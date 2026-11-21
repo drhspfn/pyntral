@@ -278,3 +278,13 @@ admin.add_resource(Resource(Product,
 
 Pyntral returns 422 with affected field names, deliberately omitting raw
 input and validator exception text to avoid exposing secrets in responses.
+
+## Optimistic concurrency
+
+Opt in with `Resource(..., version_field="version")` and a SQLAlchemy integer
+column mapped as `__mapper_args__ = {"version_id_col": version}`. Pyntral
+validates this configuration at registration. PATCH and DELETE require an
+`If-Match: <version>` header; missing headers get 428, stale versions get 412.
+SQLAlchemy's versioned UPDATE/DELETE rejects a concurrent commit with 409.
+The bundled React editor automatically sends the version it originally loaded.
+Do not implement version checks using an unguarded integer read/compare alone.

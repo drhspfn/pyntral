@@ -175,6 +175,7 @@ class Resource(Generic[ModelT]):
     virtual_fields: dict[str, VirtualField] = field(default_factory=dict)
     create_schema: type[BaseModel] | None = None
     edit_schema: type[BaseModel] | None = None
+    version_field: str | None = None  # Requires SQLAlchemy mapper.version_id_col
     scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
     access: RoleAccess | None = None
     allow_create: bool = True

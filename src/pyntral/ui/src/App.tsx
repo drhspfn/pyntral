@@ -199,7 +199,7 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
         {resource.capabilities.show && <button title="View" aria-label="View record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}><ExternalLink size={16}/></button>}
         {resource.capabilities.edit && <button title="Edit" aria-label="Edit record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}/edit`)}><Pencil size={15}/></button>}
         {resource.capabilities.delete && <button type="button" title="Delete" aria-label="Delete record"
-          onClick={() => { void requestDelete(row[resource.primaryKey]); }}><Trash2 size={15}/></button>}
+          onClick={() => { void requestDelete(row[resource.primaryKey], resource.versionField ? row[resource.versionField] : undefined); }}><Trash2 size={15}/></button>}
         {resource.actions.filter((a) => (a.kind ?? "record") === "record" && a.position !== "detail" && (data.actionsByRecord?.[String(row[resource.primaryKey])] || []).includes(a.name))
           .map((action) => <RecordAction key={action.name} resource={resource} record={row} action={action} navigate={navigate}/>)}
       </div></td>
@@ -396,7 +396,8 @@ function RecordEditor({ resource, id, navigate, notify }: {
         if (isNew || JSON.stringify(value) !== JSON.stringify(record.data?.record?.[field.name])) payload[field.name] = value;
       }
       return api<{ record: RecordData }>(`/api/resources/${resource.id}${isNew ? "" : `/${encodeURIComponent(id!)}`}`,
-        { method: isNew ? "POST" : "PATCH", body: JSON.stringify(payload) });
+        { method: isNew ? "POST" : "PATCH", body: JSON.stringify(payload),
+          headers: !isNew && resource.versionField ? { "If-Match": String(record.data?.record?.[resource.versionField]) } : undefined });
     },
     onSuccess: async (result) => {
       await client.invalidateQueries({ queryKey: ["list", resource.id] });
@@ -543,7 +544,7 @@ function RecordShow({ resource, id, schema, navigate }: {
       <p>Record details and connected relationships.</p></div>
       <div className="heading-actions">
         {resource.capabilities.edit && <button className="btn subtle" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id)}/edit`)}><Pencil size={16}/> Edit</button>}
-        {resource.capabilities.delete && <button className="btn danger" disabled={deleting} onClick={() => { void requestDelete(id); }}><Trash2 size={16}/> Delete</button>}
+        {resource.capabilities.delete && <button className="btn danger" disabled={deleting} onClick={() => { void requestDelete(id, resource.versionField ? record.data?.record?.[resource.versionField] : undefined); }}><Trash2 size={16}/> Delete</button>}
       </div>
     </div>
     {record.isLoading ? <Loading/> : record.error ? <Alert error={record.error} /> : record.data && <>
@@ -621,7 +622,9 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
     if (mode !== "create" && mode !== "edit") throw new Error("This screen cannot save records");
     const result = await api<{ record: RecordData }>(
       `/api/resources/${resource.id}${mode === "edit" ? `/${encodeURIComponent(id!)}` : ""}`,
-      { method: mode === "edit" ? "PATCH" : "POST", body: JSON.stringify(payload) });
+      { method: mode === "edit" ? "PATCH" : "POST", body: JSON.stringify(payload),
+        headers: mode === "edit" && resource.versionField && record.data?.record
+          ? { "If-Match": String(record.data.record[resource.versionField]) } : undefined });
     await invalidateResource(client, resource.id);
     feedback.toast("Record saved", { kind: "success" });
     return result.record;
@@ -629,7 +632,9 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
   const remove: CustomCrudProps["remove"] = async () => {
     if (!id || !resource.capabilities.delete) throw new Error("Delete is not available");
     if (!await feedback.confirm({ title: "Delete record?", message: "This action cannot be undone.", destructive: true })) return;
-    await api(`/api/resources/${resource.id}/${encodeURIComponent(id)}`, { method: "DELETE" });
+    await api(`/api/resources/${resource.id}/${encodeURIComponent(id)}`,
+      { method: "DELETE", headers: resource.versionField && record.data?.record
+        ? { "If-Match": String(record.data.record[resource.versionField]) } : undefined });
     await invalidateResource(client, resource.id);
     navigate(`resources/${resource.id}`);
   };

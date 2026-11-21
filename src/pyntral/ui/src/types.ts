@@ -27,7 +27,7 @@ export interface FieldDef {
   filterOperators?: ("eq" | "neq" | "contains" | "starts_with" | "ends_with" |
     "gt" | "gte" | "lt" | "lte" | "between" | "in" | "not_in")[];
   relation?: { resource: string; field: string };
-  components: Partial<Record<FieldContext, string>>;
+  components: Partial<Record<"list" | "edit" | "show" | "filter", string>>;
   views?: Partial<Record<FieldContext, FieldViewDef>>;
 }
 export interface ActionDef {
@@ -45,6 +45,7 @@ export interface ResourceDef {
   navigation?: string | null;
   navigationOrder?: number;
   primaryKey: string;
+  versionField?: string | null;
   titleField: string;
   pageSize: number;
   showSearch?: boolean;

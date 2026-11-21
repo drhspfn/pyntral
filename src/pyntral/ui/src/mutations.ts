@@ -27,8 +27,10 @@ export function useDeleteRecord(resource: ResourceDef, onDeleted?: () => void) {
   const client = useQueryClient();
   const feedback = useAdminFeedback();
   const mutation = useMutation({
-    mutationFn: (id: string) => api(`/api/resources/${resource.id}/${encodeURIComponent(id)}`, { method: "DELETE" }),
-    onMutate: async (id) => {
+    mutationFn: ({ id, version }: { id: string; version?: unknown }) => api(
+      `/api/resources/${resource.id}/${encodeURIComponent(id)}`,
+      { method: "DELETE", headers: resource.versionField ? { "If-Match": String(version) } : undefined }),
+    onMutate: async ({ id }) => {
       await Promise.all([
         client.cancelQueries({ queryKey: ["list"] }),
         client.cancelQueries({ queryKey: ["related"] }),
@@ -53,12 +55,12 @@ export function useDeleteRecord(resource: ResourceDef, onDeleted?: () => void) {
       ]);
     },
   });
-  const requestDelete = async (id: unknown) => {
+  const requestDelete = async (id: unknown, version?: unknown) => {
     if (mutation.isPending) return false;
     const accepted = await feedback.confirm({ title: "Delete record?", message: "This action cannot be undone.",
       confirmLabel: "Delete", destructive: true });
     if (!accepted) return false;
-    try { await mutation.mutateAsync(String(id)); return true; }
+    try { await mutation.mutateAsync({ id: String(id), version }); return true; }
     catch { return false; } // onError already reports the error via a toast
   };
   return { requestDelete, isPending: mutation.isPending };

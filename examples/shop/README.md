@@ -98,3 +98,11 @@ virtual setter. The submitted value is never serialized into API responses.
 creating/editing a product. `ProductPriceRules` rejects it with a field-level
 validation error before SQLAlchemy commits. Validators receive only authorized
 fields, and raw input is excluded from error payloads.
+
+### Optimistic concurrency
+
+**Commerce → Editorial Drafts:** Open the same draft in two browser tabs, save
+in the first, then attempt to save the stale second tab. The second write
+receives HTTP 412 instead of silently overwriting another administrator's
+changes. Refresh the second tab to retrieve the latest version. The model
+uses SQLAlchemy `version_id_col` for an atomic optimistic version check.

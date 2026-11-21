@@ -377,6 +377,18 @@ class Admin:
             raise AdminError(401, "Session expired", "unauthorized")
         return resolved
 
+    @staticmethod
+    def _require_version(adapter: MapperAdapter, record: Any, request: Request) -> None:
+        field_name = adapter.resource.version_field
+        if field_name is None:
+            return
+        supplied = request.headers.get("If-Match")
+        if supplied is None:
+            raise AdminError(428, "Record version required (If-Match)", "precondition_required")
+        expected = str(getattr(record, field_name))
+        if supplied.strip('"') != expected:
+            raise AdminError(412, "Record changed since it was loaded", "precondition_failed")
+
     def _csrf(self, request: Request) -> None:
         token = request.session.get("csrf")
         supplied = request.headers.get("X-CSRF-Token", "")
@@ -787,6 +799,7 @@ class Admin:
                 adapter = self._adapter(name)
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "edit", record)
+                self._require_version(adapter, record, request)
                 write_fields = await self._allowed_fields(principal, name, edit=True, view="edit")
                 rejected = set(payload) - write_fields
                 if rejected:
@@ -833,6 +846,7 @@ class Admin:
                 adapter = self._adapter(name)
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "delete", record)
+                self._require_version(adapter, record, request)
                 ctx = OperationContext("delete", name, principal, session, record=record)
                 await self._run_hooks(adapter, "before_delete", ctx)
                 await adapter.delete(session, record)

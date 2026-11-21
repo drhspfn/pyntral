@@ -15,6 +15,7 @@ from typing import Any
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import String, and_, func, inspect, or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import RelationshipProperty, selectinload
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.sqltypes import Numeric
@@ -111,6 +112,10 @@ class MapperAdapter:
             raise ValueError(f"{resource.model.__name__}: exactly one primary key required")
         self.pk = keys[0]
         self.pk_name = next((k for k, c in self.columns.items() if c is self.pk), self.pk.key)
+        if resource.version_field is not None:
+            col = self.columns.get(resource.version_field)
+            if col is None or column_kind(col) != "integer" or self.mapper.version_id_col is not col:
+                raise ValueError("version_field must be an integer SQLAlchemy version_id_col")
         self.relations: dict[str, RelationshipProperty] = {
             prop.key: prop for prop in self.mapper.relationships
         }
@@ -310,6 +315,7 @@ class MapperAdapter:
             "navigation": self.resource.navigation,
             "navigationOrder": self.resource.navigation_order,
             "primaryKey": self.pk_name,
+            "versionField": self.resource.version_field,
             "titleField": self._title_field(),
             "formLayout": self.resource.form_layout,
             "detailLayout": self.resource.detail_layout,
@@ -506,6 +512,9 @@ class MapperAdapter:
     async def _commit(self, session: Any) -> None:
         try:
             await maybe_await(session.commit())
+        except StaleDataError as exc:
+            await maybe_await(session.rollback())
+            raise AdminError(409, "Record was modified concurrently", "concurrent_update") from exc
         except IntegrityError as exc:
             await maybe_await(session.rollback())
             raise AdminError(409, "Database constraint prevents this operation. The record may be referenced by other records or a value must be unique.", "integrity_error") from exc

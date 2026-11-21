@@ -92,6 +92,15 @@ class OrderItem(Base):
 
 
 
+class EditorialDraft(Base):
+    __tablename__ = "editorial_drafts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str] = mapped_column(String(500), default="")
+    version: Mapped[int] = mapped_column(default=1, nullable=False)
+    __mapper_args__ = {"version_id_col": version}
+
+
 class FileAsset(Base):
     __tablename__ = "file_assets"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -186,6 +195,10 @@ def seed() -> None:
             session.commit()
     seed_agents()
     seed_tags()
+    with SessionLocal() as session:
+        if session.scalar(select(EditorialDraft.id).limit(1)) is None:
+            session.add(EditorialDraft(title="First draft", body="Edit this in two tabs to test conflicts"))
+            session.commit()
 
 
 def seed_agents() -> None:
@@ -366,6 +379,11 @@ admin.add_resource(Resource(
     list_fields=["id", "name", "color"], search_fields=["name"],
     crud_views={"list": "tags-list"},
     relationships={"products": Relationship(label="Tagged products")},
+))
+admin.add_resource(Resource(
+    EditorialDraft, icon="file-text", navigation="Commerce", name="editorial-drafts",
+    list_fields=["id", "title", "body", "version"],
+    fields={"version": Field(readonly=True)}, version_field="version",
 ))
 admin.add_resource(Resource(Order, icon="activity", navigation="Commerce/Orders", list_fields=["id", "customer_id", "status", "created_at"],
                             title_field="id", relationships={"items": Relationship(label="Order items", selectable=True)},
