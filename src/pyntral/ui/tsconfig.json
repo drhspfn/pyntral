@@ -54,6 +54,7 @@
       "@pyntral/auth": [
         "./src/currentAdmin.tsx"
       ],
+      "@pyntral/i18n": ["./src/i18n.tsx"],
       "@pyntral/feedback": [
         "./src/feedback.tsx"
       ],

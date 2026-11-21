@@ -82,7 +82,9 @@ export interface ThemeConfig {
   animations: boolean;
   tokens: { light?: Record<string, string>; dark?: Record<string, string> };
 }
+export interface LocalizationConfig { code: string; messages: Record<string, string>; }
 export interface Schema {
+  localization?: LocalizationConfig;
   title: string; resources: ResourceDef[]; pages: PageDef[];
   navigation: NavigationConfig; theme: ThemeConfig;
   bridges: { name: string; description: string; inputSchema: unknown; outputSchema: unknown }[];

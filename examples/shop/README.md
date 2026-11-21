@@ -158,3 +158,11 @@ range, type a preset name, and press Save preset. Change filters, then restore
 the saved preset from the menu. Preferences are stored in this browser for the
 current administrator ID and resource, never used as an authorization rule.
 Bulk selections remain available when moving between pages of the same query.
+
+### Localization
+
+Restart Shop with `SHOP_LOCALE=ru` in the environment to see Russian labels
+for key navigation, toolbar, CRUD and table actions; dates follow the resolved
+language. The default is English. Host applications may provide their own
+language dictionaries and per-principal locale resolver. Model field labels
+and resource names remain independently configurable in Python.

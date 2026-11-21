@@ -6,6 +6,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { usePopupPosition } from "./popover";
+import { useI18n } from "./i18n";
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, LoaderCircle, Search, X } from "lucide-react";
 
 export { FilterOperatorButton } from "./filter-operator";
@@ -240,6 +241,7 @@ export function AsyncSelect<T extends string | number = string | number>(props: 
 export function Calendar({ value, onChange, min, max }: {
   value: string | null; onChange: (isoDate: string) => void; min?: string; max?: string;
 }) {
+  const { locale } = useI18n();
   const initial = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date();
   const [month, setMonth] = useState(() => new Date(initial.getFullYear(), initial.getMonth(), 1));
   useEffect(() => {
@@ -257,9 +259,11 @@ export function Calendar({ value, onChange, min, max }: {
   const todayIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
   return <div className="ra-calendar">
     <div className="ra-calendar-head"><Button variant="ghost" aria-label="Previous month" onClick={() => setMonth(new Date(year, mo - 1, 1))} startIcon={<ChevronLeft size={17}/>}/>
-      <strong>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong>
+      <strong>{month.toLocaleDateString(locale, { month: "long", year: "numeric" })}</strong>
       <Button variant="ghost" aria-label="Next month" onClick={() => setMonth(new Date(year, mo + 1, 1))} startIcon={<ChevronRight size={17}/>}/></div>
-    <div className="ra-calendar-days">{["Mo","Tu","We","Th","Fr","Sa","Su"].map((day) => <span key={day}>{day}</span>)}
+    <div className="ra-calendar-days">{Array.from({length:7}, (_,i) =>
+      new Date(Date.UTC(2024, 0, i+1)).toLocaleDateString(locale, {weekday:"short"}))
+      .map((day, i) => <span key={i}>{day}</span>)}
       {dayCells.map((day, index) => day > 0 && day <= days ? <button key={index} type="button"
         className={`${value === iso(day) ? "selected" : ""} ${todayIso === iso(day) ? "today" : ""}`}
         disabled={(min !== undefined && iso(day) < min) || (max !== undefined && iso(day) > max)}
@@ -273,6 +277,7 @@ export function DatePicker({ value, onChange, includeTime = false, min, max, id,
   min?: string; max?: string; placeholder?: string; id?: string; ariaLabel?: string;
   popupMinHeight?: number;
 }) {
+  const { locale } = useI18n();
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -294,7 +299,7 @@ export function DatePicker({ value, onChange, includeTime = false, min, max, id,
   return <div className="ra-date-picker" ref={container}>
     <Button id={id} type="button" className="ra-date-trigger" aria-expanded={open} aria-label={ariaLabel} variant="secondary"
       startIcon={<CalendarDays size={16}/>} onClick={() => setOpen(!open)}>
-      {value ? (valid ? parsed!.toLocaleString() : value) : placeholder}</Button>
+      {value ? (valid ? parsed!.toLocaleString(locale) : value) : placeholder}</Button>
     {value && <button type="button" className="ra-date-clear" title="Clear date" onClick={() => onChange(null)}><X size={14}/></button>}
     {open && createPortal(<div ref={panel} className="ra-date-popover" style={popupStyle}><Calendar value={date} min={min?.slice(0,10)} max={max?.slice(0,10)}
       onChange={(day) => { onChange(serialize(day, time)); if (!includeTime) setOpen(false); }}/>

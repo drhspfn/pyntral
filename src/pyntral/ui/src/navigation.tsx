@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 import type { Schema } from "./types";
 import { useAdminFeedback } from "./feedback";
 import { useCurrentAdmin } from "./currentAdmin";
+import { useI18n } from "./i18n";
 import { access as accessExtensions } from "virtual:pyntral-extensions";
 
 type Node = { type: "group" | "resource" | "page"; id: string; label: string; icon: string; order: number; route?: string;
@@ -78,9 +79,10 @@ function Branch({ node, schema, route, go, depth }: { node: Node; schema: Schema
 }
 export function SidebarNavigation({ schema, route, navigate }: { schema: Schema; route: string; navigate: (route: string) => void }) {
   const tree = useMemo(() => makeTree(schema), [schema]);
+  const { t } = useI18n();
   return <nav aria-label="Admin navigation">
     {schema.navigation?.showDashboard !== false && <button className={`nav-link ${!route ? "active" : ""}`} onClick={() => navigate("")}>
-      <LayoutDashboard size={16}/><span>Overview</span></button>}
+      <LayoutDashboard size={16}/><span>{t("nav.overview", "Overview")}</span></button>}
     {tree.map((node) => <Branch key={node.type + node.id} node={node} schema={schema} route={route} go={navigate} depth={0}/>)}
   </nav>;
 }

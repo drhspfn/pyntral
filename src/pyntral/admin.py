@@ -66,6 +66,9 @@ class Admin:
         event_bus: EventTransport | None = None,
         auto_start_events: bool = True,
         storage: StorageBackend | None = None,
+        default_locale: str = "en",
+        translations: dict[str, dict[str, str]] | None = None,
+        locale_resolver: Callable[[Principal], Any] | None = None,
     ):
         if not isinstance(secret_key, str) or len(secret_key) < 32:
             raise ValueError("secret_key must contain at least 32 characters")
@@ -75,6 +78,15 @@ class Admin:
             raise ValueError("An authentication backend is required")
         self.session_factory = session_factory
         self.storage = storage
+        if re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", default_locale) is None:
+            raise ValueError("default_locale must be a BCP47-like language tag")
+        self.default_locale = default_locale
+        self.translations = translations or {}
+        self.locale_resolver = locale_resolver
+        for locale, messages in self.translations.items():
+            if not isinstance(messages, dict) or any(not isinstance(k, str) or not isinstance(v, str)
+                                                      for k, v in messages.items()):
+                raise ValueError(f"Translation messages for {locale} must be string mappings")
         self.auth = auth
         self.path = path
         self.title = title
@@ -606,7 +618,13 @@ class Admin:
                      if (p.min_role is None or self._role_ok(principal, p.min_role))
                      and await maybe_await(self.auth.authorize(principal, "page:" + p.name, "view"))]
             visible_paths.extend(p["navigation"] for p in pages if p["navigation"])
+            locale = self.default_locale
+            if self.locale_resolver is not None:
+                resolved = await maybe_await(self.locale_resolver(principal))
+                if isinstance(resolved, str) and re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", resolved):
+                    locale = resolved
             return {"title": self.title, "resources": resources,
+                    "localization": {"code": locale, "messages": self.translations.get(locale, {})},
                     "navigation": {"groups": [
                         {"path": g.path, "icon": g.icon, "order": g.order}
                         for g in self.groups.values() if any(

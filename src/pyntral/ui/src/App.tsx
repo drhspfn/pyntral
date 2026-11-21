@@ -18,6 +18,7 @@ import { AdvancedFilterField, serializeFilters, filterOperators, type FilterValu
 import { filterControlWidth } from "./filter-state";
 import { applyTheme, resolveMode } from "./theme";
 import { CurrentAdminProvider, useCurrentAdmin } from "./currentAdmin";
+import { I18nProvider, useI18n } from "./i18n";
 import { defaultTablePreferences, parseTablePreferences, orderedColumns, type TablePreferences } from "./table-prefs";
 import { api, base, buildQuery, getAuth, setCsrf } from "./api";
 import type {
@@ -119,8 +120,9 @@ function Login({ onSignedIn }: { onSignedIn: (state: AuthState) => void }) {
 }
 
 function Overview({ schema, navigate }: { schema: Schema; navigate: (route: string) => void }) {
+  const { t } = useI18n();
   return <>
-    <div className="page-heading"><div><h1>Overview</h1><p>{schema.title}</p></div></div>
+    <div className="page-heading"><div><h1>{t("nav.overview", "Overview")}</h1><p>{schema.title}</p></div></div>
     <div className="section-head"><h2>Resources</h2></div>
     {schema.resources.some((r) => r.capabilities.list) ? <div className="resource-grid">
       {schema.resources.filter((r) => r.capabilities.list).map((resource) => {
@@ -261,6 +263,7 @@ function CollectionAction({ schema, resource, action, selected, navigate, clearS
 }
 
 function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void }) {
+  const { t } = useI18n();
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
@@ -291,12 +294,12 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
     queryFn: () => api<Listing>(`/api/resources/${resource.id}${query}`) });
   return <>
     <div className="page-heading"><div><div className="eyebrow">DATA / {resource.id.toUpperCase()}</div>
-      <h1>{resource.label}</h1><p>View, organize, and manage your records.</p></div>
+      <h1>{resource.label}</h1><p>{t("resources.description", "View, organize, and manage your records.")}</p></div>
       <div className="heading-actions">
         {resource.actions.filter((action) => action.kind === "resource").map((action) =>
           <CollectionAction key={action.name} schema={schema} resource={resource} action={action}
             selected={[]} navigate={navigate} clearSelection={() => undefined}/>)}
-        {resource.capabilities.create && <button className="btn primary" onClick={() => navigate(`resources/${resource.id}/new`)}><Plus size={17}/> New record</button>}
+        {resource.capabilities.create && <button className="btn primary" onClick={() => navigate(`resources/${resource.id}/new`)}><Plus size={17}/> {t("actions.new", "New record")}</button>}
       </div>
     </div>
     <div className="surface">
@@ -307,8 +310,8 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
           disabled={!resource.searchFields.length} />}
         <div className="toolbar-buttons"><button className="btn subtle" type="button"
           aria-expanded={columnsOpen} onClick={() => setColumnsOpen(!columnsOpen)} title="Table columns and density">
-          Columns</button><button className={`btn subtle ra-filter-toggle ${filtersOpen ? "selected" : ""}`} aria-expanded={filtersOpen}
-          onClick={() => setFiltersOpen(!filtersOpen)}><Filter size={16}/> Filters
+          {t("table.columns", "Columns")}</button><button className={`btn subtle ra-filter-toggle ${filtersOpen ? "selected" : ""}`} aria-expanded={filtersOpen}
+          onClick={() => setFiltersOpen(!filtersOpen)}><Filter size={16}/> {t("table.filters", "Filters")}
           <span className={`ra-filter-count ${activeFilterCount === 0 ? "is-empty" : ""}`} aria-hidden={activeFilterCount === 0}>{activeFilterCount || "0"}</span></button>
           <button className="btn subtle" onClick={() => records.refetch()} title="Refresh"><RefreshCw size={16}/></button></div>
       </div>
@@ -349,7 +352,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
             <AdvancedFilterField field={field} resource={resource} value={filters[field.name] || {}}
               onChange={(value) => { setFilters((old) => ({ ...old, [field.name]: value })); setOffset(0); }}/>
           </div>)}</div>
-        <button className="link-btn" onClick={() => setFilters({})}>Clear filters</button>
+        <button className="link-btn" onClick={() => setFilters({})}>{t("table.clear_filters", "Clear filters")}</button>
         <div className="ra-filter-presets">
           <label>Saved filters <select aria-label="Load saved filters" value="" onChange={event => {
             const saved = preferences.presets[event.target.value];
@@ -365,7 +368,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
         </div>
       </div>}
       <div className="sortbar"><span>{records.data ? `${records.data.total} total records` : "Records"}</span>
-        <div className="sort-controls">Sort by <div className="ra-sort-select"><Select searchable={false} clearable={false} ariaLabel="Sort column" value={sort}
+        <div className="sort-controls">{t("table.sort_by", "Sort by")} <div className="ra-sort-select"><Select searchable={false} clearable={false} ariaLabel="Sort column" value={sort}
           onChange={(value) => { if (typeof value === "string") setSort(value); }}
           options={viewFields(resource.fields, "list").filter((field) => field.sortable !== false)
             .map((field) => ({ value: field.name, label: field.label }))}/></div>
@@ -461,6 +464,7 @@ function RecordEditor({ resource, id, navigate, notify }: {
   notify: (text: string) => void;
 }) {
   const client = useQueryClient();
+  const { t } = useI18n();
   const isNew = id === undefined;
   const record = useQuery({ queryKey: ["record", resource.id, id], enabled: !isNew,
     queryFn: () => api<{ record: RecordData }>(`/api/resources/${resource.id}/${encodeURIComponent(id!)}`) });
@@ -519,7 +523,7 @@ function RecordEditor({ resource, id, navigate, notify }: {
           {mutation.error != null && <Alert error={mutation.error} />}
           <div className="form-actions"><button type="button" className="btn subtle" onClick={() => navigate(`resources/${resource.id}`)}>Cancel</button>
             <button className="btn primary" type="submit" disabled={mutation.isPending || (!isNew && !dirty)}>
-              {mutation.isPending && <LoaderCircle className="spin" size={16}/>} {isNew ? "Create record" : "Save changes"}<ArrowRight size={16}/></button></div>
+              {mutation.isPending && <LoaderCircle className="spin" size={16}/>} {isNew ? t("actions.create", "Create record") : t("actions.save", "Save changes")}<ArrowRight size={16}/></button></div>
         </div>
         <aside className="editor-aside"><div className="surface hint-card"><div className="hint-icon"><ShieldCheck size={18}/></div>
           <strong>Data integrity</strong><p>Validation and access control are enforced by the Python backend, not by the form.</p></div></aside>
@@ -785,6 +789,7 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
   navigate: (route: string) => void; route: string; children: ReactNode;
   themeMode: ThemeMode; toggleTheme: () => void;
 }) {
+  const { t } = useI18n();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const navigateAndClose = (url: string) => { navigate(url); setDrawerOpen(false); };
@@ -815,7 +820,7 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
                 <span>{user.roles.join(", ") || "Member"}</span></div>
               {customProfileMenu && <ProfileMenuExtension user={user} schema={schema} navigate={(url) => {
                 navigateAndClose(url); setProfileOpen(false); }} close={() => setProfileOpen(false)}/>}
-              <button role="menuitem" onClick={() => { setProfileOpen(false); onLogout(); }}><LogOut size={16}/> Sign out</button>
+              <button role="menuitem" onClick={() => { setProfileOpen(false); onLogout(); }}><LogOut size={16}/> {t("nav.sign_out", "Sign out")}</button>
             </div></>}
         </div></div></header>
       <main className="main-content page-enter" key={route}>{children}</main>
@@ -896,11 +901,11 @@ function AdminApp() {
   if (schema.isPending) return <div className="fullscreen-loading"><Loading label="Loading workspace…"/></div>;
   if (schema.error || !schema.data) return <div className="fullscreen-loading"><Alert error={schema.error}/><button className="btn subtle" onClick={() => schema.refetch()}>Retry</button></div>;
   const ThemeExtension = customThemes.global;
-  return <CurrentAdminProvider currentAdmin={auth.data.user}><MainLayout schema={schema.data} user={auth.data.user} route={route} navigate={navigate} onLogout={logout}
+  return <CurrentAdminProvider currentAdmin={auth.data.user}><I18nProvider config={schema.data.localization}><MainLayout schema={schema.data} user={auth.data.user} route={route} navigate={navigate} onLogout={logout}
     themeMode={themeMode} toggleTheme={toggleTheme}>
     {ThemeExtension && <ThemeExtension schema={schema.data} mode={themeMode}/>}
     {content}
-  </MainLayout></CurrentAdminProvider>;
+  </MainLayout></I18nProvider></CurrentAdminProvider>;
 }
 
 export function App() { return <AdminFeedbackProvider><AdminApp/></AdminFeedbackProvider>; }

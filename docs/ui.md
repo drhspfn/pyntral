@@ -98,3 +98,14 @@ keyed by the current administrator ID and resource ID; they do not alter
 server-side field permissions. Filter presets are **explicitly** saved and may
 contain search strings; do not store sensitive searches on shared computers.
 Bulk selection can span list pages while the current filters remain unchanged.
+
+## Localization
+
+Configure `Admin(default_locale="en", translations={"ru": {"nav.overview":
+"Обзор", "table.filters": "Фильтры"}}, locale_resolver=callback)`.
+The verified principal determines the selected locale; the API exposes only
+its code and message dictionary. Core navigation/toolbars/CRUD use translation
+keys with English fallback. Calendars format months, weekdays and dates using
+the locale; custom components can import `useI18n()` from `@pyntral/i18n`.
+Unknown translation keys fall back to their English source text. External
+login screens must provide their own localized strings.
