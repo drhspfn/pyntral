@@ -70,30 +70,30 @@ export function ExportControls({ resource, query, offset, total, pageRows, prefe
       onClick={() => setOpen(!open)}><Download size={15}/> Export</button>
     {open && <div className="ra-export-panel">
       <h3>Export records</h3>
-      <label>Format
+      <div className="ra-export-field"><span className="ra-export-label">Format</span>
         <Select<Format> value={format} searchable={false} clearable={false}
           onChange={v => { if (typeof v === "string") setFormat(v as Format); }}
           options={[{ value: "csv", label: "CSV" }, { value: "json", label: "JSON" }]}/>
-      </label>
-      <label>Rows
+      </div>
+      <div className="ra-export-field"><span className="ra-export-label">Rows</span>
         <Select<Scope> value={scope} searchable={false} clearable={false}
           onChange={v => { if (typeof v === "string") setScope(v as Scope); }}
           options={[{ value: "page", label: "Current page" },
             { value: "filtered", label: "All filtered (max 10,000)" },
             { value: "range", label: "Custom range" }]}/>
-      </label>
+      </div>
       {scope === "range" && <div className="ra-export-range">
         <label>Skip rows<TextInput type="number" min={0} step={1} value={start}
           onChange={event => setStart(event.target.value)}/></label>
         <label>Take rows<TextInput type="number" min={1} max={10000} step={1} value={count}
           onChange={event => setCount(event.target.value)}/></label>
       </div>}
-      <label>Columns
+      <div className="ra-export-field"><span className="ra-export-label">Columns</span>
         <Select<"visible" | "all"> value={columns} searchable={false} clearable={false}
           onChange={v => { if (typeof v === "string") setColumns(v as "visible" | "all"); }}
           options={[{ value: "visible", label: "Only visible columns (in table order)" },
             { value: "all", label: "All available list columns" }]}/>
-      </label>
+      </div>
       <p aria-live="polite">{rows} of {total} matching rows · {selectedColumns.length} columns
         {scope === "filtered" && total > 10000 ? " · Limited to first 10,000" : ""}</p>
       <button type="button" className="btn primary" disabled={!rows || !selectedColumns.length || working}
