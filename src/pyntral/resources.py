@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Callable, Generic, TypeVar
 from uuid import UUID
+from pydantic import BaseModel
 
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
@@ -172,6 +173,8 @@ class Resource(Generic[ModelT]):
     crud_views: dict[str, str] = field(default_factory=dict)  # list/create/edit/show -> extension ID
     hooks: list[ResourceHook] = field(default_factory=list)
     virtual_fields: dict[str, VirtualField] = field(default_factory=dict)
+    create_schema: type[BaseModel] | None = None
+    edit_schema: type[BaseModel] | None = None
     scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
     access: RoleAccess | None = None
     allow_create: bool = True
@@ -180,6 +183,9 @@ class Resource(Generic[ModelT]):
     allow_show: bool = True
 
     def __post_init__(self) -> None:
+        for schema in (self.create_schema, self.edit_schema):
+            if schema is not None and (not isinstance(schema, type) or not issubclass(schema, BaseModel)):
+                raise TypeError("create_schema and edit_schema must inherit Pydantic BaseModel")
         if self.form_layout not in ("stack", "grid") or self.detail_layout not in ("stack", "grid"):
             raise ValueError("Layout must be stack or grid")
         if any(k not in {"list", "create", "edit", "show"} or not v or not isinstance(v, str)

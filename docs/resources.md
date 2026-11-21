@@ -252,3 +252,29 @@ admin.add_resource(Resource(Product, virtual_fields={
 
 Configure `read_role` and `write_role` on virtual fields when access differs
 from the resource. Virtual setters must not commit independently.
+
+## Pydantic write validation
+
+Specify `create_schema` and/or `edit_schema` with Pydantic `BaseModel` classes.
+They validate values supplied in CRUD input (after permission checks and
+before the ORM write). Other authorized model fields remain unchanged. Set
+Pydantic optional fields for partial edit requests, or mark fields required
+where appropriate. New fields added by a validator are not accepted.
+
+```python
+class ProductPriceRules(BaseModel):
+    price: Decimal | None = None
+
+    @field_validator("price")
+    @classmethod
+    def check_price(cls, price):
+        if price is not None and price <= 0:
+            raise ValueError("Price must be positive")
+        return price
+
+admin.add_resource(Resource(Product,
+    create_schema=ProductPriceRules, edit_schema=ProductPriceRules))
+```
+
+Pyntral returns 422 with affected field names, deliberately omitting raw
+input and validator exception text to avoid exposing secrets in responses.

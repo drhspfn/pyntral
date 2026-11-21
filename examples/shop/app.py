@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import Enum
 from base64 import b64encode
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from fastapi import FastAPI
 from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String, Table, create_engine, event, select
@@ -329,6 +329,17 @@ admin.add_resource(Resource(
                label="Reactivate all", confirmation="Reactivate all customers?"),
     ],
 ))
+class ProductPriceRules(BaseModel):
+    price: Decimal | None = None
+
+    @field_validator("price")
+    @classmethod
+    def positive_price(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and value <= 0:
+            raise ValueError("Price must be positive")
+        return value
+
+
 def validate_product_stock(ctx):
     """Prevent invalid inventory in both create and edit flows."""
     if "stock" in ctx.payload and int(ctx.payload["stock"]) < 0:
@@ -346,6 +357,7 @@ admin.add_resource(Resource(
     },
     relationships={"tags": Relationship(label="Product tags", selectable=True)},
     hooks=[ResourceHook(before_create=validate_product_stock, before_update=validate_product_stock)],
+    create_schema=ProductPriceRules, edit_schema=ProductPriceRules,
 ))
 # This resource deliberately uses a custom CRUD list while retaining the
 # standard create, edit and detail screens and all server-side permissions.

@@ -28,6 +28,7 @@ from .events import (
 from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
 from .hooks import OperationContext
+from .validation import validate_payload
 from .bridge import Bridge, BridgeContext
 from .logging import (LoggingConfig, configure_logging, emit as emit_log, request_id_var)
 from pydantic import ValidationError
@@ -693,6 +694,7 @@ class Admin:
             try:
                 ctx = OperationContext("create", name, principal, session, payload=payload.copy())
                 await self._run_hooks(adapter, "before_create", ctx)
+                ctx.payload = validate_payload(adapter.resource.create_schema, ctx.payload)
                 if set(ctx.payload) - write_fields:
                     raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
                 await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
@@ -797,6 +799,7 @@ class Admin:
                 ctx = OperationContext("update", name, principal, session, record=record,
                                        payload=payload.copy())
                 await self._run_hooks(adapter, "before_update", ctx)
+                ctx.payload = validate_payload(adapter.resource.edit_schema, ctx.payload)
                 if set(ctx.payload) - write_fields:
                     raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
                 await self._verify_foreign_keys(session, principal, adapter, ctx.payload)

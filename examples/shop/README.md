@@ -91,3 +91,10 @@ and the database remains unchanged. The example uses `ResourceHook` for both
 it is not stored in the SQL table and cannot be sorted or filtered in SQL.
 **Edit product → Rename product** changes the mapped name through a write-only
 virtual setter. The submitted value is never serialized into API responses.
+
+### Pydantic write validation
+
+**Commerce → Products:** Enter a price of `0` or a negative amount when
+creating/editing a product. `ProductPriceRules` rejects it with a field-level
+validation error before SQLAlchemy commits. Validators receive only authorized
+fields, and raw input is excluded from error payloads.
