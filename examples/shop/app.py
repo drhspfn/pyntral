@@ -17,7 +17,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String, Table, cre
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 from pyntral import (
-    Action, Admin, Bridge, CallbackAuth, Field, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
+    Action, Admin, Bridge, CallbackAuth, Field, FieldDependency, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
     ResourceUpdated, ResourceHook, VirtualField, LayoutSection, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase, UploadFeature, LocalStorage, UploadBase,
 )
 
@@ -56,6 +56,13 @@ class Tag(Base):
     name: Mapped[str] = mapped_column(String(60), unique=True)
     color: Mapped[str] = mapped_column(String(7), default="#5577aa")
     products: Mapped[list[Product]] = relationship(secondary=product_tags, back_populates="tags")
+
+
+class ShippingLocation(Base):
+    __tablename__ = "shipping_locations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    country: Mapped[str] = mapped_column(String(40), nullable=False)
+    city: Mapped[str] = mapped_column(String(60), nullable=False)
 
 
 class Product(Base):
@@ -217,6 +224,11 @@ def seed() -> None:
     seed_agents()
     seed_tags()
     with SessionLocal() as session:
+        if session.scalar(select(ShippingLocation.id).limit(1)) is None:
+            session.add_all([ShippingLocation(country="Moldova", city="Bălți"),
+                             ShippingLocation(country="Ukraine", city="Kyiv")])
+            session.commit()
+    with SessionLocal() as session:
         if session.scalar(select(EditorialDraft.id).limit(1)) is None:
             session.add(EditorialDraft(title="First draft", body="Edit this in two tabs to test conflicts"))
             session.commit()
@@ -346,6 +358,7 @@ def reactivate_all_customers(session, _principal, _payload):
 
 admin.add_group(NavigationGroup("Commerce", icon="boxes", order=10))
 admin.add_group(NavigationGroup("Commerce/Orders", icon="folder", order=20))
+admin.add_group(NavigationGroup("Commerce/Shipping", icon="folder", order=25))
 admin.add_group(NavigationGroup("Security", icon="shield-check", order=40))
 admin.add_group(NavigationGroup("Agents", icon="bot", order=30))
 admin.add_group(NavigationGroup("Agents/Operations", icon="cpu", order=10))
@@ -377,6 +390,50 @@ admin.add_resource(Resource(
                label="Reactivate all", confirmation="Reactivate all customers?"),
     ],
 ))
+CITY_OPTIONS = {
+    "Moldova": ["Bălți", "Chișinău", "Cahul"],
+    "Ukraine": ["Kyiv", "Lviv", "Odesa"],
+}
+
+
+class CityOptionsInput(BaseModel):
+    country: str
+
+
+class CityItem(BaseModel):
+    label: str
+    value: str
+
+
+class CityOptionsOutput(BaseModel):
+    options: list[CityItem]
+
+
+def shipping_city_options(payload: CityOptionsInput, _ctx) -> CityOptionsOutput:
+    return CityOptionsOutput(options=[CityItem(label=city, value=city)
+                                      for city in CITY_OPTIONS.get(payload.country, [])])
+
+
+def validate_shipping_location(ctx):
+    from pyntral.orm import AdminError
+    country = ctx.payload.get("country", getattr(ctx.record, "country", None))
+    city = ctx.payload.get("city", getattr(ctx.record, "city", None))
+    if country not in CITY_OPTIONS or city not in CITY_OPTIONS[country]:
+        raise AdminError(422, "Choose a city allowed for this country", "validation_error")
+
+
+admin.add_bridge(Bridge("shipping-city-options", CityOptionsInput, CityOptionsOutput,
+                        shipping_city_options, description="Available cities by country"))
+admin.add_resource(Resource(
+    ShippingLocation, name="shipping-locations", icon="globe", navigation="Commerce/Shipping",
+    visible_name=ShippingLocation.city, list_fields=["id", "country", "city"],
+    fields={"country": Field(options=list(CITY_OPTIONS)),
+            "city": Field(dependency=FieldDependency(source="country", bridge="shipping-city-options"))},
+    hooks=[ResourceHook(before_create=validate_shipping_location,
+                        before_update=validate_shipping_location)],
+))
+
+
 class ProductPriceRules(BaseModel):
     price: Decimal | None = None
 

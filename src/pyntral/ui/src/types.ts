@@ -23,6 +23,7 @@ export interface FieldDef {
   precision?: number | null;
   scale?: number | null;
   filterWidth?: number | null;
+  dependency?: { source: string; bridge: string } | null;
   span?: 1 | 2;
   options?: string[] | { value: string | number; label: string }[];
   filterOperators?: ("eq" | "neq" | "contains" | "starts_with" | "ends_with" |

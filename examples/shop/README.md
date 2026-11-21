@@ -198,3 +198,12 @@ The generated documents list the registered resources, view-visible fields,
 relationships, action scopes and bridge names. They never include sample record
 values or password hashes. These developer-only documents are **not** served
 as an unauthenticated HTTP route; permissions remain enforced at runtime.
+
+### Dependent field options with Pydantic Bridge
+
+**Commerce → Shipping → Shipping locations → Create:** Choose a country, then
+open the City picker. The available cities come from the authenticated
+`shipping-city-options` Bridge and change when you choose another country.
+The previous city selection is cleared automatically. Sending an incompatible
+country/city combination to the REST API is rejected with HTTP 422 by a
+Python `ResourceHook`, independent of the React UI.

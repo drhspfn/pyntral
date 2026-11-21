@@ -388,3 +388,14 @@ by the application. No Vite, Node.js or browser process is needed. This static
 file is **not** a user-scoped authorization view: do not publish it to untrusted
 parties if your model names or field metadata are confidential. Hidden mapped
 fields are excluded. See [the Shop example](../examples/shop/README.md).
+
+## Server-driven dependent selects
+
+`Field(dependency=FieldDependency(source="country", bridge="shipping-city-options"))`
+requests options from a named, authorized Pydantic Bridge when the source field
+changes. The input is `{ "country": "..." }` and the Bridge output model must
+contain an `options` array with `{ "label": str, "value": str | int }` entries.
+Do not rely on the option list as a permission check: validate the final selection
+server-side using Pydantic or a `ResourceHook`. Both the bridge and the resource
+mutation enforce their own authentication and permissions. The Shop's Shipping
+locations resource illustrates this behavior.

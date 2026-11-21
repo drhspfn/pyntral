@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+
 from pyntral import hash_password
 
 
@@ -16,19 +17,35 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("ADMIN_PASSWORD_HASH", hash_password("test-password"))
     monkeypatch.setenv("APP_SECRET_KEY", "shop-feature-demo-secret-key-please-do-not-use-in-production")
     monkeypatch.setenv("ADMIN_SECURE_COOKIE", "false")
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]))
 
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]))
     sys.modules.pop("examples.shop.app", None)
     demo = importlib.import_module("examples.shop.app")
     try:
         with TestClient(demo.app) as client:
-            login = client.post("/admin/auth/login",
-                                json={"username": "shop-admin", "password": "test-password"})
+            login = client.post("/admin/auth/login", json={"username": "shop-admin", "password": "test-password"})
             assert login.status_code == 200, login.text
             csrf = {"X-CSRF-Token": login.json()["csrf"]}
 
             schema = client.get("/admin/api/schema").json()
             resources = {resource["id"]: resource for resource in schema["resources"]}
+            locations = resources["shipping-locations"]
+            city_field = next(field for field in locations["fields"] if field["name"] == "city")
+            assert city_field["dependency"] == {
+                "source": "country", "bridge": "shipping-city-options",
+            }
+            options = client.post("/admin/api/bridge/shipping-city-options",
+                                  json={"country": "Moldova"}, headers=csrf)
+            assert options.status_code == 200, options.text
+            assert {value["value"] for value in options.json()["result"]["options"]} == {
+                "Bălți", "Chișinău", "Cahul",
+            }
+            assert client.post("/admin/api/resources/shipping-locations",
+                               json={"country": "Moldova", "city": "Lviv"},
+                               headers=csrf).status_code == 422
+            added = client.post("/admin/api/resources/shipping-locations",
+                                json={"country": "Moldova", "city": "Cahul"}, headers=csrf)
+            assert added.status_code == 201, added.text
             customers = resources["customers"]
             email = next(field for field in customers["fields"] if field["name"] == "email")
             assert email["views"]["list"]["visible"] is False
@@ -38,13 +55,14 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
             assert actions["archive_selected"] == "bulk"
             assert actions["reactivate_all"] == "resource"
 
-            assert resources["tags"]["crudViews"] == {"list": "tags-list"}
-            assert any(rel["name"] == "tags" and rel.get("editable")
-                       for rel in resources["products"]["relationships"])
-            assert client.get("/admin/api/resources/tags").json()["total"] >= 4
-            listing = client.get("/admin/api/resources/customers")
-            assert listing.status_code == 200
-            assert "email" not in listing.json()["items"][0]
+            tag_resource = resources["tags"]
+            assert tag_resource["crudViews"] == {"list": "tags-list"}
+            assert any(relation["name"] == "tags" and relation.get("editable")
+                       for relation in resources["products"]["relationships"])
+            tags = client.get("/admin/api/resources/tags").json()
+            assert tags["total"] >= 4
+            assert client.get("/admin/api/resources/customers").status_code == 200
+            assert "email" not in client.get("/admin/api/resources/customers").json()["items"][0]
             assert "email" in client.get("/admin/api/resources/customers/1").json()["record"]
             assert client.patch("/admin/api/resources/customers/1", json={"email": "bad@example.org"},
                                 headers=csrf).status_code == 403
@@ -57,35 +75,32 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
                 assert session.get(demo.Customer, 1).active is False
                 assert session.get(demo.Customer, 2).active is False
 
-            act = client.post("/admin/api/resources/customers/actions/reactivate_all",
-                              json={}, headers=csrf)
-            assert act.status_code == 200, act.text
-            assert act.json()["result"]["reactivated"] >= 2
+            resource_action = client.post("/admin/api/resources/customers/actions/reactivate_all",
+                                          json={}, headers=csrf)
+            assert resource_action.status_code == 200, resource_action.text
+            assert resource_action.json()["result"]["reactivated"] >= 2
             with demo.SessionLocal() as session:
                 assert session.get(demo.Customer, 1).active is True
 
-            url = "/admin/api/resources/products/1/relationships/tags"
-            current = client.get(url)
+            rel = "/admin/api/resources/products/1/relationships/tags"
+            current = client.get(rel)
             assert current.status_code == 200, current.text
-            linked = {item["id"] for item in current.json()["items"]}
-            tags = client.get("/admin/api/resources/tags").json()["items"]
-            available = next(tag["id"] for tag in tags if tag["id"] not in linked)
-
-            response = client.post(url + "/attach", json={"id": available}, headers=csrf)
-            assert response.status_code == 200, response.text
-            assert available in {item["id"] for item in client.get(url).json()["items"]}
-            response = client.post(url + "/detach", json={"id": available}, headers=csrf)
-            assert response.status_code == 200, response.text
-            assert available not in {item["id"] for item in client.get(url).json()["items"]}
-            assert client.get(f"/admin/api/resources/tags/{available}").status_code == 200
-
-            created = client.post(url + "/create",
-                                  json={"name": "Demo test label", "color": "#123456"},
+            currently_linked = {item["id"] for item in current.json()["items"]}
+            all_tags = client.get("/admin/api/resources/tags").json()["items"]
+            attach_id = next(tag["id"] for tag in all_tags if tag["id"] not in currently_linked)
+            attached = client.post(rel + "/attach", json={"id": attach_id}, headers=csrf)
+            assert attached.status_code == 200, attached.text
+            assert attach_id in {item["id"] for item in client.get(rel).json()["items"]}
+            detached = client.post(rel + "/detach", json={"id": attach_id}, headers=csrf)
+            assert detached.status_code == 200, detached.text
+            assert attach_id not in {item["id"] for item in client.get(rel).json()["items"]}
+            assert client.get(f"/admin/api/resources/tags/{attach_id}").status_code == 200
+            created = client.post(rel + "/create", json={"name": "Demo test label", "color": "#123456"},
                                   headers=csrf)
             assert created.status_code == 201, created.text
             assert created.json()["record"]["name"] == "Demo test label"
 
-        # Repeat seeding without dropping or overwriting existing customer data.
+        # The demonstration is safe to start repeatedly with an existing database.
         demo.seed()
         with demo.SessionLocal() as session:
             from sqlalchemy import func, select

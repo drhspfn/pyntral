@@ -397,8 +397,26 @@ function InputField({ field, resource, record, value, onChange, mode = "edit" }:
   const custom = field.components[mode] || field.components.edit;
   const Comp = custom ? customFields[custom] : undefined;
   const props: CustomFieldProps = { field, resource, record, value, onChange, mode };
+  const source = field.dependency?.source;
+  const sourceValue = source ? record[source] : undefined;
+  const dynamicOptions = useQuery({
+    queryKey: ["field-options", resource.id, field.name, field.dependency?.bridge, sourceValue],
+    enabled: !!field.dependency && sourceValue !== undefined && sourceValue !== null && sourceValue !== "",
+    queryFn: async () => api<{ result: { options: SelectOption<string | number>[] } }>(
+      `/api/bridge/${encodeURIComponent(field.dependency!.bridge)}`,
+      { method: "POST", body: JSON.stringify({ [field.dependency!.source]: sourceValue }) }),
+    staleTime: 30_000,
+  });
   let input: ReactNode;
   if (Comp) input = <Comp {...props} />;
+  else if (field.dependency) input = <div>
+    <Select id={id} options={dynamicOptions.data?.result.options ?? []} searchable
+      value={value == null || value === "" ? null : String(value)}
+      placeholder={sourceValue == null || sourceValue === "" ? `Choose ${source} first` : "Choose an option"}
+      disabled={sourceValue == null || sourceValue === "" || dynamicOptions.isLoading || !!dynamicOptions.error}
+      onChange={(next) => onChange(next)} />
+    {dynamicOptions.error && <span role="alert" className="muted">Unable to load options</span>}
+  </div>;
   else if (field.relation) input = <RelationInput field={field} value={value} onChange={onChange} />;
   else if (field.kind === "boolean") input = <label className="check-field"><input id={id} type="checkbox" checked={Boolean(value)}
     onChange={(e) => onChange(e.target.checked)}/><span>Enabled</span></label>;
@@ -518,7 +536,13 @@ function RecordEditor({ resource, id, navigate, notify }: {
             values={values} render={(field) => <InputField field={field} resource={resource}
               record={values} mode={isNew ? "create" : "edit"}
               value={values[field.name] ?? (field.kind === "boolean" ? false : "")}
-              onChange={(v) => { setValues((old) => ({ ...old, [field.name]: v })); setDirty(true); }} />}/>
+              onChange={(v) => { setValues((old) => {
+                const next: RecordData = { ...old, [field.name]: v };
+                for (const dependent of resource.fields) {
+                  if (dependent.dependency?.source === field.name) next[dependent.name] = "";
+                }
+                return next;
+              }); setDirty(true); }} />}/>
             : <p className="muted">No editable fields</p>}
           {mutation.error != null && <Alert error={mutation.error} />}
           <div className="form-actions"><button type="button" className="btn subtle" onClick={() => navigate(`resources/${resource.id}`)}>Cancel</button>

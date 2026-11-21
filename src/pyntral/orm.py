@@ -146,6 +146,10 @@ class MapperAdapter:
         for name, configuration in resource.fields.items():
             if name not in self.columns:
                 raise ValueError(f"Unknown column in {resource.name}: {name}")
+            if configuration.dependency is not None:
+                source = configuration.dependency.source
+                if source == name or source not in self.columns or not self.visible(source):
+                    raise ValueError(f"Invalid dependency source for {resource.name}.{name}: {source}")
             if configuration.filter_operators is not None:
                 supported = self.filter_operators(name, ignore_custom=True)
                 if any(operator not in supported for operator in configuration.filter_operators):
@@ -294,6 +298,9 @@ class MapperAdapter:
                     "precision": getattr(column.type, "precision", None) if kind == "number" else None,
                     "scale": getattr(column.type, "scale", None) if kind == "number" else None,
                     "filterWidth": options.filter_width if options else None,
+                    "dependency": ({"source": options.dependency.source,
+                                    "bridge": options.dependency.bridge}
+                                   if options and options.dependency else None),
                     "filterOperators": list(self.filter_operators(name)),
                     "options": (
                         options.options if options and options.options is not None
@@ -322,6 +329,7 @@ class MapperAdapter:
                 "kind": virtual.kind, "required": virtual.required, "readonly": virtual.setter is None,
                 "primaryKey": False, "sortable": False, "nullable": True, "widget": None, "help": None,
                 "maxLength": None, "precision": None, "scale": None, "filterWidth": None,
+                "dependency": None,
                 "filterOperators": [], "options": None, "relation": None,
                 "components": {}, "span": 1, "views": views,
             })

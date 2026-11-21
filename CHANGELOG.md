@@ -28,3 +28,5 @@ See [release readiness](docs/deployment.md#release-readiness) for verification r
 - Add guarded CRUD lifecycle hooks with consistent before/after commit semantics.
 
 - Add offline resource schema reference generation in Markdown/JSON (`pyntral schema`).
+
+- Add secure Bridge-backed dependent Select fields, including a validated Shop shipping location demo.

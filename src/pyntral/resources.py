@@ -31,6 +31,25 @@ class FieldView:
 
 
 @dataclass(slots=True)
+class FieldDependency:
+    """Load input options through an authenticated Pydantic Bridge.
+
+    The bridge accepts the source field under its own name, and must return
+    ``{"options": [{"value": ..., "label": ...}, ...]}``. The UI relationship
+    is not a security boundary: validate values again in the write handler.
+    """
+    source: str
+    bridge: str
+
+    def __post_init__(self) -> None:
+        import re
+        if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", self.source):
+            raise ValueError("FieldDependency.source must be an attribute name")
+        if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_-]*", self.bridge):
+            raise ValueError("FieldDependency.bridge must be a registered bridge slug")
+
+
+@dataclass(slots=True)
 class Field:
     label: str | None = None
     visible: bool = True
@@ -47,6 +66,7 @@ class Field:
     write_when: Callable[[Any, Any | None], Any] | None = None
     filter_operators: list[str] | None = None  # Restrict supported filter operations for this field
     filter_width: int | None = None  # Optional filter control width in px; auto-sized otherwise
+    dependency: FieldDependency | None = None
     list: FieldView | None = None
     edit: FieldView | None = None
     create: FieldView | None = None
