@@ -177,3 +177,11 @@ verified `Principal`. Return `{"default": "dark", "tokens": {"dark":
 Only `light` and `dark` token maps are accepted; unrecognized token names,
 non-string values and invalid mode names fail explicitly. All values are
 presentation data, never permission/role controls.
+
+## CSV / JSON resource exports
+
+A resource's list toolbar offers CSV or JSON export using the **current search, filters and sort**. Choose the current page, all matching rows (up to 10,000), or a custom skip/take range. Export the current visible columns in their table order or all available list columns.
+
+The authenticated `GET /api/resources/{name}/export` endpoint accepts `format=csv|json`, `offset`, `limit` (1–10,000), optional comma-separated `columns`, and the same `q`, `sort`, `desc`, and `filter.*` parameters as list. Every batch applies resource scoping, list/filter permission checks and per-record field visibility. Unauthorized columns are rejected, and CSV values beginning with spreadsheet formula markers are escaped. Responses disable caching and include `X-Export-Rows`.
+
+This is a bounded, multi-query export rather than a point-in-time database snapshot: concurrent inserts/deletes during an export can alter offset pagination. For large, audit-grade snapshots use a dedicated background job and a consistent transactional read. CSV/JSON **import is intentionally not implemented**; schema validation, permission checks, and all-or-nothing transactions must be designed before exposing writes.

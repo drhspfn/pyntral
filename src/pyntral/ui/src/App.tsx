@@ -21,6 +21,7 @@ import { CurrentAdminProvider, useCurrentAdmin } from "./currentAdmin";
 import { I18nProvider, useI18n } from "./i18n";
 import { defaultTablePreferences, parseTablePreferences, orderedColumns, type TablePreferences } from "./table-prefs";
 import { TableSettings } from "./table-settings";
+import { ExportControls } from "./export-controls";
 import { api, base, buildQuery, getAuth, setCsrf } from "./api";
 import type {
   ActionDef, AuthState, CustomFieldProps, CustomCrudProps, CustomCollectionActionProps, FieldDef, JobDef, RecordData, ResourceDef, Schema, ThemeMode,
@@ -369,7 +370,8 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
           className="ra-list-search" aria-label="Search records"
           placeholder={resource.searchFields.length ? `Search ${resource.label.toLowerCase()}…` : "Search not configured"}
           disabled={!resource.searchFields.length} />}
-        <div className="toolbar-buttons"><button ref={columnsButtonRef} className={"btn subtle " + (columnsOpen ? "selected" : "")} type="button"
+        <div className="toolbar-buttons"><ExportControls resource={resource} query={query} offset={offset}
+          total={records.data?.total ?? 0} pageRows={records.data?.items.length ?? 0} preferences={preferences}/><button ref={columnsButtonRef} className={"btn subtle " + (columnsOpen ? "selected" : "")} type="button"
           aria-expanded={columnsOpen} aria-controls="ra-table-settings" aria-haspopup="true"
           onClick={() => setColumnsOpen(!columnsOpen)} title="Table columns and density">
           {t("table.columns", "Columns")}</button><button className={`btn subtle ra-filter-toggle ${filtersOpen ? "selected" : ""}`} aria-expanded={filtersOpen}
