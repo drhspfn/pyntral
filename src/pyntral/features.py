@@ -89,3 +89,25 @@ class SoftDeleteFeature:
         ])
         if self.disable_hard_delete:
             resource.allow_delete = False
+
+
+@dataclass(slots=True)
+class TimestampFeature:
+    """Server-managed create/update timestamps without trusting client values."""
+
+    created_field: str = "created_at"
+    updated_field: str = "updated_at"
+
+    def apply(self, resource: Any) -> None:
+        for column in (self.created_field, self.updated_field):
+            _require_column(resource, column)
+            existing = resource.fields.get(column)
+            if existing is not None and existing.visible is False:
+                raise ValueError("TimestampFeature requires visible timestamp metadata")
+            resource.fields[column] = Field(readonly=True)
+        now = lambda: dt.datetime.now(dt.timezone.utc)
+        if self.created_field in resource._server_defaults or self.updated_field in resource._server_onupdate:
+            raise ValueError("TimestampFeature conflicts with a timestamp writer")
+        resource._server_defaults[self.created_field] = now
+        resource._server_defaults[self.updated_field] = now
+        resource._server_onupdate[self.updated_field] = now

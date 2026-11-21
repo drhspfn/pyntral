@@ -124,6 +124,9 @@ class MapperAdapter:
             if any(prop.direction.name == "MANYTOONE" and column in prop.local_columns
                    for prop in self.relations.values())
         }
+        for field_name in set(resource._server_defaults) | set(resource._server_onupdate):
+            if field_name not in self.columns:
+                raise ValueError(f"Server-managed field is not mapped: {field_name}")
         for name, virtual in resource.virtual_fields.items():
             if name in self.columns or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", name):
                 raise ValueError(f"Invalid or conflicting virtual field: {name}")
@@ -506,6 +509,8 @@ class MapperAdapter:
     async def create(self, session: Any, payload: dict[str, Any]) -> dict[str, Any]:
         parsed = self.parsed_payload(payload, create=True)
         mapped = {key: value for key, value in parsed.items() if key in self.columns}
+        for key, factory in self.resource._server_defaults.items():
+            mapped[key] = factory()
         record = self.resource.model(**mapped)
         for key, value in parsed.items():
             if key in self.resource.virtual_fields:
@@ -521,6 +526,8 @@ class MapperAdapter:
                 await maybe_await(self.resource.virtual_fields[name].setter(record, value))
             else:
                 setattr(record, name, value)
+        for key, factory in self.resource._server_onupdate.items():
+            setattr(record, key, factory())
         await self._commit(session)
         await maybe_await(session.refresh(record))
         return self.serialize(record)

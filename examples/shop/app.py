@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    ResourceUpdated, ResourceHook, VirtualField, LayoutSection, PasswordFeature, SoftDeleteFeature,
+    ResourceUpdated, ResourceHook, VirtualField, LayoutSection, PasswordFeature, SoftDeleteFeature, TimestampFeature,
 )
 
 
@@ -106,6 +106,8 @@ class EditorialDraft(Base):
     title: Mapped[str] = mapped_column(String(120))
     body: Mapped[str] = mapped_column(String(500), default="")
     version: Mapped[int] = mapped_column(default=1, nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __mapper_args__ = {"version_id_col": version}
 
 
@@ -174,6 +176,14 @@ SessionLocal = sessionmaker(engine, expire_on_commit=False)
 
 def seed() -> None:
     Base.metadata.create_all(engine)
+    # Add non-destructive demonstration columns for users upgrading an older Shop DB.
+    if db_url.startswith("sqlite"):
+        from sqlalchemy import inspect as sql_inspect, text
+        columns = {column["name"] for column in sql_inspect(engine).get_columns("editorial_drafts")}
+        with engine.begin() as connection:
+            for name in ("created_at", "updated_at"):
+                if name not in columns:
+                    connection.execute(text(f"ALTER TABLE editorial_drafts ADD COLUMN {name} DATETIME"))
     with SessionLocal() as session:
         if session.scalar(select(Customer.id).limit(1)) is None:
             rng = random.Random(1802)
@@ -400,12 +410,13 @@ admin.add_resource(Resource(
     EditorialDraft, icon="file-text", navigation="Commerce", name="editorial-drafts",
     list_fields=["id", "title", "body", "version"],
     fields={"version": Field(readonly=True)}, version_field="version",
+    features=[TimestampFeature()],
     form_sections=[
         LayoutSection("overview", "Overview", ["title"], kind="tab"),
         LayoutSection("body", "Content", ["body"], kind="tab"),
     ],
     detail_sections=[
-        LayoutSection("summary", "Summary", ["title", "version"], kind="section"),
+        LayoutSection("summary", "Summary", ["title", "version", "created_at", "updated_at"], kind="section"),
         LayoutSection("content", "Full content", ["body"], kind="accordion"),
     ],
 ))

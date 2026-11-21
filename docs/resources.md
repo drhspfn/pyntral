@@ -330,3 +330,11 @@ Resource(StaffAccount, features=[PasswordFeature(), SoftDeleteFeature()])
 
 The Shop Demo has **Security → Demo staff**, a live example. These records are
 not connected to the Shop authentication backend.
+
+## Server-managed timestamps
+
+`TimestampFeature(created_field="created_at", updated_field="updated_at")`
+adds both timestamps during creation and advances only `updated_at` on
+subsequent edits. Both mapped columns are read-only in Pyntral and the values
+are produced inside the ORM transaction, rather than trusting the browser.
+Model columns must exist and be nullable or accept timezone-aware UTC datetimes.

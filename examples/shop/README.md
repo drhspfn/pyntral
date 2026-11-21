@@ -122,3 +122,10 @@ write-only input and resulting hash never appear in list/show responses.
 On the record page use Archive, then Restore to exercise `SoftDeleteFeature`.
 Hard deletion is disabled. These are demonstration accounts, not identities
 used by the Shop login backend.
+
+### Server-managed timestamps
+
+**Commerce → Editorial Drafts:** Create a draft, then edit its content. The
+`created_at` timestamp remains unchanged while `updated_at` advances. Both
+fields are managed by `TimestampFeature` and cannot be written via JSON input.
+Existing local SQLite databases are migrated without dropping user records.
