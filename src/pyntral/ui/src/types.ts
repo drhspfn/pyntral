@@ -2,6 +2,11 @@ import type { ComponentType } from "react";
 export type FieldKind = "string" | "number" | "integer" | "boolean" | "date" |
   "datetime" | "time" | "enum" | "json" | "array" | "uuid" | "binary";
 
+export type FieldContext = "list" | "create" | "edit" | "show" | "filter";
+export interface FieldViewDef {
+  visible: boolean; readonly: boolean; required: boolean;
+  component?: string | null; order?: number | null;
+}
 export interface FieldDef {
   name: string;
   label: string;
@@ -22,11 +27,13 @@ export interface FieldDef {
   filterOperators?: ("eq" | "neq" | "contains" | "starts_with" | "ends_with" |
     "gt" | "gte" | "lt" | "lte" | "between" | "in" | "not_in")[];
   relation?: { resource: string; field: string };
-  components: Partial<Record<"list" | "edit" | "show" | "filter", string>>;
+  components: Partial<Record<FieldContext, string>>;
+  views?: Partial<Record<FieldContext, FieldViewDef>>;
 }
 export interface ActionDef {
   name: string; label: string; variant: string; confirmation?: string | null;
   position: "row" | "detail" | "both";
+  kind?: "record" | "resource" | "bulk";
   appearance: "button" | "badge" | "menu";
   component?: string | null; dialog?: string | null; icon?: string | null;
 }
@@ -41,12 +48,14 @@ export interface ResourceDef {
   titleField: string;
   pageSize: number;
   showSearch?: boolean;
+  crudViews?: Partial<Record<"list" | "create" | "edit" | "show", string>>;
   formLayout?: "stack" | "grid";
   detailLayout?: "stack" | "grid";
   fields: FieldDef[];
   listFields: string[];
   searchFields: string[];
-  relationships: { name: string; resource: string; many: boolean; label: string; selectable: boolean; layout: "table" | "cards" }[];
+  relationships: { name: string; resource: string; many: boolean; label: string; selectable: boolean;
+    layout: "table" | "cards"; editable?: boolean }[];
   actions: ActionDef[];
   capabilities: { list: boolean; select: boolean; create: boolean; edit: boolean; delete: boolean; show: boolean };
 }
@@ -77,7 +86,7 @@ export interface CustomFieldProps {
   value: unknown;
   record: RecordData;
   resource: ResourceDef;
-  mode: "list" | "edit" | "show" | "filter";
+  mode: "list" | "create" | "edit" | "show" | "filter";
   onChange?: (value: unknown) => void;
 }
 export interface CustomPageProps { schema: Schema; navigate: (url: string) => void; }
@@ -97,6 +106,15 @@ export interface CustomThemeProps {
   mode: ThemeMode;
 }
 export type ActionComponent = ComponentType<CustomActionProps>;
+export interface CustomCollectionActionProps {
+  schema: Schema;
+  resource: ResourceDef;
+  action: ActionDef;
+  selectedIds: string[];
+  navigate: (route: string) => void;
+  invoke: (payload?: RecordData) => Promise<unknown>;
+}
+export type CollectionActionComponent = ComponentType<CustomCollectionActionProps>;
 export type ThemeComponent = ComponentType<CustomThemeProps>;
 
 export interface ProfileMenuProps {
@@ -121,3 +139,40 @@ export type AccessDeniedComponent = ComponentType<AccessDeniedProps>;
 
 export interface LoginScreenProps { onAuthenticated: (auth: AuthState) => void }
 export type LoginScreenComponent = ComponentType<LoginScreenProps>;
+
+export interface CustomCrudProps {
+  schema: Schema;
+  resource: ResourceDef;
+  mode: "list" | "create" | "edit" | "show";
+  record?: RecordData;
+  navigate: (route: string) => void;
+  /** List queries are validated and scoped by the server. */
+  loadList: (params?: Record<string, string | number | boolean>) => Promise<{
+    items: RecordData[]; total: number; offset: number; limit: number;
+  }>;
+  save: (payload: RecordData) => Promise<RecordData>;
+  remove: () => Promise<void>;
+  reload: () => Promise<void>;
+}
+export type CrudComponent = ComponentType<CustomCrudProps>;
+
+/** Resolve view presentation without weakening backend field authorization. */
+export function fieldForView(field: FieldDef, mode: FieldContext): FieldDef {
+  const view = field.views?.[mode];
+  if (!view) return field;
+  return {
+    ...field,
+    readonly: view.readonly,
+    required: view.required,
+    components: view.component ? { ...field.components, [mode]: view.component } : field.components,
+  };
+}
+export function viewFields(fields: FieldDef[], mode: FieldContext): FieldDef[] {
+  return fields.filter((field) => field.views?.[mode]?.visible !== false)
+    .map((field) => fieldForView(field, mode))
+    .sort((a, b) => {
+      const av = a.views?.[mode]?.order ?? Number.MAX_SAFE_INTEGER;
+      const bv = b.views?.[mode]?.order ?? Number.MAX_SAFE_INTEGER;
+      return av - bv;
+    });
+}

@@ -23,7 +23,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .auth import AuthBackend, Principal, maybe_await
 from .events import (
     AdminEvent, EventTransport, InMemoryEventBus, ResourceCreated, ResourceUpdated, ResourceDeleted,
-    ActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded, field_refs, event_context,
+    ActionExecuted, CollectionActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded, FieldRef, field_refs, event_context,
 )
 from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
@@ -180,7 +180,7 @@ class Admin:
             adapter = self._adapter(event.resource)
             record = await adapter.get(session, event.record_id, principal)
             await self._authorize(principal, event.resource, "show", record)
-            return adapter.serialize(record, await self._allowed_fields(principal, event.resource))
+            return adapter.serialize(record, await self._allowed_fields(principal, event.resource, view="show"))
         finally:
             await maybe_await(session.close())
 
@@ -257,11 +257,11 @@ class Admin:
         auth_action = "list" if action == "select" else action
         return bool(await maybe_await(self.auth.authorize(principal, name, auth_action, record)))
 
-    async def _allowed_fields(self, principal: Principal, name: str, *, edit: bool = False) -> set[str]:
+    async def _allowed_fields(self, principal: Principal, name: str, *, edit: bool = False, view: str | None = None) -> set[str]:
         adapter = self._adapter(name)
         allowed = set()
         for field_name in adapter.columns:
-            if not adapter.visible(field_name):
+            if not adapter.visible(field_name) or (view and not adapter.view_visible(field_name, view)):
                 continue
             field = adapter.resource.fields.get(field_name)
             role = field.write_role if edit and field else field.read_role if field else None
@@ -270,6 +270,9 @@ class Admin:
             if edit and field is not None and field.read_role is not None and not self._role_ok(principal, field.read_role):
                 continue
             if edit and not adapter.writable(field_name):
+                continue
+            override = adapter.view_config(field_name, view or ("edit" if edit else "show"))
+            if edit and override and override.readonly is True:
                 continue
             # A blocked target must not expose its FK or permit editing it.
             parent = next((prop for prop in adapter.relations.values()
@@ -306,6 +309,8 @@ class Admin:
         adapter = self._adapter(name)
         visible = []
         for action in adapter.resource.actions:
+            if action.kind != "record":
+                continue
             if not await self._can(principal, name, "action:" + action.name, record):
                 continue
             predicate = action.visible
@@ -524,10 +529,19 @@ class Admin:
                             or field["name"] not in edit_fields)
                         if field["relation"] and not can_select.get(field["relation"]["resource"], False):
                             field["relation"] = None
+                    for field in metadata["fields"]:
+                        for view, option in field["views"].items():
+                            allowed = (field["name"] in edit_fields if view in ("create", "edit")
+                                       else field["name"] in read_fields)
+                            option["visible"] = option["visible"] and allowed
                     metadata["listFields"] = [n for n in metadata["listFields"] if n in read_fields]
                     metadata["searchFields"] = [n for n in metadata["searchFields"] if n in read_fields]
                     metadata["relationships"] = [r for r in metadata["relationships"]
                         if can_read.get(r["resource"], False)]
+                    for relation in metadata["relationships"]:
+                        if "editable" in relation:
+                            relation["editable"] = (metadata["capabilities"]["edit"]
+                                and can_select.get(relation["resource"], False))
                     metadata["actions"] = [a for a in metadata["actions"]
                         if await self._can(principal, name, "action:" + a["name"])]
                 resources.append(metadata)
@@ -608,11 +622,12 @@ class Admin:
             session = self.session_factory()
             try:
                 adapter = self._adapter(name)
-                read_fields = await self._allowed_fields(principal, name)
+                read_fields = await self._allowed_fields(principal, name, view="list")
+                filter_fields = await self._allowed_fields(principal, name)
                 result = await adapter.list(
                     session, principal, offset=offset, limit=limit, q=params.get("q", ""),
                     sort=params.get("sort"), desc=params.get("desc") == "true", filters=filters,
-                    allowed_fields=read_fields,
+                    allowed_fields=read_fields, filter_fields=filter_fields,
                 )
                 if adapter.resource.actions:
                     # Evaluated against the actual scoped ORM records; no frontend-only ACL.
@@ -636,7 +651,7 @@ class Admin:
             await self._authorize(principal, name, "create")
             payload = await self._body(request)
             adapter = self._adapter(name)
-            write_fields = await self._allowed_fields(principal, name, edit=True)
+            write_fields = await self._allowed_fields(principal, name, edit=True, view="create")
             rejected = set(payload) - write_fields
             if rejected:
                 if all(not adapter.writable(name) for name in rejected if name in adapter.columns) and all(
@@ -649,7 +664,7 @@ class Admin:
             try:
                 await self._verify_foreign_keys(session, principal, adapter, payload)
                 result = await adapter.create(session, payload)
-                read_fields = await self._allowed_fields(principal, name)
+                read_fields = await self._allowed_fields(principal, name, view="show")
                 self.log_event("resource", "resource.created", principal=principal, resource=name,
                                record_id=result.get(adapter.pk_name))
                 await self._publish(ResourceCreated(
@@ -657,6 +672,55 @@ class Admin:
                     fields=field_refs(adapter, payload), **event_context(),
                 ))
                 return {"record": {k: v for k, v in result.items() if k in read_fields}}
+            finally:
+                await maybe_await(session.close())
+
+        @api.post("/api/resources/{name}/actions/{action_name}")
+        async def run_collection_action(
+            name: str, action_name: str, request: Request,
+            principal: Principal = Depends(self._principal),
+        ) -> dict:
+            """Explicit resource/bulk action route: no implicit SQL mass updates."""
+            self._csrf(request)
+            adapter = self._adapter(name)
+            action = next((a for a in adapter.resource.actions if a.name == action_name), None)
+            if action is None or action.kind not in ("resource", "bulk"):
+                raise AdminError(404, "Action not found", "not_found")
+            await self._authorize(principal, name, "action:" + action_name)
+            payload = await self._body(request)
+            session = self.session_factory()
+            try:
+                if action.kind == "bulk":
+                    ids = payload.get("ids")
+                    if not isinstance(ids, list) or not ids or len(ids) > 100 or any(
+                        not isinstance(value, (str, int)) or isinstance(value, bool) for value in ids
+                    ) or len({str(value) for value in ids}) != len(ids):
+                        raise AdminError(422, "Bulk actions require 1-100 distinct record IDs", "validation_error")
+                    records = []
+                    for identifier in ids:
+                        record = await adapter.get(session, str(identifier), principal)
+                        await self._authorize(principal, name, "action:" + action_name, record)
+                        records.append(record)
+                    remaining = {k: v for k, v in payload.items() if k != "ids"}
+                    allowed = (await maybe_await(action.visible(principal, records))
+                               if callable(action.visible) else action.visible)
+                    if not allowed:
+                        raise AdminError(403, "Action unavailable", "forbidden")
+                    output = await maybe_await(action.handler(records, session, principal, remaining))
+                else:
+                    allowed = (await maybe_await(action.visible(principal, None))
+                               if callable(action.visible) else action.visible)
+                    if not allowed:
+                        raise AdminError(403, "Action unavailable", "forbidden")
+                    output = await maybe_await(action.handler(session, principal, payload))
+                encoded = jsonable_encoder(output)
+                self.log_event("action", "action.invoked", principal=principal,
+                               resource=name, action=action_name, action_kind=action.kind)
+                await self._publish(CollectionActionExecuted(
+                    resource=name, actor_id=str(principal.id), action=action_name,
+                    action_kind=action.kind, **event_context(),
+                ))
+                return {"result": encoded}
             finally:
                 await maybe_await(session.close())
 
@@ -668,7 +732,7 @@ class Admin:
                 adapter = self._adapter(name)
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "show", record)
-                return {"record": adapter.serialize(record, await self._allowed_fields(principal, name)),
+                return {"record": adapter.serialize(record, await self._allowed_fields(principal, name, view="show")),
                         "actions": await self._visible_actions(principal, name, record)}
             finally:
                 await maybe_await(session.close())
@@ -686,7 +750,7 @@ class Admin:
                 adapter = self._adapter(name)
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "edit", record)
-                write_fields = await self._allowed_fields(principal, name, edit=True)
+                write_fields = await self._allowed_fields(principal, name, edit=True, view="edit")
                 rejected = set(payload) - write_fields
                 if rejected:
                     if all(not adapter.writable(name) for name in rejected if name in adapter.columns) and all(
@@ -700,7 +764,7 @@ class Admin:
                 result = await adapter.update(session, record, payload)
                 changed = [field_name for field_name, old in before.items()
                            if old != getattr(record, field_name)]
-                read_fields = await self._allowed_fields(principal, name)
+                read_fields = await self._allowed_fields(principal, name, view="show")
                 self.log_event("resource", "resource.updated", principal=principal, resource=name,
                                record_id=identifier)
                 if changed:
@@ -750,7 +814,7 @@ class Admin:
             try:
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "action:" + action_name, record)
-                if action_name not in await self._visible_actions(principal, name, record):
+                if action.kind != "record" or action_name not in await self._visible_actions(principal, name, record):
                     raise AdminError(403, "Action unavailable for this record", "forbidden")
                 payload = await self._body(request)
                 output = await maybe_await(action.handler(record, session, principal, payload))
@@ -762,6 +826,124 @@ class Admin:
                     action=action_name, **event_context(),
                 ))
                 return {"result": encoded_output}
+            finally:
+                await maybe_await(session.close())
+
+        async def _editable_relation(
+            name: str, identifier: str, relation_name: str, principal: Principal,
+            session: Any,
+        ) -> tuple[MapperAdapter, Any, Any, MapperAdapter]:
+            adapter = self._adapter(name)
+            prop = adapter.relations.get(relation_name)
+            config = adapter.resource.relationships.get(relation_name)
+            target_name = adapter._related_resource(prop, self.resources) if prop else None
+            if (prop is None or not prop.uselist or prop.secondary is None or prop.viewonly
+                    or config is not None and not config.visible or target_name is None):
+                raise AdminError(404, "Editable many-to-many relationship not found", "not_found")
+            await self._authorize(principal, name, "edit")
+            await self._authorize(principal, name, "show")
+            # Eager loading is mandatory for SQLAlchemy AsyncSession.
+            from sqlalchemy.orm import selectinload
+            relationship_attr = getattr(adapter.resource.model, relation_name)
+            statement = await adapter._scope(select(adapter.resource.model).options(
+                selectinload(relationship_attr)).where(
+                    getattr(adapter.resource.model, adapter.pk_name) == adapter.pk_value(identifier)), principal)
+            parent = (await maybe_await(session.execute(statement))).scalar_one_or_none()
+            if parent is None:
+                raise AdminError(404, "Record not found", "not_found")
+            await self._authorize(principal, name, "edit", parent)
+            return adapter, prop, parent, self._adapter(target_name)
+
+        @api.post("/api/resources/{name}/{identifier}/relationships/{relation_name}/attach")
+        async def attach_relation(name: str, identifier: str, relation_name: str,
+                                  request: Request, principal: Principal = Depends(self._principal)) -> dict:
+            self._csrf(request)
+            payload = await self._body(request)
+            if set(payload) != {"id"} or not isinstance(payload["id"], (int, str)) or isinstance(payload["id"], bool):
+                raise AdminError(422, "Expected a related record ID", "validation_error")
+            session = self.session_factory()
+            try:
+                parent_adapter, prop, parent, target = await _editable_relation(
+                    name, identifier, relation_name, principal, session)
+                await self._authorize(principal, target.resource.name, "select")
+                related = await target.get(session, str(payload["id"]), principal)
+                await self._authorize(principal, target.resource.name, "select", related)
+                members = getattr(parent, relation_name)
+                if not any(getattr(row, target.pk_name) == getattr(related, target.pk_name) for row in members):
+                    members.append(related)
+                    await parent_adapter._commit(session)
+                    await self._publish(ResourceUpdated(
+                        resource=name, record_id=identifier, actor_id=str(principal.id),
+                        fields=(FieldRef(
+                            name=relation_name, kind="relationship"),), **event_context(),
+                    ))
+                return {"ok": True}
+            finally:
+                await maybe_await(session.close())
+
+        @api.post("/api/resources/{name}/{identifier}/relationships/{relation_name}/detach")
+        async def detach_relation(name: str, identifier: str, relation_name: str,
+                                  request: Request, principal: Principal = Depends(self._principal)) -> dict:
+            self._csrf(request)
+            payload = await self._body(request)
+            if set(payload) != {"id"} or not isinstance(payload["id"], (int, str)) or isinstance(payload["id"], bool):
+                raise AdminError(422, "Expected a related record ID", "validation_error")
+            session = self.session_factory()
+            try:
+                parent_adapter, prop, parent, target = await _editable_relation(
+                    name, identifier, relation_name, principal, session)
+                await self._authorize(principal, target.resource.name, "select")
+                members = getattr(parent, relation_name)
+                pk = target.pk_value(str(payload["id"]))
+                match = next((row for row in members if getattr(row, target.pk_name) == pk), None)
+                if match is None:
+                    raise AdminError(404, "Relationship link not found", "not_found")
+                # Target ACL/scope also applies when detaching a link.
+                scoped = await target.get(session, str(payload["id"]), principal)
+                await self._authorize(principal, target.resource.name, "select", scoped)
+                members.remove(match)
+                await parent_adapter._commit(session)
+                await self._publish(ResourceUpdated(
+                    resource=name, record_id=identifier, actor_id=str(principal.id),
+                    fields=(FieldRef(
+                        name=relation_name, kind="relationship"),), **event_context(),
+                ))
+                return {"ok": True}
+            finally:
+                await maybe_await(session.close())
+
+        @api.post("/api/resources/{name}/{identifier}/relationships/{relation_name}/create", status_code=201)
+        async def create_related(name: str, identifier: str, relation_name: str,
+                                 request: Request, principal: Principal = Depends(self._principal)) -> dict:
+            self._csrf(request)
+            payload = await self._body(request)
+            session = self.session_factory()
+            try:
+                parent_adapter, prop, parent, target = await _editable_relation(
+                    name, identifier, relation_name, principal, session)
+                await self._authorize(principal, target.resource.name, "create")
+                await self._authorize(principal, target.resource.name, "select")
+                allowed = await self._allowed_fields(principal, target.resource.name,
+                                                    edit=True, view="create")
+                if set(payload) - allowed:
+                    raise AdminError(403, "Cannot write one or more related fields", "forbidden")
+                await self._verify_foreign_keys(session, principal, target, payload)
+                child = target.resource.model(**target.parsed_payload(payload, create=True))
+                session.add(child)
+                getattr(parent, relation_name).append(child)
+                await parent_adapter._commit(session)
+                await maybe_await(session.refresh(child))
+                await self._publish(ResourceCreated(
+                    resource=target.resource.name, record_id=str(getattr(child, target.pk_name)),
+                    actor_id=str(principal.id), fields=field_refs(target, payload), **event_context(),
+                ))
+                await self._publish(ResourceUpdated(
+                    resource=name, record_id=identifier, actor_id=str(principal.id),
+                    fields=(FieldRef(
+                        name=relation_name, kind="relationship"),), **event_context(),
+                ))
+                return {"record": target.serialize(
+                    child, await self._allowed_fields(principal, target.resource.name, view="show"))}
             finally:
                 await maybe_await(session.close())
 
@@ -790,7 +972,7 @@ class Admin:
                 return await adapter.relation(
                     session, principal, record, relation_name,
                     self._adapter(target_name), offset, limit, query=q,
-                    allowed_fields=await self._allowed_fields(principal, target_name),
+                    allowed_fields=await self._allowed_fields(principal, target_name, view="list"),
                 )
             finally:
                 await maybe_await(session.close())

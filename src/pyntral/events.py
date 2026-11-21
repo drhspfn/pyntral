@@ -76,6 +76,15 @@ class ActionExecuted(ResourceEvent):
     action: str
 
 
+class CollectionActionExecuted(AdminEvent):
+    """Resource/bulk action metadata. Does not disclose selected record IDs."""
+
+    event_name: ClassVar[str] = "action.collection_executed"
+    resource: str = PydanticField(min_length=1)
+    action: str = PydanticField(min_length=1)
+    action_kind: str = PydanticField(pattern=r"^(resource|bulk)$")
+
+
 class LoginSucceeded(AdminEvent):
     event_name: ClassVar[str] = "auth.login_succeeded"
 
@@ -239,6 +248,6 @@ EventBus = InMemoryEventBus
 
 __all__ = [
     "AdminEvent", "FieldRef", "ResourceCreated", "ResourceUpdated", "ResourceDeleted",
-    "ActionExecuted", "LoginSucceeded", "LoginFailed", "LogoutSucceeded",
+    "ActionExecuted", "CollectionActionExecuted", "LoginSucceeded", "LoginFailed", "LogoutSucceeded",
     "CustomEvent", "ResourceEvent", "InMemoryEventBus", "EventBus", "EventTransport", "DeliveryReport",
 ]

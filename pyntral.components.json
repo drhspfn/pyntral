@@ -13,5 +13,6 @@
   "themes": {},
   "dialogs": {
     "archive-notice": "admin/ArchiveNotice.tsx"
-  }
+  },
+  "crud": {}
 }

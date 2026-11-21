@@ -2,10 +2,10 @@
 
 from .admin import Admin
 from .auth import CallbackAuth, LocalAuth, ModelAuth, Principal, hash_password, verify_password
-from .resources import Action, Field, Page, Resource, NavigationGroup, Relationship, RoleAccess
+from .resources import Action, Field, FieldView, Page, Resource, NavigationGroup, Relationship, RoleAccess
 from .bridge import Bridge, BridgeContext
 from .events import (AdminEvent, FieldRef, ResourceEvent, ResourceCreated, ResourceUpdated, ResourceDeleted,
-                     ActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded, CustomEvent,
+                     ActionExecuted, CollectionActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded, CustomEvent,
                      InMemoryEventBus, EventBus, EventTransport, DeliveryReport)
 from .transports.rabbitmq import RabbitMQEventBus
 from .transports.kafka import KafkaEventBus
@@ -14,7 +14,7 @@ from .logging import LoggingConfig, EventFormatter, configure_logging, forward_t
 __all__ = [
     "Admin",
     "AdminEvent", "FieldRef", "ResourceEvent", "ResourceCreated", "ResourceUpdated", "ResourceDeleted",
-    "ActionExecuted", "LoginSucceeded", "LoginFailed", "LogoutSucceeded", "CustomEvent",
+    "ActionExecuted", "CollectionActionExecuted", "LoginSucceeded", "LoginFailed", "LogoutSucceeded", "CustomEvent",
     "InMemoryEventBus", "EventBus", "EventTransport", "DeliveryReport",
     "RabbitMQEventBus", "KafkaEventBus",
     "LoggingConfig",
@@ -27,7 +27,7 @@ __all__ = [
     "BridgeContext",
     "NavigationGroup",
     "CallbackAuth",
-    "Field",
+    "Field", "FieldView",
     "LocalAuth",
     "ModelAuth",
     "Page",

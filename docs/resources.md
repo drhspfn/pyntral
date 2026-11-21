@@ -117,3 +117,93 @@ resource = Resource(
 ```
 
 `position` is `row`, `detail`, or `both`; `appearance` is `button`, `badge`, or `menu`. An `Action(component="profile")` opens a registered React action page; `Action(dialog="archive-dialog")` inserts a registered custom dialog body. `visible` may be a boolean or sync/async predicate. Pyntral checks access on the server, not just button visibility. See [extensions](extensions.md).
+
+## Per-screen field configuration
+
+`FieldView` configures each representation independently, without changing the
+SQLAlchemy mapping. Global `Field(visible=False)` and role permissions continue to
+win over per-view configuration.
+
+```python
+from pyntral import Field, FieldView, Resource
+
+admin.add_resource(Resource(
+    User,
+    fields={
+        "email": Field(
+            list=FieldView(visible=True, order=1),
+            show=FieldView(visible=True, order=2),
+            create=FieldView(required=True),
+            edit=FieldView(readonly=True),
+            filter=FieldView(visible=True, operators=["eq", "contains"]),
+        ),
+        "internal_note": Field(
+            list=FieldView(visible=False),
+            show=FieldView(visible=False),
+        ),
+    },
+))
+```
+
+For list/show responses, Pyntral excludes fields hidden in that context. Write
+attempts to `readonly` edit fields and filters targeting hidden filter fields
+are rejected by the server. `FieldView(component="component-id")` replaces
+the field renderer for that context; `order` determines display order in
+that context. `FieldView.required` augments validation for create/edit forms.
+
+## Resource and bulk actions
+
+`Action.kind` selects the execution scope. The default `record` kind keeps the
+existing handler signature `(record, session, principal, payload)`. The other
+kinds have explicit signatures:
+
+```python
+from pyntral import Action, Resource
+
+
+def archive_selected(records, session, principal, payload):
+    for record in records:
+        record.active = False
+    session.commit()
+    return {"updated": len(records)}
+
+
+def refresh_statistics(session, principal, payload):
+    # Implement resource-wide work here. The framework does not execute
+    # unbounded SQL updates automatically.
+    return {"accepted": True}
+
+admin.add_resource(Resource(User, actions=[
+    Action("archive_selected", archive_selected, kind="bulk",
+           confirmation="Archive the selected users?"),
+    Action("refresh_stats", refresh_statistics, kind="resource"),
+]))
+```
+
+`POST /admin/api/resources/users/actions/archive_selected` expects a JSON
+object containing `ids` (1-100 distinct primary keys). All records must exist,
+pass the resource's `scope`, record-level authorization and the action's
+visibility predicate **before** the handler runs. The validated ORM instances
+are passed in the given order. Resource actions use the same route without
+`ids`. Handlers own their database commit and should be idempotent where needed.
+The frontend provides a selection toolbar and corresponding action buttons.
+
+## Editing SQLAlchemy many-to-many relationships
+
+For a normal writable `relationship(secondary=...)`, the parent record view
+provides an AsyncSelect picker, unlink action and optional create-and-link
+form. The three corresponding POST endpoints are:
+
+```text
+/admin/api/resources/{parent}/{id}/relationships/{name}/attach
+/admin/api/resources/{parent}/{id}/relationships/{name}/detach
+/admin/api/resources/{parent}/{id}/relationships/{name}/create
+```
+
+`attach` and `detach` accept `{"id": 12}`. `create` accepts the new target
+record's field data and commits the target + association together. `detach`
+**never deletes the related record**. Every operation checks CSRF, parent edit
+permission, target select permission and row scopes; create additionally
+requires target create access. `viewonly` and non-secondary relations remain
+read-only. Association tables requiring additional mandatory columns should
+be handled by a custom action or an explicitly mapped association model.
