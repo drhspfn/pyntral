@@ -34,3 +34,5 @@ See [release readiness](docs/deployment.md#release-readiness) for verification r
 - Add optional authenticated SSE invalidation of frontend query caches, without record identifiers or values.
 
 - Add opt-in in-process background resource jobs with bounded execution, progress and cancellation, demonstrated in Products.
+
+- Add before/after hooks around record, bulk and resource Actions, including server-side veto support.

@@ -412,3 +412,13 @@ writes, and resource-action permissions. Requests are bounded, jobs time out,
 completed entries expire, and tasks are cancelled during FastAPI shutdown.
 **Jobs are not persisted or transferred between workers.** Use a real broker
 and durable worker for long-running, must-not-lose tasks.
+
+## Custom action hooks
+
+`ResourceHook(before_action=callback, after_action=callback)` also wraps record,
+bulk and resource actions. `OperationContext.action` identifies the action,
+`record` contains a checked record for record actions, and `records` contains
+pre-authorized ORM instances for bulk actions. A before-hook can validate or
+modify the action payload; throwing an `AdminError` blocks the handler. After
+hooks run only after successful handlers and are logged if they fail, but they
+do not imply an ORM commit. See the Shop Orders Fulfill action.

@@ -20,6 +20,8 @@ class OperationContext:
     session: Any
     record: Any = None
     payload: dict[str, Any] = field(default_factory=dict)
+    action: str | None = None
+    records: list[Any] | None = None  # Pre-authorized bulk records; never raw client IDs.
 
 
 @dataclass(slots=True)
@@ -30,3 +32,5 @@ class ResourceHook:
     after_update: Callable[[OperationContext], Any] | None = None
     before_delete: Callable[[OperationContext], Any] | None = None
     after_delete: Callable[[OperationContext], Any] | None = None
+    before_action: Callable[[OperationContext], Any] | None = None
+    after_action: Callable[[OperationContext], Any] | None = None

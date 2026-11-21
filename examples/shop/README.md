@@ -228,3 +228,11 @@ request-scoped sessions. This demo does not change inventory data. Job status
 is visible only to the administrator who launched it. It is intentionally not
 a durable queue — production jobs requiring crash recovery must use a worker
 system (RabbitMQ, Redis Streams, etc.) rather than this convenience feature.
+
+### Hooks around custom Actions
+
+**Commerce → Orders → an order → Fulfill:** The order's `before_action`
+hook rejects cancelled orders with HTTP 422 before the custom action handler
+runs. `ResourceHook.before_action` and `after_action` also cover resource-wide
+and bulk actions. Hooks never bypass the normal server-side action permissions;
+handlers are responsible for their own database commits.

@@ -324,9 +324,13 @@ admin = Admin(
 )
 
 
+def validate_order_action(ctx):
+    if ctx.action == "mark_fulfilled" and ctx.record.status == OrderStatus.cancelled:
+        from pyntral.orm import AdminError
+        raise AdminError(422, "Cancelled orders cannot be fulfilled", "validation_error")
+
+
 def fulfill_order(record: Order, session, _principal, _payload):
-    if record.status == OrderStatus.cancelled:
-        return {"message": "Cancelled orders cannot be fulfilled"}
     record.status = OrderStatus.fulfilled
     session.commit()
     return {"message": f"Order #{record.id} fulfilled"}
@@ -521,6 +525,7 @@ admin.add_resource(Resource(
     ],
 ))
 admin.add_resource(Resource(Order, icon="activity", navigation="Commerce/Orders", list_fields=["id", "customer_id", "status", "created_at"],
+                            hooks=[ResourceHook(before_action=validate_order_action)],
                             title_field="id", relationships={"items": Relationship(label="Order items", selectable=True)},
                             fields={"created_at": Field(readonly=True),
                                                        "status": Field(components={"list": "order-status", "show": "order-status"})},

@@ -1020,13 +1020,20 @@ class Admin:
                                if callable(action.visible) else action.visible)
                     if not allowed:
                         raise AdminError(403, "Action unavailable", "forbidden")
-                    output = await maybe_await(action.handler(records, session, principal, remaining))
+                    ctx = OperationContext("action", name, principal, session, action=action_name,
+                                           records=records, payload=remaining)
+                    await self._run_hooks(adapter, "before_action", ctx)
+                    output = await maybe_await(action.handler(records, session, principal, ctx.payload))
                 else:
                     allowed = (await maybe_await(action.visible(principal, None))
                                if callable(action.visible) else action.visible)
                     if not allowed:
                         raise AdminError(403, "Action unavailable", "forbidden")
-                    output = await maybe_await(action.handler(session, principal, payload))
+                    ctx = OperationContext("action", name, principal, session, action=action_name,
+                                           payload=payload)
+                    await self._run_hooks(adapter, "before_action", ctx)
+                    output = await maybe_await(action.handler(session, principal, ctx.payload))
+                await self._run_hooks(adapter, "after_action", ctx)
                 encoded = jsonable_encoder(output)
                 self.log_event("action", "action.invoked", principal=principal,
                                resource=name, action=action_name, action_kind=action.kind)
@@ -1144,7 +1151,11 @@ class Admin:
                 if action.kind != "record" or action_name not in await self._visible_actions(principal, name, record):
                     raise AdminError(403, "Action unavailable for this record", "forbidden")
                 payload = await self._body(request)
-                output = await maybe_await(action.handler(record, session, principal, payload))
+                ctx = OperationContext("action", name, principal, session,
+                                       record=record, action=action_name, payload=payload)
+                await self._run_hooks(adapter, "before_action", ctx)
+                output = await maybe_await(action.handler(record, session, principal, ctx.payload))
+                await self._run_hooks(adapter, "after_action", ctx)
                 encoded_output = jsonable_encoder(output)
                 self.log_event("action", "action.invoked", principal=principal,
                                resource=name, action=action_name, record_id=identifier)
