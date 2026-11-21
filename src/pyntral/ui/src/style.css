@@ -383,3 +383,21 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .ra-collection-action { position:relative; display:inline-flex; }
 .ra-collection-panel { position:absolute; right:0; top:calc(100% + 8px); z-index:20; min-width:min(420px,90vw); padding:16px; }
 @media(max-width:680px) { .ra-relation-editor,.ra-bulk-bar { align-items:stretch; } .ra-attach-picker { max-width:100%; } }
+
+/* Declarative resource layouts */
+.ra-layout-sections { display: grid; gap: 1rem; min-width: 0; }
+.ra-layout-tabs { display: flex; align-items: center; gap: .25rem; flex-wrap: wrap;
+  border-bottom: 1px solid var(--ra-border); }
+.ra-layout-tabs button { border: 0; background: transparent; color: var(--ra-text-secondary);
+  padding: .65rem .9rem; border-bottom: 2px solid transparent; cursor: pointer; }
+.ra-layout-tabs button[aria-selected="true"] { color: var(--ra-text); border-bottom-color: var(--ra-primary); }
+.ra-layout-panel { min-width: 0; }
+.ra-layout-group { min-width: 0; border: 1px solid var(--ra-border); border-radius: 12px;
+  padding: .9rem; }
+.ra-layout-group h3, .ra-layout-group summary { font-size: .94rem; font-weight: 600;
+  margin: 0 0 .9rem; }
+.ra-layout-group summary { cursor: pointer; }
+.ra-layout-field { min-width: 0; }
+.ra-layout-panel .field-grid, .ra-layout-group .field-grid { width: 100%; }
+@media (max-width: 700px) { .ra-layout-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .ra-layout-tabs button { flex-shrink: 0; } }

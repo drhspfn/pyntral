@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    ResourceUpdated, ResourceHook, VirtualField,
+    ResourceUpdated, ResourceHook, VirtualField, LayoutSection,
 )
 
 
@@ -384,6 +384,14 @@ admin.add_resource(Resource(
     EditorialDraft, icon="file-text", navigation="Commerce", name="editorial-drafts",
     list_fields=["id", "title", "body", "version"],
     fields={"version": Field(readonly=True)}, version_field="version",
+    form_sections=[
+        LayoutSection("overview", "Overview", ["title"], kind="tab"),
+        LayoutSection("body", "Content", ["body"], kind="tab"),
+    ],
+    detail_sections=[
+        LayoutSection("summary", "Summary", ["title", "version"], kind="section"),
+        LayoutSection("content", "Full content", ["body"], kind="accordion"),
+    ],
 ))
 admin.add_resource(Resource(Order, icon="activity", navigation="Commerce/Orders", list_fields=["id", "customer_id", "status", "created_at"],
                             title_field="id", relationships={"items": Relationship(label="Order items", selectable=True)},

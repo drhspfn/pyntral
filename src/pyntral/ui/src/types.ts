@@ -37,6 +37,14 @@ export interface ActionDef {
   appearance: "button" | "badge" | "menu";
   component?: string | null; dialog?: string | null; icon?: string | null;
 }
+export interface LayoutSectionDef {
+  id: string;
+  title: string;
+  kind: "section" | "tab" | "accordion";
+  fields: string[];
+  visibleIf?: { field: string; equals: unknown } | null;
+  defaultOpen: boolean;
+}
 export interface ResourceDef {
   id: string;
   label: string;
@@ -50,6 +58,7 @@ export interface ResourceDef {
   pageSize: number;
   showSearch?: boolean;
   crudViews?: Partial<Record<"list" | "create" | "edit" | "show", string>>;
+  layouts?: { form: LayoutSectionDef[]; detail: LayoutSectionDef[] };
   formLayout?: "stack" | "grid";
   detailLayout?: "stack" | "grid";
   fields: FieldDef[];

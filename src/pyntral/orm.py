@@ -127,6 +127,19 @@ class MapperAdapter:
         for name, virtual in resource.virtual_fields.items():
             if name in self.columns or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", name):
                 raise ValueError(f"Invalid or conflicting virtual field: {name}")
+        for mode, sections in (("form", resource.form_sections), ("detail", resource.detail_sections)):
+            if len({sec.id for sec in sections}) != len(sections):
+                raise ValueError(f"Duplicate {mode} layout section IDs")
+            seen_fields: set[str] = set()
+            for section in sections:
+                if seen_fields.intersection(section.fields):
+                    raise ValueError(f"Duplicate field in {mode} layout sections")
+                seen_fields.update(section.fields)
+                for name in section.fields:
+                    if name not in self.columns and name not in resource.virtual_fields:
+                        raise ValueError(f"Unknown {mode} layout field: {name}")
+                if section.visible_if and section.visible_if["field"] not in self.columns and section.visible_if["field"] not in resource.virtual_fields:
+                    raise ValueError(f"Unknown conditional layout field: {section.visible_if['field']}")
         for name, configuration in resource.fields.items():
             if name not in self.columns:
                 raise ValueError(f"Unknown column in {resource.name}: {name}")
@@ -317,6 +330,13 @@ class MapperAdapter:
             "primaryKey": self.pk_name,
             "versionField": self.resource.version_field,
             "titleField": self._title_field(),
+            "layouts": {mode: [
+                {"id": section.id, "title": section.title, "kind": section.kind,
+                 "fields": section.fields, "visibleIf": section.visible_if,
+                 "defaultOpen": section.default_open}
+                for section in items
+            ] for mode, items in (("form", self.resource.form_sections),
+                                  ("detail", self.resource.detail_sections))},
             "formLayout": self.resource.form_layout,
             "detailLayout": self.resource.detail_layout,
             "pageSize": self.resource.page_size,

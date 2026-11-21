@@ -106,3 +106,10 @@ in the first, then attempt to save the stale second tab. The second write
 receives HTTP 412 instead of silently overwriting another administrator's
 changes. Refresh the second tab to retrieve the latest version. The model
 uses SQLAlchemy `version_id_col` for an atomic optimistic version check.
+
+### Declarative layout sections
+
+**Commerce → Editorial Drafts → Create/Edit:** The editor uses Overview/Content
+*tab* sections without requiring custom React. **Show** renders Summary as a
+section and Full content as an accordion. Non-declared fields still render in
+an "Other details" fallback, so adding a model column does not hide it.

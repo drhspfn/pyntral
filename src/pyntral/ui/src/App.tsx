@@ -361,6 +361,43 @@ function InputField({ field, resource, record, value, onChange, mode = "edit" }:
   </FormField>;
 }
 
+/** Server-defined section/tab/accordion layout, without frontend ACL decisions. */
+function StructuredFields({ resource, mode, fields, values, render }: {
+  resource: ResourceDef; mode: "form" | "detail"; fields: FieldDef[];
+  values: RecordData; render: (field: FieldDef) => ReactNode;
+}) {
+  const sections = resource.layouts?.[mode] ?? [];
+  const visible = (section: typeof sections[number]) =>
+    !section.visibleIf || values[section.visibleIf.field] === section.visibleIf.equals;
+  const tabs = sections.filter((section) => section.kind === "tab" && visible(section));
+  const [selectedTab, setSelectedTab] = useState<string | null>(null);
+  const current = tabs.find((section) => section.id === selectedTab) ?? tabs[0];
+  const assigned = new Set(sections.flatMap((section) => section.fields));
+  const gridClass = `field-grid ra-layout-${mode === "form" ? resource.formLayout || "stack" : resource.detailLayout || "stack"}`;
+  const content = (names: string[]) => <div className={gridClass}>{fields.filter((field) => names.includes(field.name))
+    .map((field) => <div key={field.name} className="ra-layout-field">{render(field)}</div>)}</div>;
+  if (!sections.length) return content(fields.map((field) => field.name));
+  const trailing = fields.filter((field) => !assigned.has(field.name));
+  return <div className="ra-layout-sections">
+    {tabs.length > 0 && <div className="ra-layout-tabs" role="tablist" aria-label="Record sections">
+      {tabs.map((section) => <button key={section.id} type="button" role="tab"
+        aria-selected={current?.id === section.id} onClick={() => setSelectedTab(section.id)}>
+        {section.title}</button>)}
+    </div>}
+    {current && <section role="tabpanel" className="ra-layout-panel" aria-label={current.title}>
+      {content(current.fields)}</section>}
+    {sections.filter((section) => section.kind !== "tab" && visible(section)).map((section) =>
+      section.kind === "accordion" ? <details className="ra-layout-group" key={section.id}
+        open={section.defaultOpen ? true : undefined}>
+        <summary>{section.title}</summary>{content(section.fields)}
+      </details> : <section className="ra-layout-group" key={section.id}>
+        <h3>{section.title}</h3>{content(section.fields)}
+      </section>)}
+    {trailing.length > 0 && <section className="ra-layout-group">
+      <h3>Other details</h3>{content(trailing.map((field) => field.name))}</section>}
+  </div>;
+}
+
 function RecordEditor({ resource, id, navigate, notify }: {
   resource: ResourceDef; id?: string; navigate: (route: string) => void;
   notify: (text: string) => void;
@@ -415,11 +452,12 @@ function RecordEditor({ resource, id, navigate, notify }: {
     {!isNew && record.isLoading ? <Loading/> : record.error ? <Alert error={record.error}/> :
       <form className="editor-grid" onSubmit={(e: FormEvent) => { e.preventDefault(); mutation.mutate(); }}>
         <div className="surface editor-card"><div className="editor-card-title"><h2>Record details</h2><p>Fields marked with * are required.</p></div>
-          <div className={`field-grid ra-layout-${resource.formLayout || "stack"}`}>{visibleFields.length ? visibleFields.map((field) => <InputField
-            key={field.name} field={field} resource={resource} record={values} mode={isNew ? "create" : "edit"}
-            value={values[field.name] ?? (field.kind === "boolean" ? false : "")}
-            onChange={(v) => { setValues((old) => ({ ...old, [field.name]: v })); setDirty(true); }} />) :
-            <p className="muted">No editable fields</p>}</div>
+          {visibleFields.length ? <StructuredFields resource={resource} mode="form" fields={visibleFields}
+            values={values} render={(field) => <InputField field={field} resource={resource}
+              record={values} mode={isNew ? "create" : "edit"}
+              value={values[field.name] ?? (field.kind === "boolean" ? false : "")}
+              onChange={(v) => { setValues((old) => ({ ...old, [field.name]: v })); setDirty(true); }} />}/>
+            : <p className="muted">No editable fields</p>}
           {mutation.error != null && <Alert error={mutation.error} />}
           <div className="form-actions"><button type="button" className="btn subtle" onClick={() => navigate(`resources/${resource.id}`)}>Cancel</button>
             <button className="btn primary" type="submit" disabled={mutation.isPending || (!isNew && !dirty)}>
@@ -549,10 +587,11 @@ function RecordShow({ resource, id, schema, navigate }: {
     </div>
     {record.isLoading ? <Loading/> : record.error ? <Alert error={record.error} /> : record.data && <>
       <div className="surface detail-card"><div className="editor-card-title"><h2>Details</h2><p>Data from the SQLAlchemy resource</p></div>
-        <dl className={`details-grid ra-layout-${resource.detailLayout || "stack"}`}>{viewFields(resource.fields, "show").map((field) => <div key={field.name} className={`detail-item ${field.span === 2 ? "ra-field-wide" : ""}`}>
-          <dt>{field.label}</dt><dd><FieldValue resource={resource} field={field}
-            record={record.data!.record} value={record.data!.record[field.name]} mode="show" /></dd>
-        </div>)}</dl>
+        <StructuredFields resource={resource} mode="detail" fields={viewFields(resource.fields, "show")}
+          values={record.data.record} render={(field) => <div className={`detail-item ${field.span === 2 ? "ra-field-wide" : ""}`}>
+            <dt>{field.label}</dt><dd><FieldValue resource={resource} field={field}
+              record={record.data!.record} value={record.data!.record[field.name]} mode="show" /></dd>
+          </div>} />
       </div>
       {!!resource.actions.length && <div className="record-extra-actions">
         {resource.actions.filter((action) => (action.kind ?? "record") === "record" && action.position !== "row" && record.data.actions.includes(action.name))

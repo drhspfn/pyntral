@@ -288,3 +288,24 @@ validates this configuration at registration. PATCH and DELETE require an
 SQLAlchemy's versioned UPDATE/DELETE rejects a concurrent commit with 409.
 The bundled React editor automatically sends the version it originally loaded.
 Do not implement version checks using an unguarded integer read/compare alone.
+
+## Layout sections
+
+Declare `form_sections` and `detail_sections` as `LayoutSection` instances.
+Kinds: `section`, `tab`, `accordion`. Fields may appear in at most one declared
+section per view, with remaining visible fields shown in a fallback section.
+`visible_if={"field":"active", "equals":True}` hides a group **in the UI
+only**; it never grants or removes access to its fields. All values and
+permissions are validated server-side as usual.
+
+```python
+from pyntral import LayoutSection
+
+Resource(Article, form_sections=[
+    LayoutSection("general", "General", ["title"], kind="tab"),
+    LayoutSection("content", "Content", ["body"], kind="tab"),
+], detail_sections=[
+    LayoutSection("summary", "Summary", ["title", "version"]),
+    LayoutSection("body", "Body", ["body"], kind="accordion"),
+])
+```
