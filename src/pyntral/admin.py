@@ -688,6 +688,33 @@ class Admin:
                 resolved = await maybe_await(self.locale_resolver(principal))
                 if isinstance(resolved, str) and re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", resolved):
                     locale = resolved
+            # Literal labels stay untouched. Explicit @keys resolve against the
+            # selected locale with an English fallback, without translating IDs.
+            def localized(value: Any) -> Any:
+                if not isinstance(value, str) or re.fullmatch(r"@[a-zA-Z][a-zA-Z0-9_.-]*", value) is None:
+                    return value
+                key = value[1:]
+                return (self.translations.get(locale, {}).get(key)
+                        or self.translations.get("en", {}).get(key)
+                        or key)
+
+            for metadata in resources:
+                metadata["label"] = localized(metadata["label"])
+                for field_data in metadata.get("fields", []):
+                    field_data["label"] = localized(field_data.get("label"))
+                    field_data["help"] = localized(field_data.get("help"))
+                for operation in ("actions", "jobs"):
+                    for action_data in metadata.get(operation, []):
+                        for attribute in ("label", "confirmation"):
+                            if attribute in action_data:
+                                action_data[attribute] = localized(action_data[attribute])
+                for mode in ("form", "detail"):
+                    for section in metadata.get("layouts", {}).get(mode, []):
+                        section["title"] = localized(section["title"])
+                for relationship in metadata.get("relationships", []):
+                    relationship["label"] = localized(relationship.get("label"))
+            for page in pages:
+                page["label"] = localized(page["label"])
             theme_default = self.default_theme
             theme_tokens = {mode: dict(self.theme.get(mode, {})) for mode in ("light", "dark")}
             if self.theme_resolver is not None:
