@@ -52,6 +52,7 @@ export interface LayoutSectionDef {
   fields: string[];
   visibleIf?: { field: string; equals: unknown } | null;
   defaultOpen: boolean;
+  columns?: 1 | 2 | null;
 }
 export interface ResourceDef {
   id: string;

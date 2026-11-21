@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.pool import StaticPool
 import pytest
 from pyntral import Admin, CallbackAuth, Principal, Resource
@@ -39,6 +40,21 @@ def test_stale_updates_and_deletes_are_rejected():
         assert new_ver==2
         assert c.delete(url,headers={**headers,"If-Match":str(new_ver)}).status_code==200
     engine.dispose()
+
+def test_commit_time_version_race_is_a_precondition_failure():
+    from pyntral.orm import MapperAdapter, AdminError
+    from unittest.mock import AsyncMock
+    import asyncio
+    adapter = MapperAdapter(Resource(Draft, version_field="version"))
+    session = type("RaceSession", (), {})()
+    session.commit = AsyncMock(side_effect=StaleDataError("UPDATE affected zero rows"))
+    session.rollback = AsyncMock()
+    with pytest.raises(AdminError) as result:
+        asyncio.run(adapter._commit(session))
+    assert result.value.status_code == 412
+    assert result.value.code == "precondition_failed"
+    session.rollback.assert_awaited_once()
+
 
 def test_version_mapping_is_required():
     class Bad(Base):

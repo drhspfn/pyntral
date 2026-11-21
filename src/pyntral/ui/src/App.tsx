@@ -492,10 +492,11 @@ function StructuredFields({ resource, mode, fields, values, render }: {
     !section.visibleIf || values[section.visibleIf.field] === section.visibleIf.equals;
   const tabs = sections.filter((section) => section.kind === "tab" && visible(section));
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
+  const [accordionOpen, setAccordionOpen] = useState<Record<string, boolean>>({});
   const current = tabs.find((section) => section.id === selectedTab) ?? tabs[0];
   const assigned = new Set(sections.flatMap((section) => section.fields));
   const gridClass = `field-grid ra-layout-${mode === "form" ? resource.formLayout || "stack" : resource.detailLayout || "stack"}`;
-  const content = (names: string[]) => <div className={gridClass}>{fields.filter((field) => names.includes(field.name))
+  const content = (names: string[], columns?: 1 | 2 | null) => <div className={columns ? `field-grid ra-layout-${columns === 1 ? "stack" : "grid"}` : gridClass}>{fields.filter((field) => names.includes(field.name))
     .map((field) => <div key={field.name} className="ra-layout-field">{render(field)}</div>)}</div>;
   if (!sections.length) return content(fields.map((field) => field.name));
   const trailing = fields.filter((field) => !assigned.has(field.name));
@@ -506,13 +507,15 @@ function StructuredFields({ resource, mode, fields, values, render }: {
         {section.title}</button>)}
     </div>}
     {current && <section role="tabpanel" className="ra-layout-panel" aria-label={current.title}>
-      {content(current.fields)}</section>}
+      {content(current.fields, current.columns)}</section>}
     {sections.filter((section) => section.kind !== "tab" && visible(section)).map((section) =>
       section.kind === "accordion" ? <details className="ra-layout-group" key={section.id}
-        open={section.defaultOpen ? true : undefined}>
-        <summary>{section.title}</summary>{content(section.fields)}
+        open={accordionOpen[section.id] ?? section.defaultOpen}
+        onToggle={(event) => { const open = event.currentTarget.open;
+          setAccordionOpen((previous) => previous[section.id] === open ? previous : { ...previous, [section.id]: open }); }}>
+        <summary>{section.title}</summary>{content(section.fields, section.columns)}
       </details> : <section className="ra-layout-group" key={section.id}>
-        <h3>{section.title}</h3>{content(section.fields)}
+        <h3>{section.title}</h3>{content(section.fields, section.columns)}
       </section>)}
     {trailing.length > 0 && <section className="ra-layout-group">
       <h3>Other details</h3>{content(trailing.map((field) => field.name))}</section>}

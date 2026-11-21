@@ -20,12 +20,15 @@ class LayoutSection:
     kind: Literal["section", "tab", "accordion"] = "section"
     visible_if: dict[str, Any] | None = None
     default_open: bool = True
+    columns: Literal[1, 2] | None = None
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[a-z][a-z0-9_-]*", self.id):
             raise ValueError("Layout section ID must be a lowercase slug")
         if not self.title.strip() or not self.fields or len(set(self.fields)) != len(self.fields):
             raise ValueError("Layout section must have a title and unique fields")
+        if self.columns is not None and (type(self.columns) is not int or self.columns not in (1, 2)):
+            raise ValueError("Layout section columns must be 1 or 2")
         if self.kind not in ("section", "tab", "accordion"):
             raise ValueError("Invalid layout section kind")
         if self.visible_if is not None and (

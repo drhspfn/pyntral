@@ -346,7 +346,7 @@ class MapperAdapter:
             "layouts": {mode: [
                 {"id": section.id, "title": section.title, "kind": section.kind,
                  "fields": section.fields, "visibleIf": section.visible_if,
-                 "defaultOpen": section.default_open}
+                 "defaultOpen": section.default_open, "columns": section.columns}
                 for section in items
             ] for mode, items in (("form", self.resource.form_sections),
                                   ("detail", self.resource.detail_sections))},
@@ -581,7 +581,7 @@ class MapperAdapter:
             await maybe_await(session.commit())
         except StaleDataError as exc:
             await maybe_await(session.rollback())
-            raise AdminError(409, "Record was modified concurrently", "concurrent_update") from exc
+            raise AdminError(412, "Record changed since it was loaded", "precondition_failed") from exc
         except IntegrityError as exc:
             await maybe_await(session.rollback())
             raise AdminError(409, "Database constraint prevents this operation. The record may be referenced by other records or a value must be unique.", "integrity_error") from exc
