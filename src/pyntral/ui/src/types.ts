@@ -15,6 +15,7 @@ export interface FieldDef {
   readonly: boolean;
   nullable: boolean;
   primaryKey: boolean;
+  sortable?: boolean;
   widget?: string;
   help?: string;
   /** SQLAlchemy String.length, Numeric.precision/scale, or an explicit UI width. */

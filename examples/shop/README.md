@@ -149,3 +149,12 @@ private demonstration directory: do not put it under a public static server.
 `S3Storage(bucket=..., endpoint_url=...)` uses the same API with AWS S3 or
 MinIO (requires `pyntral[s3]`). For persistence in Docker, mount a volume for
 `SHOP_UPLOAD_ROOT`.
+
+### Table preferences and saved filter presets
+
+**Commerce → Products → Columns:** Hide/reorder columns, pin one column, or
+switch between Comfortable and Compact row density. Open Filters, set a price
+range, type a preset name, and press Save preset. Change filters, then restore
+the saved preset from the menu. Preferences are stored in this browser for the
+current administrator ID and resource, never used as an authorization rule.
+Bulk selections remain available when moving between pages of the same query.

@@ -17,7 +17,8 @@ import { RelationInput } from "./relation";
 import { AdvancedFilterField, serializeFilters, filterOperators, type FilterValues } from "./filters";
 import { filterControlWidth } from "./filter-state";
 import { applyTheme, resolveMode } from "./theme";
-import { CurrentAdminProvider } from "./currentAdmin";
+import { CurrentAdminProvider, useCurrentAdmin } from "./currentAdmin";
+import { defaultTablePreferences, parseTablePreferences, orderedColumns, type TablePreferences } from "./table-prefs";
 import { api, base, buildQuery, getAuth, setCsrf } from "./api";
 import type {
   ActionDef, AuthState, CustomFieldProps, CustomCrudProps, CustomCollectionActionProps, FieldDef, RecordData, ResourceDef, Schema, ThemeMode,
@@ -171,18 +172,23 @@ function RecordAction({ resource, record, action, navigate }: {
   </span>;
 }
 
-function TableContent({ resource, data, navigate, selectable = false, selection = [], onSelectionChange }: { resource: ResourceDef; data: Listing;
+function TableContent({ resource, data, navigate, selectable = false, selection = [], onSelectionChange, preferences }: { resource: ResourceDef; data: Listing;
   navigate: (route: string) => void; selectable?: boolean; selection?: string[];
-  onSelectionChange?: (selected: string[]) => void;
+  onSelectionChange?: (selected: string[]) => void; preferences?: TablePreferences;
 }) {
-  const columns = viewFields(resource.fields, "list").filter((field) => resource.listFields.includes(field.name));
+  const names = preferences ? orderedColumns(resource.listFields, preferences) : resource.listFields;
+  const columns = viewFields(resource.fields, "list").filter((field) => names.includes(field.name))
+    .sort((a, b) => names.indexOf(a.name) - names.indexOf(b.name));
   const { requestDelete } = useDeleteRecord(resource);
   const keys = data.items.map((row) => String(row[resource.primaryKey]));
-  return <div><div className="table-scroll"><table className="data-table"><thead><tr>
+  return <div className={preferences?.density === "compact" ? "ra-table-compact" : ""}
+    style={{ "--ra-pin-left": selectable ? "46px" : "0px" } as CSSProperties}>
+    <div className="table-scroll"><table className="data-table"><thead><tr>
     {selectable && <th><input type="checkbox" aria-label="Select all visible records"
       checked={keys.length > 0 && keys.every((key) => selection.includes(key))}
       onChange={(event) => onSelectionChange?.(event.target.checked ? Array.from(new Set([...selection, ...keys])) : selection.filter((key) => !keys.includes(key)))}/></th>}
-    {columns.map((field) => <th key={field.name}>{field.label}</th>)}<th className="actions-head">ACTION</th>
+    {columns.map((field) => <th key={field.name} className={preferences?.pinned === field.name ? "ra-column-pinned" : ""}>
+      {field.label}</th>)}<th className="actions-head">ACTION</th>
   </tr></thead><tbody>
     {data.items.map((row) => <tr key={String(row[resource.primaryKey])}>
       {selectable && <td><input type="checkbox" aria-label={`Select record ${String(row[resource.primaryKey])}`}
@@ -190,7 +196,8 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
           const key = String(row[resource.primaryKey]);
           onSelectionChange?.(event.target.checked ? [...selection, key] : selection.filter((value) => value !== key));
         }}/></td>}
-      {columns.map((field, idx) => <td key={field.name} className={idx === 0 ? "strong-cell" : ""}>
+      {columns.map((field, idx) => <td key={field.name}
+        className={`${idx === 0 ? "strong-cell" : ""} ${preferences?.pinned === field.name ? "ra-column-pinned" : ""}`}>
         {idx === 0 && resource.capabilities.show ? <button className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
           <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" /></button> :
           <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" />}
@@ -261,6 +268,15 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
   const [desc, setDesc] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
+  const admin = useCurrentAdmin();
+  const prefKey = `pyntral:table:${admin.id}:${resource.id}`;
+  const [preferences, setPreferences] = useState<TablePreferences>(() => {
+    try { return parseTablePreferences(JSON.parse(localStorage.getItem(prefKey) || "null"), resource.listFields); }
+    catch { return defaultTablePreferences(); }
+  });
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  useEffect(() => { try { localStorage.setItem(prefKey, JSON.stringify(preferences)); } catch { /* storage may be disabled */ } }, [prefKey, preferences]);
   const [filters, setFilters] = useState<FilterValues>({});
   const [appliedFilters, setAppliedFilters] = useState<FilterValues>({});
   const activeFilterCount = Object.keys(serializeFilters(resource.fields, filters)).length;
@@ -269,7 +285,8 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
   const query = buildQuery({ offset, limit: resource.pageSize,
     q: resource.showSearch ? search : undefined, sort, desc,
     ...serializeFilters(resource.fields, appliedFilters) });
-  useEffect(() => setSelection([]), [query]);
+  const selectionScope = JSON.stringify({ q: search, filters: appliedFilters });
+  useEffect(() => setSelection([]), [selectionScope, resource.id]);
   const records = useQuery({ queryKey: ["list", resource.id, query],
     queryFn: () => api<Listing>(`/api/resources/${resource.id}${query}`) });
   return <>
@@ -288,11 +305,38 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
           className="ra-list-search" aria-label="Search records"
           placeholder={resource.searchFields.length ? `Search ${resource.label.toLowerCase()}…` : "Search not configured"}
           disabled={!resource.searchFields.length} />}
-        <div className="toolbar-buttons"><button className={`btn subtle ra-filter-toggle ${filtersOpen ? "selected" : ""}`} aria-expanded={filtersOpen}
+        <div className="toolbar-buttons"><button className="btn subtle" type="button"
+          aria-expanded={columnsOpen} onClick={() => setColumnsOpen(!columnsOpen)} title="Table columns and density">
+          Columns</button><button className={`btn subtle ra-filter-toggle ${filtersOpen ? "selected" : ""}`} aria-expanded={filtersOpen}
           onClick={() => setFiltersOpen(!filtersOpen)}><Filter size={16}/> Filters
           <span className={`ra-filter-count ${activeFilterCount === 0 ? "is-empty" : ""}`} aria-hidden={activeFilterCount === 0}>{activeFilterCount || "0"}</span></button>
           <button className="btn subtle" onClick={() => records.refetch()} title="Refresh"><RefreshCw size={16}/></button></div>
       </div>
+      {columnsOpen && <div className="ra-table-preferences" aria-label="Table preferences">
+        <div className="ra-table-preferences-heading"><strong>Columns</strong>
+          <button type="button" className="btn subtle" onClick={() => setPreferences(defaultTablePreferences())}>Reset</button></div>
+        {resource.listFields.map((name) => <div className="ra-table-preference-row" key={name}>
+          <label><input type="checkbox" checked={!preferences.hidden.includes(name)} onChange={(event) =>
+            setPreferences(prev => ({ ...prev, hidden: event.target.checked ? prev.hidden.filter(v => v !== name) : [...prev.hidden, name] }))}/>
+            {resource.fields.find(f => f.name === name)?.label ?? name}</label>
+          <button type="button" title="Move left" onClick={() => setPreferences(prev => {
+            const order = prev.order.length ? [...prev.order] : [...resource.listFields];
+            const index = order.indexOf(name); if (index > 0) [order[index-1], order[index]] = [order[index], order[index-1]];
+            return { ...prev, order };
+          })}>←</button>
+          <button type="button" title="Move right" onClick={() => setPreferences(prev => {
+            const order = prev.order.length ? [...prev.order] : [...resource.listFields];
+            const index = order.indexOf(name); if (index >= 0 && index < order.length - 1) [order[index+1], order[index]] = [order[index], order[index+1]];
+            return { ...prev, order };
+          })}>→</button>
+          <button type="button" title="Pin column" aria-pressed={preferences.pinned === name}
+            onClick={() => setPreferences(prev => ({...prev, pinned: prev.pinned === name ? null : name}))}>
+            {preferences.pinned === name ? "Unpin" : "Pin"}</button>
+        </div>)}
+        <label>Density <select value={preferences.density} onChange={(event) => setPreferences(prev =>
+          ({...prev, density: event.target.value === "compact" ? "compact" : "comfortable"}))}>
+          <option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+      </div>}
       {filtersOpen && <div className="filters-panel">
         <div className="ra-filter-heading"><span className="filter-caption">REFINE RESULTS</span>
           <span className="ra-filter-hint">Choose a comparison using the icon beside each field</span></div>
@@ -306,11 +350,25 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
               onChange={(value) => { setFilters((old) => ({ ...old, [field.name]: value })); setOffset(0); }}/>
           </div>)}</div>
         <button className="link-btn" onClick={() => setFilters({})}>Clear filters</button>
+        <div className="ra-filter-presets">
+          <label>Saved filters <select aria-label="Load saved filters" value="" onChange={event => {
+            const saved = preferences.presets[event.target.value];
+            if (saved) { setFilters(saved as FilterValues); setOffset(0); }
+          }}><option value="">Choose preset…</option>
+            {Object.keys(preferences.presets).map(name => <option key={name} value={name}>{name}</option>)}
+          </select></label>
+          <input aria-label="Preset name" placeholder="Preset name" value={presetName}
+            onChange={event => setPresetName(event.target.value)} maxLength={30}/>
+          <button type="button" className="btn subtle" disabled={!presetName.trim() || Object.keys(preferences.presets).length >= 10}
+            onClick={() => { const name = presetName.trim(); if (!name) return;
+              setPreferences(prev => ({ ...prev, presets: {...prev.presets, [name]: filters} })); setPresetName(""); }}>Save preset</button>
+        </div>
       </div>}
       <div className="sortbar"><span>{records.data ? `${records.data.total} total records` : "Records"}</span>
         <div className="sort-controls">Sort by <div className="ra-sort-select"><Select searchable={false} clearable={false} ariaLabel="Sort column" value={sort}
           onChange={(value) => { if (typeof value === "string") setSort(value); }}
-          options={viewFields(resource.fields, "list").map((field) => ({ value: field.name, label: field.label }))}/></div>
+          options={viewFields(resource.fields, "list").filter((field) => field.sortable !== false)
+            .map((field) => ({ value: field.name, label: field.label }))}/></div>
           <button title="Toggle sort order" onClick={() => setDesc(!desc)}>{desc ? <ArrowDown size={16}/> : <ArrowUp size={16}/>}</button></div></div>
       {!!resource.actions.some((action) => action.kind === "bulk") && <div className="ra-bulk-bar" aria-live="polite">
         <span>{selection.length} selected</span>
@@ -321,7 +379,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
       {records.isLoading ? <Loading label="Loading records…" /> : records.error ? <Alert error={records.error} /> :
         records.data?.items.length ? <><TableContent resource={resource} data={records.data} navigate={navigate}
             selectable={resource.actions.some((action) => action.kind === "bulk")}
-            selection={selection} onSelectionChange={setSelection}/>
+            selection={selection} onSelectionChange={setSelection} preferences={preferences}/>
           <Pager offset={offset} total={records.data.total} limit={resource.pageSize} onOffset={setOffset}/></> :
         <Empty title="No records found" description={search ? "Try another search term or clear your filters." : "This resource has no records yet."} />}
     </div>

@@ -89,3 +89,12 @@ The UI prefixes custom variables with `--ra-` (for example, `primary` → `--ra-
 Scrollbar tokens include `scrollbar-width`, `scrollbar-track`, `scrollbar-thumb`, `scrollbar-thumb-hover`, and `scrollbar-radius`; Firefox supports a more limited scrollbar customization than Chromium/WebKit.
 
 Form and detail layout can be `stack` or `grid` on each resource. Custom component classes are free to use these tokens; avoid changing core styles globally when a scoped CSS class suffices.
+
+## Personal table preferences
+
+List views provide hide/reorder columns, one pinned column, density, and up
+to ten named filter presets. Preferences use the local browser's `localStorage`
+keyed by the current administrator ID and resource ID; they do not alter
+server-side field permissions. Filter presets are **explicitly** saved and may
+contain search strings; do not store sensitive searches on shared computers.
+Bulk selection can span list pages while the current filters remain unchanged.

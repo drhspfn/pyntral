@@ -286,6 +286,7 @@ class MapperAdapter:
                     "required": options.required if options and options.required is not None else is_required,
                     "readonly": not self.writable(name),
                     "primaryKey": name == self.pk_name,
+                    "sortable": True,
                     "nullable": column.nullable,
                     "widget": options.widget if options else None,
                     "help": options.help if options else None,
@@ -319,7 +320,7 @@ class MapperAdapter:
             fields.append({
                 "name": name, "label": virtual.label or name.replace("_", " ").title(),
                 "kind": virtual.kind, "required": virtual.required, "readonly": virtual.setter is None,
-                "primaryKey": False, "nullable": True, "widget": None, "help": None,
+                "primaryKey": False, "sortable": False, "nullable": True, "widget": None, "help": None,
                 "maxLength": None, "precision": None, "scale": None, "filterWidth": None,
                 "filterOperators": [], "options": None, "relation": None,
                 "components": {}, "span": 1, "views": views,
