@@ -189,3 +189,5 @@ This is a bounded, multi-query export rather than a point-in-time database snaps
 ## Localized resource labels
 
 Resource, field, action, job, relationship, page and layout-section labels can be **literal strings** or explicit translation references starting with `@` (for example, `Field(label="@fields.title")`). Define translations in `Admin(translations={"en": {"fields.title": "Title"}, "ru": {"fields.title": "Заголовок"}})`. The server resolves references for the authenticated administrator's locale, falls back to the English dictionary, then to the untranslated key. It never interprets arbitrary literals as keys, and translation does not grant permissions. To change the locale for an administrator, use `locale_resolver` and refetch the schema.
+
+Pyntral bundles basic core UI translations for `ru`, `es`, and `fr`, and uses the caller-provided English fallback for other locales or missing entries. `Admin(translations=...)` overrides bundled messages for matching keys. This initial catalog covers navigation and common list/CRUD commands; other UI strings still require translation-key migration.
