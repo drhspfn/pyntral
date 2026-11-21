@@ -1,0 +1,61 @@
+"""The installed Python package serves its embedded SPA without a frontend toolchain."""
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from pyntral import Admin, LocalAuth, hash_password
+
+
+def test_generic_spa_is_served_from_package_data(tmp_path, monkeypatch):
+    import pyntral.admin as admin_module
+
+    package = tmp_path / "installed" / "pyntral"
+    assets = package / "web_dist" / "assets"
+    assets.mkdir(parents=True)
+    (package / "web_dist" / "index.html").write_text("<html>Pyntral packaged</html>")
+    (assets / "main.js").write_text("console.log('packaged')")
+    # Pretend the code was imported from the installed wheel and the host has
+    # not compiled a custom .pyntral/dist/ bundle.
+    monkeypatch.setattr(admin_module, "__file__", str(package / "admin.py"))
+    empty_host = tmp_path / "empty"
+    empty_host.mkdir()
+    monkeypatch.chdir(empty_host)
+    monkeypatch.delenv("PYNTRAL_DIST", raising=False)
+
+    app = FastAPI()
+    admin = Admin(
+        app, session_factory=lambda: None,
+        auth=LocalAuth("demo", hash_password("long-password")),
+        secret_key="a" * 48, secure_cookie=False,
+    )
+    assert admin._dist() == package / "web_dist"
+    with TestClient(app) as client:
+        assert client.get("/admin/").text == "<html>Pyntral packaged</html>"
+        assert client.get("/admin/resources/users/42").status_code == 200
+        assert "packaged" in client.get("/admin/assets/main.js").text
+        assert client.get("/admin/assets/missing.js").status_code == 404
+        assert client.get("/admin/api/schema").status_code == 401
+
+
+def test_custom_bundle_takes_precedence(tmp_path, monkeypatch):
+    app = FastAPI()
+    auth = LocalAuth("demo", hash_password("long-password"))
+    local = tmp_path / ".pyntral" / "dist"
+    local.mkdir(parents=True)
+    (local / "index.html").write_text("custom")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("PYNTRAL_DIST", raising=False)
+    admin = Admin(app, session_factory=lambda: None, auth=auth,
+                  secret_key="b" * 48, secure_cookie=False)
+    assert admin._dist() == local.resolve()
+    with TestClient(app) as client:
+        assert client.get("/admin/").text == "custom"
+
+    direct = tmp_path / "another-dist"
+    direct.mkdir()
+    (direct / "index.html").write_text("explicit")
+    admin_with_override = Admin(FastAPI(), session_factory=lambda: None, auth=auth,
+                                secret_key="c" * 48, secure_cookie=False,
+                                dist_dir=direct)
+    assert admin_with_override._dist() == direct

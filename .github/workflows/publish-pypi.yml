@@ -1,0 +1,73 @@
+name: Publish Python package to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pyntral-pypi-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and validate self-contained Python distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify tag matches Python package version
+        run: |
+          uv run --no-project python - <<'PY'
+          import os, pathlib, tomllib
+          version = tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version']
+          assert os.environ['GITHUB_REF_NAME'] == f'v{version}', 'Tag does not match pyproject version'
+          PY
+      - name: Install Python dependencies
+        run: uv sync --extra dev
+      - name: Run Python tests
+        run: uv run pytest -q
+      - name: Run JS logic tests
+        run: node --experimental-strip-types --test src/pyntral/ui/tests/*.test.mjs
+      - name: Build generic SPA, wheel and sdist
+        run: uv run python scripts/build_release.py
+      - name: Check installed wheel and FastAPI in a clean environment
+        run: |
+          uv venv /tmp/pyntral-wheel-test
+          uv pip install --python /tmp/pyntral-wheel-test/bin/python dist/*.whl httpx
+          /tmp/pyntral-wheel-test/bin/python scripts/smoke_installed.py
+      - name: Upload verified Python distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyntral-python-dist
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Trusted Publishing to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pyntral
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pyntral-python-dist
+          path: dist/
+      - name: Publish wheel and sdist
+        uses: pypa/gh-action-pypi-publish@release/v1

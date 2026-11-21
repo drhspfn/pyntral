@@ -1,0 +1,74 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "types": [
+      "vite/client",
+      "node"
+    ],
+    "paths": {
+      "@pyntral/types": [
+        "./src/types.ts"
+      ],
+      "@pyntral/api": [
+        "./src/api.ts"
+      ],
+      "@pyntral/bridge": [
+        "./src/bridge.ts"
+      ],
+      "@pyntral/generated": [
+        "../generated/bridges.ts"
+      ],
+      "react": [
+        "./node_modules/@types/react/index.d.ts"
+      ],
+      "react-dom": [
+        "./node_modules/@types/react-dom/index.d.ts"
+      ],
+      "react/jsx-runtime": [
+        "./node_modules/@types/react/jsx-runtime.d.ts"
+      ],
+      "@tanstack/react-query": [
+        "./node_modules/@tanstack/react-query"
+      ],
+      "@pyntral/ui": [
+        "./src/ui.tsx"
+      ],
+      "@pyntral/auth": [
+        "./src/currentAdmin.tsx"
+      ],
+      "@pyntral/feedback": [
+        "./src/feedback.tsx"
+      ],
+      "@pyntral/mutations": [
+        "./src/mutations.ts"
+      ],
+      "lucide-react": [
+        "./node_modules/lucide-react"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "vite.config.ts",
+    "../../admin/**/*.ts",
+    "../../admin/**/*.tsx"
+  ]
+}

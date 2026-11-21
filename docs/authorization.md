@@ -1,0 +1,78 @@
+# Authorization and permissions
+
+[Documentation index](README.md) · [Authentication](authentication.md)
+
+Pyntral supports two complementary authorization layers: role thresholds (`RoleAccess`) and the `AuthBackend.authorize(principal, resource, action, record)` callback. A resource may also apply a SQLAlchemy query `scope` to enforce row-level visibility.
+
+## Role thresholds
+
+```python
+from pyntral import Admin, Resource, RoleAccess, Field
+
+admin = Admin(
+    app, session_factory=SessionLocal, auth=auth, secret_key=secret,
+    role_weights={"viewer": 10, "avatar-manager": 20, "voice-editor": 30, "admin": 100},
+)
+admin.add_resource(Resource(
+    Avatar,
+    access=RoleAccess(read="viewer", write="avatar-manager"),
+))
+admin.add_resource(Resource(
+    Voice,
+    access=RoleAccess(read="avatar-manager", select="avatar-manager", write="voice-editor", navigation="lock"),
+))
+```
+
+An avatar manager can read/select a Voice for an Avatar relationship, but cannot change the Voice record. Selection permission does not imply write permission. The server checks that foreign key assignments reference records the principal can select.
+
+`RoleAccess` accepts `read`, `select`, `write`, `create`, `edit`, `delete`, and `navigation`. `select` defaults to `read`. `create`, `edit`, and `delete` default to `write`. A custom action requires `write` plus callback authorization. Unknown roles fail closed. **Omitting `write` denies writes**, and role-based mutation permissions also require read access.
+
+If you specify `RoleAccess`, define explicit role thresholds. A resource without `RoleAccess` remains governed by its flags and the auth backend; the built-in callback backend's default `authorize` allows actions unless overridden. Define an explicit policy for public deployments.
+
+## Per-field protection
+
+```python
+Resource(
+    User,
+    fields={
+        "email": Field(read_role="viewer", write_role="admin"),
+        "password_hash": Field(visible=False),
+    },
+)
+```
+
+Pyntral filters response fields and edits according to the role thresholds. Foreign-key fields can also be omitted when the target resource is not accessible. Do not rely on a hidden field or sidebar alone to secure other application endpoints.
+
+## Per-record callbacks and scopes
+
+```python
+async def authorize(principal, resource, action, record=None):
+    if resource == "users" and action == "delete":
+        return "admin" in principal.roles
+    return True
+
+# Restrict list/get/relations at query level (statement -> statement):
+def scope(principal, stmt):
+    return stmt.where(User.organization_id == principal.attributes["organization_id"])
+
+Resource(User, scope=scope)
+```
+
+Scopes must be applied consistently in the application's other data-access routes too. For external IdPs, derive organization membership server-side and re-check it during requests.
+
+## Sidebar state
+
+`navigation="hide"` hides inaccessible resources; `navigation="lock"` may show disabled entries and an access-denied dialog. Neither setting grants direct route/API access. `Page.min_role` and `Bridge.min_role` provide separate minimum thresholds for custom pages and bridge endpoints.
+
+## Access matrix
+
+| Operation | Server responsibility |
+| --- | --- |
+| List / Show | Resolve principal, require read permission, apply scope and field filtering. |
+| Select related row | Require select permission for target, respect target scope. |
+| Create / Edit | Require operation permission, validate fields and foreign keys, check CSRF. |
+| Delete | Require delete permission; DB constraints remain authoritative. |
+| Custom Action | Require write/action authorization and evaluate `visible` predicate. |
+| Bridge | Require authenticated principal and optional `min_role`. |
+
+For full threat-model guidance, consult [SECURITY.md](../SECURITY.md).

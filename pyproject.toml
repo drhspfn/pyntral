@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyntral"
+version = "1.0.0b1"
+description = "Extensible React admin console for FastAPI and SQLAlchemy"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "pyntral contributors"}]
+dependencies = [
+  "fastapi>=0.163,<1",
+  "sqlalchemy>=2.0.40,<3",
+  "pydantic>=2.12,<3",
+  "uvicorn[standard]>=0.40,<1",
+  "itsdangerous>=2.2,<3",
+]
+
+keywords = ["admin", "fastapi", "sqlalchemy", "react", "dashboard", "crud"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Framework :: FastAPI",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+]
+
+[project.optional-dependencies]
+loguru = ["loguru>=0.8,<1"]
+rabbitmq = ["aio-pika==10.2.3"]
+kafka = ["aiokafka==0.15.0"]
+all-events = ["aio-pika==10.2.3", "aiokafka==0.15.0"]
+dev = ["pytest>=9,<10", "httpx>=0.28,<1", "pytest-asyncio>=1.2,<2", "aiosqlite>=0.21,<1", "ruff>=0.14,<1"]
+
+[project.scripts]
+pyntral = "pyntral.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+pyntral = ["ui/**/*", "web_dist/*", "web_dist/assets/*", "web_dist/**/*"]
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+

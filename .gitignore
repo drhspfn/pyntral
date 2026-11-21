@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.pyntral/
+node_modules/
+.DS_Store
+.env
+*.db
+*.sqlite3
+coverage/
+
+# Generated generic SPA; packaged only by release builds
+src/pyntral/web_dist/

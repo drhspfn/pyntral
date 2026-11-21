@@ -1,0 +1,56 @@
+name: PR checks
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pyntral-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Python, frontend and distribution
+    if: github.event.label.name == 'Run checks'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Python dependencies
+        run: uv sync --extra dev
+      - name: Python tests
+        run: uv run pytest -q
+      - name: Frontend logic tests
+        run: node --experimental-strip-types --test src/pyntral/ui/tests/*.test.mjs
+      - name: Configure isolated demo credentials
+        run: |
+          echo 'ADMIN_USERNAME=ci' >> "$GITHUB_ENV"
+          echo "ADMIN_PASSWORD_HASH=$(uv run pyntral hash-password --password ci-development-password-123)" >> "$GITHUB_ENV"
+          echo 'APP_SECRET_KEY=ci-only-secret-must-be-at-least-32-characters-long' >> "$GITHUB_ENV"
+          echo 'ADMIN_SECURE_COOKIE=false' >> "$GITHUB_ENV"
+      - name: Generate editor bridge declarations
+        run: uv run pyntral types examples.shop.app:app --editor
+      - name: Typecheck and build customized shop UI (TSX extensions)
+        run: uv run pyntral build --app examples.shop.app:app --force
+      - name: Build self-contained Python distributions (generic UI)
+        run: uv run python scripts/build_release.py
+      - name: Verify both installation modes
+        run: |
+          test -s .pyntral/generated/bridges.ts
+          test -s .pyntral/dist/index.html
+          test -s src/pyntral/web_dist/index.html
+          test -d src/pyntral/web_dist/assets
+          uv venv /tmp/pyntral-ci-wheel
+          uv pip install --python /tmp/pyntral-ci-wheel/bin/python dist/*.whl httpx
+          /tmp/pyntral-ci-wheel/bin/python scripts/smoke_installed.py

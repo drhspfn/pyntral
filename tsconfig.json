@@ -1,0 +1,3 @@
+{
+  "extends": "./.pyntral/tsconfig.editor.json"
+}

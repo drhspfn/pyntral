@@ -1,0 +1,33 @@
+{
+  "name": "@pyntral/ui",
+  "version": "1.0.0-beta.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test:filters": "node --experimental-strip-types --test tests/*.test.mjs",
+    "build": "npm run check && vite build",
+    "lint": "eslint --config eslint.config.mjs src && node scripts/lint-extensions.mjs",
+    "check": "npm run lint && npm run typecheck"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.108.2",
+    "lucide-react": "1.77.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "typescript": "6.0.2",
+    "vite": "8.3.8",
+    "@types/node": "22.15.0",
+    "eslint": "10.15.0",
+    "typescript-eslint": "8.73.0"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

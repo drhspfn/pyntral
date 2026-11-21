@@ -1,0 +1,174 @@
+"""Declarative public API; SQLAlchemy metadata is resolved when a Resource is registered."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable, Generic, TypeVar
+from uuid import UUID
+
+from sqlalchemy.orm.attributes import InstrumentedAttribute
+
+from sqlalchemy.orm import DeclarativeBase
+
+
+@dataclass(slots=True)
+class Field:
+    label: str | None = None
+    visible: bool = True
+    readonly: bool = False
+    required: bool | None = None
+    widget: str | None = None
+    help: str | None = None
+    options: list[dict[str, Any]] | list[str] | None = None
+    components: dict[str, str] = field(default_factory=dict)  # {list: id, edit: id, show: id}
+    span: int = 1  # Full row when 2 in a two-column layout
+    read_role: str | None = None  # Optional minimum role for this field
+    write_role: str | None = None  # Optional minimum role to modify this field
+    filter_operators: list[str] | None = None  # Restrict supported filter operations for this field
+    filter_width: int | None = None  # Optional filter control width in px; auto-sized otherwise
+
+    def __post_init__(self) -> None:
+        if self.span not in (1, 2):
+            raise ValueError("Field.span must be 1 or 2")
+        if self.filter_width is not None and (
+            type(self.filter_width) is not int or not 140 <= self.filter_width <= 560
+        ):
+            raise ValueError("Field.filter_width must be between 140 and 560 pixels")
+
+
+@dataclass(slots=True)
+class Action:
+    name: str
+    handler: Callable[..., Any]
+    label: str | None = None
+    variant: str = "secondary"
+    confirmation: str | None = None
+    position: str = "both"  # row | detail | both
+    appearance: str = "button"  # button | badge | menu
+    component: str | None = None  # React extension action ID; opens an action page
+    dialog: str | None = None  # React extension dialog body, shown before invoking the action
+    icon: str | None = None
+    visible: bool | Callable[..., Any] = True  # (principal, record) -> bool, async supported
+
+    def __post_init__(self) -> None:
+        if self.position not in ("row", "detail", "both"):
+            raise ValueError("Action position must be row, detail or both")
+        if self.appearance not in ("button", "badge", "menu"):
+            raise ValueError("Action appearance must be button, badge or menu")
+
+
+@dataclass(slots=True)
+class NavigationGroup:
+    path: str  # e.g. "Agents" or "Agents/Runtime"
+    icon: str = "folder"
+    order: int = 0
+
+
+@dataclass(slots=True)
+class RoleAccess:
+    """Minimum role thresholds per operation; an omitted write role denies writes.
+
+    Only applies to a Resource when explicitly provided. ``select`` defaults to
+    ``read``; ``create`` / ``edit`` / ``delete`` default to ``write``.
+    Unknown role names fail closed. Role hierarchy is configured on Admin.
+    """
+    read: str | None = None
+    select: str | None = None
+    write: str | None = None
+    create: str | None = None
+    edit: str | None = None
+    delete: str | None = None
+    navigation: str = "hide"  # hide | lock
+
+    def __post_init__(self) -> None:
+        if self.navigation not in ("hide", "lock"):
+            raise ValueError("RoleAccess.navigation must be hide or lock")
+
+    def threshold(self, action: str) -> str | None:
+        if action == "select":
+            return self.select if self.select is not None else self.read
+        if action in ("list", "show"):
+            return self.read
+        if action in ("create", "edit", "delete"):
+            return getattr(self, action) or self.write
+        # Custom actions require write permission plus their own authorize callback.
+        if action.startswith("action:"):
+            return self.write
+        return None
+
+
+@dataclass(slots=True)
+class Page:
+    name: str
+    label: str
+    component: str  # registered React component ID
+    icon: str = "layout-dashboard"
+    navigation: str | None = None
+    navigation_order: int = 0
+    min_role: str | None = None
+
+
+@dataclass(slots=True)
+class Relationship:
+    """Presentation of a mapped SQLAlchemy relationship (not its FK column)."""
+    visible: bool = True
+    label: str | None = None
+    selectable: bool = False  # Enable selection/search in the related list
+    layout: str = "table"  # table | cards
+
+    def __post_init__(self) -> None:
+        if self.layout not in ("table", "cards"):
+            raise ValueError("Relationship.layout must be table or cards")
+
+
+ModelT = TypeVar("ModelT", bound=DeclarativeBase)
+
+
+@dataclass(slots=True)
+class Resource(Generic[ModelT]):
+    model: type[ModelT]
+    name: str | None = None
+    label: str | None = None
+    icon: str = "database"
+    navigation: str | None = None
+    navigation_order: int = 0
+    list_fields: list[str] | None = None
+    search_fields: list[str] = field(default_factory=list)
+    show_search: bool = False  # Optional quick search above the advanced filters
+    fields: dict[str, Field] = field(default_factory=dict)
+    actions: list[Action] = field(default_factory=list)
+    page_size: int = 20
+    title_field: str | None = None  # String field name; use visible_name for static typing
+    visible_name: InstrumentedAttribute[str] | InstrumentedAttribute[int] | InstrumentedAttribute[UUID] | None = None
+    label_factory: Callable[[ModelT], str] | None = None  # Row-based display label; no SQL search for computed labels
+    relationships: dict[str, Relationship] = field(default_factory=dict)
+    form_layout: str = "stack"  # stack | grid
+    detail_layout: str = "stack"  # stack | grid
+    scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
+    access: RoleAccess | None = None
+    allow_create: bool = True
+    allow_edit: bool = True
+    allow_delete: bool = True
+    allow_show: bool = True
+
+    def __post_init__(self) -> None:
+        if self.form_layout not in ("stack", "grid") or self.detail_layout not in ("stack", "grid"):
+            raise ValueError("Layout must be stack or grid")
+        if self.page_size < 1 or self.page_size > 200:
+            raise ValueError("page_size must be between 1 and 200")
+        if self.name is None:
+            import re
+
+            name = re.sub(r"(?<!^)(?=[A-Z])", "_", self.model.__name__).lower()
+            self.name = name.replace("_", "-") + "s"
+        if self.label is None:
+            self.label = self.model.__name__ + "s"
+
+
+def validate_navigation(path: str | None) -> None:
+    if path is None:
+        return
+    if not isinstance(path, str) or not path or any(not part.strip() for part in path.split("/")):
+        raise ValueError("Navigation must be a non-empty slash-separated group path")
+    if len(path) > 200 or any(c in path for c in ("\\", "\n", "\r")):
+        raise ValueError("Invalid navigation path")

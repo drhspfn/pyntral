@@ -1,0 +1,17 @@
+{
+  "app": "examples.shop.app:app",
+  "fields": {
+    "order-status": "admin/OrderStatusBadge.tsx",
+    "asset-image": "admin/AssetImage.tsx"
+  },
+  "pages": {
+    "insights": "admin/Insights.tsx"
+  },
+  "actions": {
+    "customer-profile": "admin/CustomerProfile.tsx"
+  },
+  "themes": {},
+  "dialogs": {
+    "archive-notice": "admin/ArchiveNotice.tsx"
+  }
+}

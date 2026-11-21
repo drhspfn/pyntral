@@ -1,0 +1,12 @@
+include README.md LICENSE CHANGELOG.md CONTRIBUTING.md SECURITY.md
+recursive-include docs *.md
+recursive-include examples *.py *.md Dockerfile Dockerfile.dockerignore compose.yaml
+recursive-include admin *.tsx
+include pyntral.components.json
+include .env.example
+recursive-include src/pyntral/ui *
+recursive-include src/pyntral/web_dist *
+global-exclude __pycache__ *.py[cod] .DS_Store
+
+recursive-include scripts *.py
+include tsconfig.json
