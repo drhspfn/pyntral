@@ -2,6 +2,8 @@
 
 Thanks for your interest in improving Pyntral. The project is in early beta and welcomes focused bug reports, tests, documentation improvements and reviewed pull requests.
 
+Read [CLAUDE.md](CLAUDE.md) for mandatory development rules, including **a runnable Shop demonstration for every new user-visible feature in the same PR**. Use [the PR template](.github/pull_request_template.md) as the review checklist.
+
 ## Local setup
 
 ```bash
@@ -31,7 +33,7 @@ Node.js 22.12+ is required to build the React UI. The CLI stages files under `.p
 3. Add tests for API, authorization and event behavior changes. Never weaken CSRF/ACL tests to make a feature pass.
 4. Run `uv run pytest -q` and, when Node/npm are available, `uv run pyntral build --force`.
 5. Update the appropriate `docs/` page, README pointers and `CHANGELOG.md`.
-6. Use descriptive commits (for example `fix(ui): preserve select value when operator changes`).
+7. Use descriptive commits (for example `fix(ui): preserve select value when operator changes`).
 
 Before publishing a release, generate and review `uv.lock`, review frontend lockfiles, test a built wheel (not only source imports), and validate the SPA in a real browser. The release manager should verify ownership/availability of package names and URLs.
 
