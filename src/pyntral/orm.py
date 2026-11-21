@@ -8,6 +8,7 @@ import enum
 import math
 import uuid
 from collections.abc import Mapping
+from inspect import isawaitable
 import re
 from typing import Any
 
@@ -118,6 +119,9 @@ class MapperAdapter:
             if any(prop.direction.name == "MANYTOONE" and column in prop.local_columns
                    for prop in self.relations.values())
         }
+        for name, virtual in resource.virtual_fields.items():
+            if name in self.columns or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", name):
+                raise ValueError(f"Invalid or conflicting virtual field: {name}")
         for name, configuration in resource.fields.items():
             if name not in self.columns:
                 raise ValueError(f"Unknown column in {resource.name}: {name}")
@@ -130,7 +134,7 @@ class MapperAdapter:
                 if any(operator not in supported for operator in configuration.filter.operators):
                     raise ValueError(f"Unsupported filter operator for {resource.name}.{name}")
         for name in (resource.list_fields or []) + resource.search_fields:
-            if name not in self.columns:
+            if name not in self.columns and not (name in resource.virtual_fields and name not in resource.search_fields):
                 raise ValueError(f"Unknown column in {resource.name}: {name}")
         for name in resource.search_fields:
             if not self.visible(name):
@@ -201,8 +205,15 @@ class MapperAdapter:
         )
 
     def serialize(self, record: Any, allowed_fields: set[str] | None = None) -> dict[str, Any]:
-        return jsonable_encoder({name: getattr(record, name) for name in self.columns
-                                 if self.visible(name) and (allowed_fields is None or name in allowed_fields)})
+        values = {name: getattr(record, name) for name in self.columns
+                  if self.visible(name) and (allowed_fields is None or name in allowed_fields)}
+        for name, virtual in self.resource.virtual_fields.items():
+            if virtual.getter is not None and (allowed_fields is None or name in allowed_fields):
+                value = virtual.getter(record)
+                if isawaitable(value):
+                    raise AdminError(500, "Virtual field getter must be synchronous", "virtual_field_error")
+                values[name] = value
+        return jsonable_encoder(values)
 
     def pk_value(self, raw: str) -> Any:
         return convert_value(self.pk, raw)
@@ -272,6 +283,26 @@ class MapperAdapter:
                     "views": view_configs,
                 }
             )
+        for name, virtual in self.resource.virtual_fields.items():
+            # Each access is independently checked by the backend; a setter-only
+            # field must never be serialized into a list or record response.
+            views = {mode: {
+                "visible": virtual.getter is not None if mode in ("list", "show", "filter")
+                else virtual.setter is not None,
+                "readonly": virtual.setter is None,
+                "required": virtual.required if mode == "create" else False,
+                "component": virtual.component,
+                "order": None,
+            } for mode in ("list", "create", "edit", "show", "filter")}
+            views["filter"]["visible"] = False  # Not backed by an SQL expression.
+            fields.append({
+                "name": name, "label": virtual.label or name.replace("_", " ").title(),
+                "kind": virtual.kind, "required": virtual.required, "readonly": virtual.setter is None,
+                "primaryKey": False, "nullable": True, "widget": None, "help": None,
+                "maxLength": None, "precision": None, "scale": None, "filterWidth": None,
+                "filterOperators": [], "options": None, "relation": None,
+                "components": {}, "span": 1, "views": views,
+            })
         return {
             "id": self.resource.name,
             "label": self.resource.label,
@@ -288,7 +319,8 @@ class MapperAdapter:
             "fields": fields,
             "listFields": [
                 name for name in (self.resource.list_fields or list(self.columns)[:6])
-                if self.view_visible(name, "list")
+                if (self.view_visible(name, "list") if name in self.columns
+                    else self.resource.virtual_fields[name].getter is not None)
             ],
             "searchFields": self.resource.search_fields,
             "relationships": [
@@ -346,7 +378,7 @@ class MapperAdapter:
     def parsed_payload(self, payload: Mapping[str, Any], *, create: bool) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise AdminError(422, "Expected JSON object", "validation_error")
-        unexpected = set(payload) - set(self.columns)
+        unexpected = set(payload) - set(self.columns) - set(self.resource.virtual_fields)
         forbidden = [name for name in payload if name in self.columns and not self.writable(name)]
         if unexpected or forbidden:
             raise AdminError(422, "Unknown or read-only fields", "validation_error", {
@@ -354,6 +386,14 @@ class MapperAdapter:
             })
         out = {}
         for name, value in payload.items():
+            if name in self.resource.virtual_fields:
+                virtual = self.resource.virtual_fields[name]
+                if virtual.setter is None:
+                    raise AdminError(422, "Read-only virtual field", "validation_error")
+                if virtual.required and create and value in (None, ""):
+                    raise AdminError(422, f"{name} is required", "validation_error")
+                out[name] = value
+                continue
             view = self.view_config(name, "create" if create else "edit")
             if view and view.required and (value is None or value == ""):
                 raise AdminError(422, f"{name} is required", "validation_error")
@@ -362,6 +402,11 @@ class MapperAdapter:
                 raise AdminError(422, f"{name} cannot be null", "validation_error")
             out[name] = convert_value(col, value)
         if create:
+            missing_virtual = [name for name, field in self.resource.virtual_fields.items()
+                               if field.required and field.setter is not None and name not in out]
+            if missing_virtual:
+                raise AdminError(422, "Missing required virtual fields", "validation_error",
+                                 {"fields": missing_virtual})
             missing = [
                 name for name, col in self.columns.items()
                 if self.writable(name) and not col.nullable and col.default is None
@@ -433,7 +478,12 @@ class MapperAdapter:
         return record
 
     async def create(self, session: Any, payload: dict[str, Any]) -> dict[str, Any]:
-        record = self.resource.model(**self.parsed_payload(payload, create=True))
+        parsed = self.parsed_payload(payload, create=True)
+        mapped = {key: value for key, value in parsed.items() if key in self.columns}
+        record = self.resource.model(**mapped)
+        for key, value in parsed.items():
+            if key in self.resource.virtual_fields:
+                await maybe_await(self.resource.virtual_fields[key].setter(record, value))
         session.add(record)
         await self._commit(session)
         await maybe_await(session.refresh(record))
@@ -441,7 +491,10 @@ class MapperAdapter:
 
     async def update(self, session: Any, record: Any, payload: dict[str, Any]) -> dict[str, Any]:
         for name, value in self.parsed_payload(payload, create=False).items():
-            setattr(record, name, value)
+            if name in self.resource.virtual_fields:
+                await maybe_await(self.resource.virtual_fields[name].setter(record, value))
+            else:
+                setattr(record, name, value)
         await self._commit(session)
         await maybe_await(session.refresh(record))
         return self.serialize(record)

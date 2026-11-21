@@ -210,6 +210,10 @@ class Admin:
             unknown = [x for x in thresholds if x is not None and x not in self.role_weights]
             if unknown:
                 raise ValueError(f"Unknown role threshold(s): {unknown}")
+        for virtual in resource.virtual_fields.values():
+            for role in (virtual.read_role, virtual.write_role):
+                if role is not None and role not in self.role_weights:
+                    raise ValueError(f"Unknown virtual field role: {role}")
         for config in resource.fields.values():
             for threshold in (config.read_role, config.write_role):
                 if threshold is not None and threshold not in self.role_weights:
@@ -299,6 +303,16 @@ class Admin:
                                    (not edit and await self._can(principal, target, "list"))):
                     continue
             allowed.add(field_name)
+        for field_name, virtual in adapter.resource.virtual_fields.items():
+            if view == "filter":
+                continue
+            if edit and virtual.setter is None:
+                continue
+            if not edit and virtual.getter is None:
+                continue
+            role = virtual.write_role if edit else virtual.read_role
+            if role is None or self._role_ok(principal, role):
+                allowed.add(field_name)
         return allowed
 
     async def _verify_foreign_keys(self, session: Any, principal: Principal,
@@ -786,7 +800,8 @@ class Admin:
                 if set(ctx.payload) - write_fields:
                     raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
                 await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
-                before = {field_name: getattr(record, field_name) for field_name in ctx.payload}
+                before = {field_name: getattr(record, field_name) for field_name in ctx.payload
+                          if field_name in adapter.columns}
                 result = await adapter.update(session, record, ctx.payload)
                 await self._run_hooks(adapter, "after_update", ctx)
                 changed = [field_name for field_name, old in before.items()

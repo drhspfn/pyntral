@@ -231,3 +231,24 @@ admin.add_resource(Resource(Product, hooks=[ResourceHook(
     before_create=validate_stock, before_update=validate_stock,
 )]))
 ```
+
+## Virtual fields
+
+`Resource.virtual_fields` registers values not mapped as SQLAlchemy columns.
+A synchronous `getter(record)` can show a computed field in List/Show; a
+sync/async `setter(record, value)` updates the model in the same CRUD transaction.
+Use both callbacks for readable and writable virtual fields. Setter-only
+fields never appear in list/show records; getter-only fields cannot be edited.
+Virtual values are intentionally not SQL-filterable or sortable.
+
+```python
+from pyntral import VirtualField, Resource
+
+admin.add_resource(Resource(Product, virtual_fields={
+    "display_label": VirtualField(getter=lambda row: f"{row.name} / {row.sku}"),
+    "rename_to": VirtualField(setter=lambda row, value: setattr(row, "name", str(value))),
+}))
+```
+
+Configure `read_role` and `write_role` on virtual fields when access differs
+from the resource. Virtual setters must not commit independently.

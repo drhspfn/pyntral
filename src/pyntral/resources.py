@@ -10,6 +10,7 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from sqlalchemy.orm import DeclarativeBase
 from .hooks import ResourceHook
+from .virtual import VirtualField
 
 
 @dataclass(slots=True)
@@ -170,6 +171,7 @@ class Resource(Generic[ModelT]):
     detail_layout: str = "stack"  # stack | grid
     crud_views: dict[str, str] = field(default_factory=dict)  # list/create/edit/show -> extension ID
     hooks: list[ResourceHook] = field(default_factory=list)
+    virtual_fields: dict[str, VirtualField] = field(default_factory=dict)
     scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
     access: RoleAccess | None = None
     allow_create: bool = True

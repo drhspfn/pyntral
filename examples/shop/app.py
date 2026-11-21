@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    ResourceUpdated, ResourceHook,
+    ResourceUpdated, ResourceHook, VirtualField,
 )
 
 
@@ -338,8 +338,12 @@ def validate_product_stock(ctx):
 
 admin.add_resource(Resource(
     Product, icon="boxes", navigation="Commerce",
-    list_fields=["id", "name", "sku", "price", "stock", "active"],
+    list_fields=["id", "name", "sku", "price", "stock", "active", "display_label"],
     search_fields=["name", "sku"], title_field="name",
+    virtual_fields={
+        "display_label": VirtualField(label="Name / SKU", getter=lambda product: f"{product.name} / {product.sku}"),
+        "rename_to": VirtualField(label="Rename product", setter=lambda product, value: setattr(product, "name", str(value))),
+    },
     relationships={"tags": Relationship(label="Product tags", selectable=True)},
     hooks=[ResourceHook(before_create=validate_product_stock, before_update=validate_product_stock)],
 ))

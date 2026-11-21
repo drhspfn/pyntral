@@ -84,3 +84,10 @@ tenant and row scopes as well as Pyntral authorization.
 an existing product to a negative stock. The request is rejected with HTTP 422
 and the database remains unchanged. The example uses `ResourceHook` for both
 `before_create` and `before_update`.
+
+### Computed and write-only fields
+
+**Commerce → Products:** The `Name / SKU` column is a computed virtual field:
+it is not stored in the SQL table and cannot be sorted or filtered in SQL.
+**Edit product → Rename product** changes the mapped name through a write-only
+virtual setter. The submitted value is never serialized into API responses.
