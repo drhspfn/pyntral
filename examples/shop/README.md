@@ -165,6 +165,20 @@ private demonstration directory: do not put it under a public static server.
 MinIO (requires `pyntral[s3]`). For persistence in Docker, mount a volume for
 `SHOP_UPLOAD_ROOT`.
 
+### Reusable choice controls and improved Columns panel
+
+**Commerce → Orders → Columns:** Open the compact anchored settings panel,
+show/hide columns with themed checkboxes, reorder with accessible arrow buttons,
+pin one visible column, and switch row density with the segmented `ToggleGroup`.
+The panel does not occupy the full table width and saves choices per user and
+resource. At least one data column stays visible. Select all in bulk-action
+tables displays a mixed checkbox state when only some rows are selected.
+
+**Agents → Insights → Choice controls:** Try the public `@pyntral/ui` atoms:
+`Checkbox`, `Switch`, `CheckboxGroup` (up to two selected channels),
+`RadioGroup` (one priority), and `ToggleGroup` (one density).
+User-written TSX extensions import the same atoms.
+
 ### Table preferences and saved filter presets
 
 **Commerce → Products → Columns:** Hide/reorder columns, pin one column, or

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowRight, Bell, Image as ImageIcon } from "lucide-react";
 import type { CustomPageProps } from "@pyntral/types";
 import { useAdminFeedback } from "@pyntral/feedback";
-import { AsyncSelect, Badge, Button, Card, DatePicker, Dialog, SearchInput, Select, TextInput,
+import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, RadioGroup, SearchInput, Select, Switch, TextInput, ToggleGroup,
   type SelectOption } from "@pyntral/ui";
 import { api } from "@pyntral/api";
 
@@ -15,6 +15,11 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
   const [roles, setRoles] = useState<(string | number)[]>(["reviewer", "author"]);
   const [agentId, setAgentId] = useState<string | number | null>(null);
   const [dialog, setDialog] = useState(false);
+  const [alerts, setAlerts] = useState(true);
+  const [pinned, setPinned] = useState(false);
+  const [channels, setChannels] = useState<string[]>(["email", "in-app"]);
+  const [priority, setPriority] = useState<string | null>("standard");
+  const [density, setDensity] = useState<string | null>("comfortable");
   const loadAgents = async (q: string): Promise<SelectOption[]> =>
     (await api<{ items: SelectOption[] }>(`/api/resources/agents/options?q=${encodeURIComponent(q)}`)).items;
 
@@ -36,6 +41,23 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
           </div>
           <Button variant="primary" startIcon={<Bell size={16}/>} onClick={() => feedback.toast("All controls use the same feedback service", { kind: "success" })}>Show toast</Button>
           <Button variant="secondary" onClick={() => setDialog(true)} startIcon={<ImageIcon size={16}/>}>Open dialog</Button>
+        </div>
+      </Card>
+      <Card title="Choice controls" description="Shared Checkbox, Switch, CheckboxGroup, RadioGroup and ToggleGroup atoms">
+        <div style={{ display: "grid", gap: 17, padding: 14 }}>
+          <Checkbox checked={pinned} onCheckedChange={setPinned} label="Pin example"
+            description="Controlled checkbox with themed focus state"/>
+          <Switch checked={alerts} onCheckedChange={setAlerts} label="Enable alerts"/>
+          <CheckboxGroup<string> label="Notification channels" value={channels} onValueChange={setChannels}
+            maxSelected={2} options={[
+              { value: "email", label: "Email" }, { value: "in-app", label: "In-app" },
+              { value: "sms", label: "SMS (choose up to two)" },
+            ]}/>
+          <RadioGroup<string> label="Priority (exactly one)" value={priority} onValueChange={setPriority}
+            options={[{ value: "standard", label: "Standard" }, { value: "urgent", label: "Urgent" }]}/>
+          <ToggleGroup<string> label="Table density" value={density} onValueChange={(next) => {
+            if (typeof next === "string") setDensity(next);
+          }} options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }]}/>
         </div>
       </Card>
       <Card title="Registered resources" description={`${schema.resources.length} resources available`}>

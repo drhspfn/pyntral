@@ -36,3 +36,5 @@ See [release readiness](docs/deployment.md#release-readiness) for verification r
 - Add opt-in in-process background resource jobs with bounded execution, progress and cancellation, demonstrated in Products.
 
 - Add before/after hooks around record, bulk and resource Actions, including server-side veto support.
+
+- Add reusable accessible Checkbox, CheckboxGroup, Switch, RadioGroup and ToggleGroup controls, a compact table Columns panel and unified bulk-selection checkboxes.

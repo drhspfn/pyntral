@@ -9,6 +9,7 @@ The Pyntral frontend is a React SPA. Its base CSS and reusable components live i
 ```tsx
 import {
   Button, Badge, Card, TextInput, Textarea, FormField,
+  Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup,
   SearchInput, Select, AsyncSelect, DatePicker, Calendar, Dialog,
 } from "@pyntral/ui";
 ```
@@ -20,6 +21,11 @@ import {
 | `Card` | `title`, `description`, `children`. |
 | `TextInput`, `Textarea` | Native input/textarea props with theme styles. |
 | `FormField` | `label`, `htmlFor`, `hint`, `required`, `span`. |
+| `Checkbox` | Controlled `checked`, `onCheckedChange`, optional label/description and `indeterminate` mixed state. |
+| `Switch` | Controlled boolean state, native keyboard-operable switch semantics. |
+| `CheckboxGroup` | Multiple selected values; optional `minSelected`/`maxSelected` limits. |
+| `RadioGroup` | Exclusive choice; native radio-keyboard semantics. |
+| `ToggleGroup` | Segmented single-choice radios or multiple-choice checkboxes. |
 | `SearchInput` | Controlled `value`, `onChange`, `onSearch`, optional search icon / submit button placement. |
 | `Select` | Static `options` or `loadOptions(query)`, `multiple`, `searchable`, `maxItems`, `maxSelections`, `popupMinHeight`, `popupMaxHeight`. |
 | `AsyncSelect` | Wrapper for server-loaded searchable options. |
@@ -48,6 +54,33 @@ export function TagSelector() {
 ```
 
 `maxItems` limits the number of **visible chips**, collapsing the rest into `+N`; `maxSelections` limits how many may be selected. Dropdowns are rendered in viewport-aware portals and may flip vertically when there is insufficient space.
+
+### Accessible choice controls
+
+All five choice atoms are exported through the public `@pyntral/ui` alias and
+use native HTML inputs with themed markers. Space toggles a focused checkbox
+or switch; arrow keys navigate radio choices. Focus, disabled and mixed
+(indeterminate) states work in light and dark modes without extra libraries.
+
+```tsx
+import { Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup } from "@pyntral/ui";
+
+<Checkbox checked={enabled} onCheckedChange={setEnabled} label="Enabled" />
+<Switch checked={alerts} onCheckedChange={setAlerts} label="Alerts" />
+<CheckboxGroup<string> value={channels} onValueChange={setChannels}
+  maxSelected={2} options={[
+    { value: "email", label: "Email" }, { value: "sms", label: "SMS" },
+    { value: "push", label: "Push" },
+  ]} />
+<RadioGroup<string> value={priority} onValueChange={setPriority}
+  options={[{ value: "normal", label: "Normal" }, { value: "high", label: "High" }]} />
+<ToggleGroup<string> value={density} onValueChange={setDensity}
+  options={[{ value: "compact", label: "Compact" }, { value: "comfortable", label: "Comfortable" }]} />
+```
+
+For mutually exclusive selection use `RadioGroup` or single-mode `ToggleGroup`.
+Use `CheckboxGroup` for multiple choices with an optional selection cap.
+The interactive demo is at **Agents → Insights → Choice controls**.
 
 ## Global toasts and dialogs
 
@@ -92,7 +125,8 @@ Form and detail layout can be `stack` or `grid` on each resource. Custom compone
 
 ## Personal table preferences
 
-List views provide hide/reorder columns, one pinned column, density, and up
+List views provide a compact anchored **Columns** panel with themed choice
+controls for hide/reorder columns, one pinned column, density, and up
 to ten named filter presets. Preferences use the local browser's `localStorage`
 keyed by the current administrator ID and resource ID; they do not alter
 server-side field permissions. Filter presets are **explicitly** saved and may
