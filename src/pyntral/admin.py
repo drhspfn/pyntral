@@ -587,7 +587,11 @@ class Admin:
                 else:
                     read_fields = await self._allowed_fields(principal, name)
                     edit_fields = await self._allowed_fields(principal, name, edit=True)
-                    metadata["fields"] = [f for f in metadata["fields"] if f["name"] in read_fields]
+                    # Write-only virtual fields must remain in create/edit forms,
+                    # but never become readable list/show fields or filter targets.
+                    # Read and write permissions are independent here.
+                    metadata["fields"] = [f for f in metadata["fields"]
+                                          if f["name"] in read_fields or f["name"] in edit_fields]
                     for field in metadata["fields"]:
                         field["readonly"] = (field["readonly"] or
                             not (metadata["capabilities"]["edit"] or metadata["capabilities"]["create"])

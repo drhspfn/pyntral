@@ -26,6 +26,13 @@ def test_virtual_fields_are_guarded_and_not_returned_when_write_only():
     with TestClient(app) as c:
         csrf=c.post("/admin/auth/login",json={"username":"a","password":"x"}).json()["csrf"]
         h={"X-CSRF-Token":csrf}
+        metadata=next(r for r in c.get("/admin/api/schema").json()["resources"] if r["id"]=="articles")
+        secret_field=next(f for f in metadata["fields"] if f["name"]=="new_secret")
+        assert secret_field["views"]["create"]["visible"] is True
+        assert secret_field["views"]["edit"]["visible"] is True
+        assert secret_field["views"]["list"]["visible"] is False
+        assert secret_field["views"]["show"]["visible"] is False
+        assert secret_field["views"]["filter"]["visible"] is False
         result=c.post("/admin/api/resources/articles",headers=h,json={"title":"X","new_secret":"not-serialized"})
         assert result.status_code==201,result.text
         assert 'new_secret' not in result.text and 'secret' not in result.text
