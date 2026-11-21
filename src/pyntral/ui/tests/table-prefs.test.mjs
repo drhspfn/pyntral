@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultTablePreferences, moveColumn, setColumnVisible, parseTablePreferences, orderedColumns } from '../src/table-prefs.ts';
+import { defaultTablePreferences, moveColumn, reorderColumns, setColumnVisible, parseTablePreferences, orderedColumns } from '../src/table-prefs.ts';
 
 test('table preferences reject unknown columns and validate density', () => {
   const state = parseTablePreferences({order: ['b','bad','a'], hidden:['b','invalid'],
@@ -30,4 +30,20 @@ test('moveColumn preserves a stable complete ordering', () => {
   assert.deepEqual(moved.order,['b','a','c']);
   assert.deepEqual(moveColumn(['a','b','c'],moved,'b',-1), moved);
   assert.deepEqual(moveColumn(['a','b','c'],moved,'b',1).order,['a','b','c']);
+});
+
+test('drag order retains visibility and pinned settings', () => {
+  const names = ['id','name','status'];
+  const prefs = {...defaultTablePreferences(), hidden:['status'], pinned:'id'};
+  const next = reorderColumns(names, prefs, ['name','status','id']);
+  assert.deepEqual(next.order, ['name','status','id']);
+  assert.deepEqual(orderedColumns(names, next), ['name','id']);
+  assert.deepEqual(next.hidden, ['status']);
+  assert.equal(next.pinned, 'id');
+});
+test('invalid drag reorder cannot inject, drop or repeat a column', () => {
+  const names = ['a','b'], prefs = defaultTablePreferences();
+  for (const values of [['a'],['a','a'],['a','x']]) {
+    assert.equal(reorderColumns(names, prefs, values), prefs);
+  }
 });

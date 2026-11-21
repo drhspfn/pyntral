@@ -165,10 +165,10 @@ private demonstration directory: do not put it under a public static server.
 MinIO (requires `pyntral[s3]`). For persistence in Docker, mount a volume for
 `SHOP_UPLOAD_ROOT`.
 
-### Reusable choice controls and improved Columns panel
+### Reusable choice controls and draggable Columns panel
 
 **Commerce → Orders → Columns:** Open the compact anchored settings panel,
-show/hide columns with themed checkboxes, reorder with accessible arrow buttons,
+show/hide columns with themed checkboxes, drag rows using their handle or use Space + arrow keys from the focused handle to reorder,
 pin one visible column, and switch row density with the segmented `ToggleGroup`.
 The panel does not occupy the full table width and saves choices per user and
 resource. At least one data column stays visible. Select all in bulk-action
@@ -265,3 +265,11 @@ hook rejects cancelled orders with HTTP 422 before the custom action handler
 runs. `ResourceHook.before_action` and `after_action` also cover resource-wide
 and bulk actions. Hooks never bypass the normal server-side action permissions;
 handlers are responsible for their own database commits.
+
+### Drag-to-reorder atom
+
+**Commerce → Orders → Columns** now supports actual pointer and keyboard
+drag-and-drop with the shared `SortableList` atom. Saved ordering respects
+hidden and pinned columns. **Agents → Insights → Drag to reorder** demonstrates
+the public `@pyntral/ui` API for custom React components. See
+[UI primitives](../../docs/ui.md) for keyboard interaction and typed props.

@@ -1,8 +1,9 @@
 /** Compact, accessible table preferences shared by built-in resource lists. */
-import { ArrowDown, ArrowUp, GripVertical, Pin, PinOff, RotateCcw, X } from "lucide-react";
+import { Pin, PinOff, RotateCcw, X } from "lucide-react";
 import type { Dispatch, SetStateAction } from "react";
 import { Checkbox, ToggleGroup } from "./controls";
-import { orderedColumns, moveColumn, setColumnVisible, type TablePreferences, defaultTablePreferences } from "./table-prefs";
+import { SortableList } from "./sortable";
+import { orderedColumns, reorderColumns, setColumnVisible, type TablePreferences, defaultTablePreferences } from "./table-prefs";
 
 export interface TableSettingsProps {
   columns: { name: string; label: string }[];
@@ -15,7 +16,6 @@ export function TableSettings({ columns, preferences, onChange, onClose }: Table
   const order = orderedColumns(names, { ...preferences, hidden: [] });
   const labelByName = new Map(columns.map((field) => [field.name, field.label]));
   const visibleCount = names.length - preferences.hidden.filter((name) => names.includes(name)).length;
-  const move = (name: string, direction: -1 | 1) => onChange((prev) => moveColumn(names, prev, name, direction));
   return <section className="ra-table-settings" aria-label="Table preferences">
     <header className="ra-table-settings-head">
       <div><h3>Customize table</h3><p>Choose which fields appear in your list.</p></div>
@@ -26,20 +26,19 @@ export function TableSettings({ columns, preferences, onChange, onClose }: Table
     <div className="ra-table-settings-body">
       <div className="ra-settings-section-title"><strong>Visible columns</strong>
         <span>{visibleCount} of {names.length}</span></div>
-      <div className="ra-columns-list" role="group" aria-label="Column visibility and order">
-        {order.map((name, index) => {
+      <SortableList<string> items={order} getKey={(name) => name}
+        getLabel={(name) => labelByName.get(name) ?? name}
+        ariaLabel="Column visibility and order" className="ra-columns-list"
+        itemClassName={(name) => "ra-column-option " + (preferences.pinned === name ? "is-pinned" : "")}
+        onReorder={(keys) => onChange((prev) => reorderColumns(names, prev, keys))}
+        renderItem={(name) => {
           const checked = !preferences.hidden.includes(name);
           const pinned = preferences.pinned === name;
-          return <div className={"ra-column-option " + (pinned ? "is-pinned" : "")} key={name}>
-            <GripVertical className="ra-column-grip" size={15} aria-hidden="true"/>
+          return <>
             <Checkbox checked={checked} label={labelByName.get(name) ?? name}
               disabled={checked && visibleCount === 1}
               onCheckedChange={(next) => onChange((prev) => setColumnVisible(names, prev, name, next))}/>
             <div className="ra-column-controls">
-              <button type="button" className="ra-control-icon" disabled={index === 0}
-                onClick={() => move(name, -1)} title={"Move " + name + " up"} aria-label={"Move " + name + " up"}><ArrowUp size={15}/></button>
-              <button type="button" className="ra-control-icon" disabled={index === order.length - 1}
-                onClick={() => move(name, 1)} title={"Move " + name + " down"} aria-label={"Move " + name + " down"}><ArrowDown size={15}/></button>
               <button type="button" className={"ra-control-icon " + (pinned ? "is-active" : "")}
                 disabled={!checked} aria-pressed={pinned} title={(pinned ? "Unpin " : "Pin ") + name}
                 aria-label={(pinned ? "Unpin " : "Pin ") + name}
@@ -47,9 +46,8 @@ export function TableSettings({ columns, preferences, onChange, onClose }: Table
                 {pinned ? <PinOff size={15}/> : <Pin size={15}/>}
               </button>
             </div>
-          </div>;
-        })}
-      </div>
+          </>;
+        }}/>
       <div className="ra-density-section"><div><strong>Row density</strong><small>Adjust vertical spacing</small></div>
         <ToggleGroup<string> value={preferences.density} ariaLabel="Row density" options={[
           { value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" },

@@ -38,3 +38,5 @@ See [release readiness](docs/deployment.md#release-readiness) for verification r
 - Add before/after hooks around record, bulk and resource Actions, including server-side veto support.
 
 - Add reusable accessible Checkbox, CheckboxGroup, Switch, RadioGroup and ToggleGroup controls, a compact table Columns panel and unified bulk-selection checkboxes.
+
+- Add public accessible `SortableList` drag handles; use in table Columns and the Shop component playground.

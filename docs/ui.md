@@ -9,7 +9,7 @@ The Pyntral frontend is a React SPA. Its base CSS and reusable components live i
 ```tsx
 import {
   Button, Badge, Card, TextInput, Textarea, FormField,
-  Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup,
+  Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup, SortableList,
   SearchInput, Select, AsyncSelect, DatePicker, Calendar, Dialog,
 } from "@pyntral/ui";
 ```
@@ -26,6 +26,7 @@ import {
 | `CheckboxGroup` | Multiple selected values; optional `minSelected`/`maxSelected` limits. |
 | `RadioGroup` | Exclusive choice; native radio-keyboard semantics. |
 | `ToggleGroup` | Segmented single-choice radios or multiple-choice checkboxes. |
+| `SortableList` | Controlled reorderable list; mouse, touch and pen drag handles, keyboard reordering and Escape cancellation. |
 | `SearchInput` | Controlled `value`, `onChange`, `onSearch`, optional search icon / submit button placement. |
 | `Select` | Static `options` or `loadOptions(query)`, `multiple`, `searchable`, `maxItems`, `maxSelections`, `popupMinHeight`, `popupMaxHeight`. |
 | `AsyncSelect` | Wrapper for server-loaded searchable options. |
@@ -81,6 +82,30 @@ import { Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup } from "@pyntr
 For mutually exclusive selection use `RadioGroup` or single-mode `ToggleGroup`.
 Use `CheckboxGroup` for multiple choices with an optional selection cap.
 The interactive demo is at **Agents → Insights → Choice controls**.
+
+### Drag-and-drop ordering
+
+`SortableList` is a public controlled atom from `@pyntral/ui`. The built-in
+**Columns → Customize table** panel uses the same component. Only its handle
+starts a drag; embedded checkboxes and buttons continue to work. Pointer
+gestures support mouse, touch and pen. With keyboard focus on a handle, press
+Space/Enter to lift, Up/Down to move, Space/Enter to drop, Escape to cancel.
+The parent receives the reordered array only after a successful drop.
+
+```tsx
+import { useState } from "react";
+import { SortableList } from "@pyntral/ui";
+
+export function Steps() {
+  const [steps, setSteps] = useState([{id:"review",label:"Review"},{id:"publish",label:"Publish"}]);
+  return <SortableList items={steps} getKey={(item) => item.id}
+    getLabel={(item) => item.label} renderItem={(item) => <span>{item.label}</span>}
+    onReorder={setSteps} ariaLabel="Workflow steps" />;
+}
+```
+
+Use unique, stable keys (not indexes); callers own persistence. See the
+**Agents → Insights → Drag to reorder** interactive demo.
 
 ## Global toasts and dialogs
 

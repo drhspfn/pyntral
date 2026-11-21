@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowRight, Bell, Image as ImageIcon } from "lucide-react";
 import type { CustomPageProps } from "@pyntral/types";
 import { useAdminFeedback } from "@pyntral/feedback";
-import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, RadioGroup, SearchInput, Select, Switch, TextInput, ToggleGroup,
+import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, RadioGroup, SearchInput, Select, SortableList, Switch, TextInput, ToggleGroup,
   type SelectOption } from "@pyntral/ui";
 import { api } from "@pyntral/api";
 
@@ -20,6 +20,11 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
   const [channels, setChannels] = useState<string[]>(["email", "in-app"]);
   const [priority, setPriority] = useState<string | null>("standard");
   const [density, setDensity] = useState<string | null>("comfortable");
+  const [workflowSteps, setWorkflowSteps] = useState([
+    { id: "review", label: "Review request" },
+    { id: "approve", label: "Approve changes" },
+    { id: "publish", label: "Publish update" },
+  ]);
   const loadAgents = async (q: string): Promise<SelectOption[]> =>
     (await api<{ items: SelectOption[] }>(`/api/resources/agents/options?q=${encodeURIComponent(q)}`)).items;
 
@@ -58,6 +63,15 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
           <ToggleGroup<string> label="Table density" value={density} onValueChange={(next) => {
             if (typeof next === "string") setDensity(next);
           }} options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }]}/>
+        </div>
+      </Card>
+      <Card title="Drag to reorder" description="Shared SortableList with mouse, touch and keyboard support">
+        <div style={{ padding: "10px 0" }}>
+          <SortableList items={workflowSteps} getKey={(step) => step.id} getLabel={(step) => step.label}
+            ariaLabel="Workflow steps" onReorder={setWorkflowSteps}
+            renderItem={(step, index) => <span style={{ flex: 1, padding: "9px 4px", fontSize: 12 }}>
+              <strong>{index + 1}.</strong> {step.label}
+            </span>}/>
         </div>
       </Card>
       <Card title="Registered resources" description={`${schema.resources.length} resources available`}>

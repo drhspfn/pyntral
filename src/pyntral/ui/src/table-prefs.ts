@@ -57,3 +57,12 @@ export function moveColumn(names: string[], prefs: TablePreferences, name: strin
   [next[from], next[to]] = [next[to], next[from]];
   return { ...prefs, order: next };
 }
+
+/** Accept only a complete permutation of the resource's known columns. */
+export function reorderColumns(names: string[], prefs: TablePreferences, keys: readonly string[]): TablePreferences {
+  const expected = orderedColumns(names, { ...prefs, hidden: [] });
+  if (keys.length !== expected.length || new Set(keys).size !== expected.length ||
+      keys.some((key) => !expected.includes(key))) return prefs;
+  if (keys.every((key, index) => key === expected[index])) return prefs;
+  return { ...prefs, order: [...keys] };
+}
