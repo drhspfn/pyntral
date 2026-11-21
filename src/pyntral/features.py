@@ -121,3 +121,18 @@ class AuditFeature:
         if resource._audit_enabled:
             raise ValueError("Duplicate AuditFeature on a resource")
         resource._audit_enabled = True
+
+
+@dataclass(slots=True)
+class UploadFeature:
+    """Enable authenticated attachments for one resource."""
+
+    max_bytes: int = 10 * 1024 * 1024
+
+    def apply(self, resource: Any) -> None:
+        if resource._uploads_enabled:
+            raise ValueError("Duplicate UploadFeature")
+        if not 1 <= self.max_bytes <= 100 * 1024 * 1024:
+            raise ValueError("Upload max_bytes must be 1..104857600")
+        resource._uploads_enabled = True
+        resource._upload_max_bytes = self.max_bytes

@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -29,6 +29,7 @@ from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
 from .hooks import OperationContext
 from .validation import validate_payload
+from .storage import StorageBackend, UploadEntry, safe_upload_name, normalize_mime
 from .bridge import Bridge, BridgeContext
 from .logging import (LoggingConfig, configure_logging, emit as emit_log, request_id_var)
 from pydantic import ValidationError
@@ -64,6 +65,7 @@ class Admin:
         logging_config: LoggingConfig | None = None,
         event_bus: EventTransport | None = None,
         auto_start_events: bool = True,
+        storage: StorageBackend | None = None,
     ):
         if not isinstance(secret_key, str) or len(secret_key) < 32:
             raise ValueError("secret_key must contain at least 32 characters")
@@ -72,6 +74,7 @@ class Admin:
         if auth is None:
             raise ValueError("An authentication backend is required")
         self.session_factory = session_factory
+        self.storage = storage
         self.auth = auth
         self.path = path
         self.title = title
@@ -210,6 +213,8 @@ class Admin:
                     raise TypeError("Resource features must implement apply(resource)")
                 feature.apply(resource)
             resource._features_applied = True
+        if resource._uploads_enabled and self.storage is None:
+            raise ValueError("UploadFeature requires Admin(storage=...)")
         adapter = MapperAdapter(resource)
         if resource.access:
             thresholds = [resource.access.read, resource.access.select, resource.access.write,
@@ -641,6 +646,106 @@ class Admin:
                     raise AdminError(500, "Bridge output did not match its model", "bridge_output_error") from exc
                 self.log_event("bridge", "bridge.invoked", principal=principal, bridge=name)
                 return {"result": validated.model_dump(mode="json")}
+            finally:
+                await maybe_await(session.close())
+
+        async def _upload_owner(name: str, identifier: str, principal: Principal,
+                                session: Any, *, edit: bool = False) -> tuple[MapperAdapter, Any]:
+            adapter = self._adapter(name)
+            if not adapter.resource._uploads_enabled or self.storage is None:
+                raise AdminError(404, "Uploads not enabled for this resource", "not_found")
+            await self._authorize(principal, name, "edit" if edit else "show")
+            record = await adapter.get(session, identifier, principal)
+            await self._authorize(principal, name, "edit" if edit else "show", record)
+            return adapter, record
+
+        @api.get("/api/resources/{name}/{identifier}/uploads")
+        async def list_uploads(name: str, identifier: str,
+                               principal: Principal = Depends(self._principal)) -> dict:
+            session = self.session_factory()
+            try:
+                await _upload_owner(name, identifier, principal, session)
+                rows = (await maybe_await(session.execute(select(UploadEntry).where(
+                    UploadEntry.resource == name, UploadEntry.record_id == identifier
+                ).order_by(UploadEntry.id).limit(100)))).scalars().all()
+                return {"items": [{"id": row.id, "filename": row.filename,
+                                   "content_type": row.content_type, "size_bytes": row.size_bytes}
+                                  for row in rows]}
+            finally:
+                await maybe_await(session.close())
+
+        @api.post("/api/resources/{name}/{identifier}/uploads", status_code=201)
+        async def upload_resource_file(name: str, identifier: str, request: Request,
+                                       principal: Principal = Depends(self._principal)) -> dict:
+            self._csrf(request)
+            session = self.session_factory()
+            try:
+                adapter, _record = await _upload_owner(name, identifier, principal, session, edit=True)
+                from urllib.parse import unquote
+                filename = safe_upload_name(unquote(request.headers.get("X-Filename", "attachment")))
+                try:
+                    mime = normalize_mime(request.headers.get("Content-Type", ""), filename)
+                except ValueError:
+                    raise AdminError(422, "Invalid content type", "validation_error") from None
+                content = bytearray()
+                async for chunk in request.stream():
+                    content.extend(chunk)
+                    if len(content) > adapter.resource._upload_max_bytes:
+                        raise AdminError(413, "Upload exceeds configured size limit", "upload_too_large")
+                if not content:
+                    raise AdminError(422, "Upload must not be empty", "validation_error")
+                key = uuid.uuid4().hex
+                await self.storage.put(key, bytes(content), mime)
+                entry = UploadEntry(resource=name, record_id=identifier, object_key=key,
+                                    filename=filename, content_type=mime, size_bytes=len(content))
+                try:
+                    session.add(entry)
+                    await adapter._commit(session)
+                except Exception:
+                    await self.storage.delete(key)
+                    raise
+                return {"id": entry.id, "filename": filename, "size_bytes": len(content)}
+            finally:
+                await maybe_await(session.close())
+
+        async def _get_upload(upload_id: str, principal: Principal, session: Any,
+                              *, edit: bool = False) -> UploadEntry:
+            entry = await maybe_await(session.get(UploadEntry, upload_id))
+            if entry is None:
+                raise AdminError(404, "Upload not found", "not_found")
+            await _upload_owner(entry.resource, entry.record_id, principal, session, edit=edit)
+            return entry
+
+        @api.get("/api/uploads/{upload_id}")
+        async def download_resource_file(upload_id: str,
+                                         principal: Principal = Depends(self._principal)) -> Response:
+            session = self.session_factory()
+            try:
+                entry = await _get_upload(upload_id, principal, session)
+                try:
+                    content = await self.storage.get(entry.object_key)
+                except FileNotFoundError:
+                    raise AdminError(404, "Stored object missing", "not_found") from None
+                from urllib.parse import quote
+                encoded_name = quote(entry.filename, safe="")
+                return Response(content, media_type="application/octet-stream", headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}",
+                    "Content-Security-Policy": "default-src 'none'",
+                })
+            finally:
+                await maybe_await(session.close())
+
+        @api.delete("/api/uploads/{upload_id}")
+        async def delete_resource_file(upload_id: str, request: Request,
+                                       principal: Principal = Depends(self._principal)) -> dict:
+            self._csrf(request)
+            session = self.session_factory()
+            try:
+                entry = await _get_upload(upload_id, principal, session, edit=True)
+                await self.storage.delete(entry.object_key)
+                await maybe_await(session.delete(entry))
+                await maybe_await(session.commit())
+                return {"ok": True}
             finally:
                 await maybe_await(session.close())
 

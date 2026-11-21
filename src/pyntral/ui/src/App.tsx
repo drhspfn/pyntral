@@ -567,6 +567,43 @@ function RelatedRecords({ resource, identifier, relation, target, navigate }: {
       <div className="muted relation-empty">No related records</div>}
   </div>;
 }
+function ResourceUploads({ resource, identifier }: { resource: ResourceDef; identifier: string }) {
+  const client = useQueryClient();
+  const feedback = useAdminFeedback();
+  const [file, setFile] = useState<File | null>(null);
+  const url = `/api/resources/${resource.id}/${encodeURIComponent(identifier)}/uploads`;
+  const rows = useQuery({ queryKey: ["uploads", resource.id, identifier], queryFn: () =>
+    api<{ items: { id: string; filename: string; size_bytes: number }[] }>(url) });
+  const send = useMutation({
+    mutationFn: (upload: File) => api(url, { method: "POST", body: upload,
+      headers: { "X-Filename": encodeURIComponent(upload.name), "Content-Type": upload.type || "application/octet-stream" } }),
+    onSuccess: async () => { setFile(null); await client.invalidateQueries({ queryKey: ["uploads", resource.id, identifier] });
+      feedback.toast("Attachment uploaded", { kind: "success" }); },
+    onError: (error: unknown) => feedback.toast(error instanceof Error ? error.message : "Upload failed", { kind: "error" }),
+  });
+  const remove = useMutation({
+    mutationFn: (uploadId: string) => api(`/api/uploads/${encodeURIComponent(uploadId)}`, { method: "DELETE" }),
+    onSuccess: async () => { await client.invalidateQueries({ queryKey: ["uploads", resource.id, identifier] });
+      feedback.toast("Attachment removed", { kind: "success" }); },
+  });
+  return <div className="surface relationship-card">
+    <h3>Attachments</h3>
+    {rows.isLoading && <Loading label="Loading attachments" />}
+    {rows.error && <Alert error={rows.error}/>}
+    {rows.data?.items.map((asset) => <div className="ra-upload-item" key={asset.id}>
+      <a href={`${base}/api/uploads/${encodeURIComponent(asset.id)}`} download>{asset.filename}</a>
+      <small>{asset.size_bytes} bytes</small>
+      {resource.capabilities.edit && <button className="btn subtle" disabled={remove.isPending} onClick={() =>
+        void feedback.confirm({title:"Remove attachment?",destructive:true}).then(ok => {if(ok)remove.mutate(asset.id);})}>Remove</button>}
+    </div>)}
+    {resource.capabilities.edit && <form className="ra-upload-form" onSubmit={(event) => {
+      event.preventDefault(); if (file) send.mutate(file); }}>
+      <input type="file" aria-label="Choose attachment" onChange={(event) => setFile(event.target.files?.[0] ?? null)}/>
+      <button type="submit" className="btn primary" disabled={!file || send.isPending}>Upload</button>
+    </form>}
+  </div>;
+}
+
 function RecordShow({ resource, id, schema, navigate }: {
   resource: ResourceDef; id: string; schema: Schema; navigate: (route: string) => void;
 }) {
@@ -598,6 +635,7 @@ function RecordShow({ resource, id, schema, navigate }: {
           .map((action) => <RecordAction key={action.name} resource={resource} record={record.data!.record}
             action={action} navigate={navigate}/>)}
       </div>}
+      {resource.uploads && <ResourceUploads resource={resource} identifier={id} />}
       {related.map((relation) => <div key={relation.name} className="surface relationship-card">
         <RelatedRecords resource={resource} identifier={id} relation={relation}
           target={schema.resources.find((r) => r.id === relation.resource)!} navigate={navigate}/></div>)}

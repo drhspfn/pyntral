@@ -332,6 +332,7 @@ class MapperAdapter:
             "navigationOrder": self.resource.navigation_order,
             "primaryKey": self.pk_name,
             "versionField": self.resource.version_field,
+            "uploads": self.resource._uploads_enabled,
             "titleField": self._title_field(),
             "layouts": {mode: [
                 {"id": section.id, "title": section.title, "kind": section.kind,

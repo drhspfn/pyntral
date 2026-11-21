@@ -31,6 +31,7 @@ classifiers = [
 
 [project.optional-dependencies]
 loguru = ["loguru>=0.8,<1"]
+s3 = ["boto3>=1.35,<2"]
 rabbitmq = ["aio-pika==10.2.3"]
 kafka = ["aiokafka==0.15.0"]
 all-events = ["aio-pika==10.2.3", "aiokafka==0.15.0"]

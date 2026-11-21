@@ -184,6 +184,8 @@ class Resource(Generic[ModelT]):
     _server_defaults: dict[str, Callable[[], Any]] = field(default_factory=dict, init=False, repr=False)
     _server_onupdate: dict[str, Callable[[], Any]] = field(default_factory=dict, init=False, repr=False)
     _audit_enabled: bool = field(default=False, init=False, repr=False)
+    _uploads_enabled: bool = field(default=False, init=False, repr=False)
+    _upload_max_bytes: int = field(default=10_485_760, init=False, repr=False)
     scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
     access: RoleAccess | None = None
     allow_create: bool = True

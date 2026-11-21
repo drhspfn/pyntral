@@ -54,6 +54,7 @@ export interface ResourceDef {
   navigationOrder?: number;
   primaryKey: string;
   versionField?: string | null;
+  uploads?: boolean;
   titleField: string;
   pageSize: number;
   showSearch?: boolean;

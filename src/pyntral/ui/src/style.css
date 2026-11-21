@@ -401,3 +401,9 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .ra-layout-panel .field-grid, .ra-layout-group .field-grid { width: 100%; }
 @media (max-width: 700px) { .ra-layout-tabs { overflow-x: auto; flex-wrap: nowrap; }
   .ra-layout-tabs button { flex-shrink: 0; } }
+
+.ra-upload-item { display: flex; flex-wrap: wrap; align-items: center; gap: .7rem;
+  padding: .6rem 0; border-bottom: 1px solid var(--ra-border); }
+.ra-upload-item small { color: var(--ra-text-secondary); margin-left: auto; }
+.ra-upload-form { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
+.ra-upload-form input[type="file"] { max-width: 100%; }

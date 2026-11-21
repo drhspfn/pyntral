@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import random
+from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -17,7 +18,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    ResourceUpdated, ResourceHook, VirtualField, LayoutSection, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase,
+    ResourceUpdated, ResourceHook, VirtualField, LayoutSection, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase, UploadFeature, LocalStorage, UploadBase,
 )
 
 
@@ -177,6 +178,7 @@ SessionLocal = sessionmaker(engine, expire_on_commit=False)
 def seed() -> None:
     Base.metadata.create_all(engine)
     AuditBase.metadata.create_all(engine)
+    UploadBase.metadata.create_all(engine)
     # Add non-destructive demonstration columns for users upgrading an older Shop DB.
     if db_url.startswith("sqlite"):
         from sqlalchemy import inspect as sql_inspect, text
@@ -290,6 +292,7 @@ admin = Admin(
     title="Shop demo",
     default_theme="system",
     animations=True,
+    storage=LocalStorage(Path(os.environ.get("SHOP_UPLOAD_ROOT", ".pyntral/uploads"))),
     theme={"light": {"primary": "#276b9e"}, "dark": {"primary": "#88c2e9"}},
 )
 
@@ -417,7 +420,7 @@ admin.add_resource(Resource(
     EditorialDraft, icon="file-text", navigation="Commerce", name="editorial-drafts",
     list_fields=["id", "title", "body", "version"],
     fields={"version": Field(readonly=True)}, version_field="version",
-    features=[TimestampFeature(), AuditFeature()],
+    features=[TimestampFeature(), AuditFeature(), UploadFeature(max_bytes=2_000_000)],
     form_sections=[
         LayoutSection("overview", "Overview", ["title"], kind="tab"),
         LayoutSection("body", "Content", ["body"], kind="tab"),

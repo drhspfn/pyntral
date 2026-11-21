@@ -349,3 +349,33 @@ demo setup; production projects should use an Alembic migration instead.
 Register `Resource(AuditEntry, allow_create=False, allow_edit=False,
 allow_delete=False)` to inspect the audit trail from a secured admin view.
 Arbitrary custom Actions and M:N operations are not part of this CRUD hook.
+
+## Secure resource uploads
+
+Enable `UploadFeature(max_bytes=...)` for selected resources and provide
+`Admin(storage=LocalStorage(Path("private-uploads")))`. Files are stored by
+server-generated opaque keys and indexed in `UploadEntry`. Create the
+`pyntral_uploads` table through `UploadBase.metadata` in local development or
+Alembic in production. Authenticated routes enforce owner record scopes:
+
+- `GET /admin/api/resources/{resource}/{id}/uploads` — metadata list
+- `POST /admin/api/resources/{resource}/{id}/uploads` — raw binary body plus
+  `X-Filename` header, CSRF, size limit and owner edit permission
+- `GET /admin/api/uploads/{upload_id}` — authorized attachment download
+- `DELETE /admin/api/uploads/{upload_id}` — authorized deletion
+
+Downloads force `Content-Disposition: attachment`, preventing accidental inline
+HTML execution. An S3/MinIO-compatible adapter is available with
+`pyntral[s3]`:
+
+```python
+from pyntral import UploadFeature, LocalStorage, S3Storage
+storage = S3Storage(bucket="private-admin-assets", endpoint_url="https://minio.example.org")
+admin = Admin(app, storage=storage, ...)  # all other constructor arguments required
+admin.add_resource(Resource(Article, features=[UploadFeature(max_bytes=5_000_000)]))
+```
+
+S3 credentials come from boto3's standard environment/credentials chain;
+never embed them in frontend JSON schemas. A file deletion is not a transaction
+across the object store and SQL database; applications requiring coordinated
+cleanup should use a durable outbox.

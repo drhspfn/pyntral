@@ -138,3 +138,14 @@ administrator ID, operation and changed field names. No previous/new values
 are stored. Audit rows are inserted in the same database transaction as the
 normal mapped CRUD operation. Actions and M:N mutations have separate
 semantics and are not automatically audited by this feature.
+
+### Authenticated attachments (Local/S3/MinIO)
+
+**Commerce → Editorial Drafts → a draft → Attachments:** Select a file and
+upload it; download via the protected API link or delete it. Users without
+write permission cannot upload/delete. The Shop uses `LocalStorage` under
+`.pyntral/uploads/` by default and enforces a 2 MB request limit. This is a
+private demonstration directory: do not put it under a public static server.
+`S3Storage(bucket=..., endpoint_url=...)` uses the same API with AWS S3 or
+MinIO (requires `pyntral[s3]`). For persistence in Docker, mount a volume for
+`SHOP_UPLOAD_ROOT`.
