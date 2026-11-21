@@ -538,7 +538,7 @@ h2 {font-size:15px;letter-spacing:-.2px}
   background:var(--ra-surface);border:1px solid var(--ra-border);box-shadow:var(--ra-shadow);border-radius:12px;
   display:grid;gap:12px}
 .ra-export-panel h3{margin:0;font-size:14px}
-.ra-export-panel label{display:grid;gap:6px;font-size:12px;font-weight:600;color:var(--ra-text-secondary)}
+.ra-export-panel label,.ra-export-field{display:grid;gap:6px;font-size:12px;font-weight:600;color:var(--ra-text-secondary)}
 .ra-export-panel p{font-size:12px;color:var(--ra-muted);margin:0}
 .ra-export-panel .ra-export-range{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .ra-export-panel .ra-input{width:100%;min-width:0}
