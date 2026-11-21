@@ -43,6 +43,8 @@ class Field:
     span: int = 1  # Full row when 2 in a two-column layout
     read_role: str | None = None  # Optional minimum role for this field
     write_role: str | None = None  # Optional minimum role to modify this field
+    read_when: Callable[[Any, Any | None], Any] | None = None  # (principal, record) -> bool
+    write_when: Callable[[Any, Any | None], Any] | None = None
     filter_operators: list[str] | None = None  # Restrict supported filter operations for this field
     filter_width: int | None = None  # Optional filter control width in px; auto-sized otherwise
     list: FieldView | None = None
@@ -187,6 +189,7 @@ class Resource(Generic[ModelT]):
     _uploads_enabled: bool = field(default=False, init=False, repr=False)
     _upload_max_bytes: int = field(default=10_485_760, init=False, repr=False)
     scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
+    operation_policy: Callable[[Any, str, Any | None], Any] | None = None
     access: RoleAccess | None = None
     allow_create: bool = True
     allow_edit: bool = True

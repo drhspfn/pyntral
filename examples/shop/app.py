@@ -431,7 +431,13 @@ admin.add_resource(Resource(
 admin.add_resource(Resource(
     EditorialDraft, icon="file-text", navigation="Commerce", name="editorial-drafts",
     list_fields=["id", "title", "body", "version"],
-    fields={"version": Field(readonly=True)}, version_field="version",
+    # Conditional rules run on the server for each record; creating a [Locked]
+    # draft lets you exercise protected edits in the UI.
+    fields={"version": Field(readonly=True),
+            "body": Field(write_when=lambda _principal, row: not row.title.startswith("[Locked]"))},
+    operation_policy=lambda _principal, action, row: (
+        row is None or action != "delete" or not row.title.startswith("[Locked]")),
+    version_field="version",
     features=[TimestampFeature(), AuditFeature(), UploadFeature(max_bytes=2_000_000)],
     form_sections=[
         LayoutSection("overview", "Overview", ["title"], kind="tab"),

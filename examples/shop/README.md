@@ -175,3 +175,12 @@ dark-mode accent; the function may also read persisted user preferences.
 `Admin(theme={...})` remains the global fallback, and only the verified
 principal influences the server-provided defaults. Users can still toggle
 their local theme from the header.
+
+### Conditional authorization
+
+Create an **Editorial Draft** with a title beginning `[Locked]` to test the
+per-record `operation_policy` (hard delete is denied) and the `body` field's
+`Field.write_when` rule (editing the body is denied with HTTP 403). Other
+fields remain editable; restrictions are checked on the server. Separate
+`Field.read_when` conditions can redact data on a per-row basis, including
+in related lists; such fields cannot be sorted or filtered to avoid leaks.

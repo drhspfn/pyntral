@@ -213,7 +213,7 @@ class Admin:
             adapter = self._adapter(event.resource)
             record = await adapter.get(session, event.record_id, principal)
             await self._authorize(principal, event.resource, "show", record)
-            return adapter.serialize(record, await self._allowed_fields(principal, event.resource, view="show"))
+            return adapter.serialize(record, await self._allowed_fields(principal, event.resource, view="show", record=record))
         finally:
             await maybe_await(session.close())
 
@@ -298,11 +298,16 @@ class Admin:
                 principal, resource.access.read
             ):
                 return False
+        if resource.operation_policy is not None and not await maybe_await(
+            resource.operation_policy(principal, action, record)
+        ):
+            return False
         # For older auth callbacks, selecting an option uses the same authorization as listing.
         auth_action = "list" if action == "select" else action
         return bool(await maybe_await(self.auth.authorize(principal, name, auth_action, record)))
 
-    async def _allowed_fields(self, principal: Principal, name: str, *, edit: bool = False, view: str | None = None) -> set[str]:
+    async def _allowed_fields(self, principal: Principal, name: str, *, edit: bool = False,
+                              view: str | None = None, record: Any = None) -> set[str]:
         adapter = self._adapter(name)
         allowed = set()
         for field_name in adapter.columns:
@@ -314,6 +319,14 @@ class Admin:
                 continue
             if edit and field is not None and field.read_role is not None and not self._role_ok(principal, field.read_role):
                 continue
+            if field is not None:
+                condition = field.write_when if edit else field.read_when
+                if condition is not None and record is not None and not await maybe_await(condition(principal, record)):
+                    continue
+                # Dynamic field predicates cannot be safely used in sorting/filtering:
+                # a hidden row value would otherwise be inferable by a query oracle.
+                if not edit and field.read_when is not None and view in ("filter", "search"):
+                    continue
             if edit and not adapter.writable(field_name):
                 continue
             override = adapter.view_config(field_name, view or ("edit" if edit else "show"))
@@ -606,7 +619,13 @@ class Admin:
                                        else field["name"] in read_fields)
                             option["visible"] = option["visible"] and allowed
                     metadata["listFields"] = [n for n in metadata["listFields"] if n in read_fields]
-                    metadata["searchFields"] = [n for n in metadata["searchFields"] if n in read_fields]
+                    metadata["searchFields"] = [n for n in metadata["searchFields"] if n in read_fields
+                        and (n not in adapter.resource.fields or adapter.resource.fields[n].read_when is None)]
+                    for field in metadata["fields"]:
+                        if field["name"] in adapter.resource.fields and adapter.resource.fields[field["name"]].read_when is not None:
+                            field["filterOperators"] = []
+                            field["sortable"] = False
+                            field["views"]["filter"]["visible"] = False
                     metadata["relationships"] = [r for r in metadata["relationships"]
                         if can_read.get(r["resource"], False)]
                     for relation in metadata["relationships"]:
@@ -823,11 +842,14 @@ class Admin:
             try:
                 adapter = self._adapter(name)
                 read_fields = await self._allowed_fields(principal, name, view="list")
-                filter_fields = await self._allowed_fields(principal, name)
+                filter_fields = await self._allowed_fields(principal, name, view="filter")
+                async def fields_for_row(row):
+                    return await self._allowed_fields(principal, name, view="list", record=row)
                 result = await adapter.list(
                     session, principal, offset=offset, limit=limit, q=params.get("q", ""),
                     sort=params.get("sort"), desc=params.get("desc") == "true", filters=filters,
                     allowed_fields=read_fields, filter_fields=filter_fields,
+                    per_record_fields=fields_for_row,
                 )
                 if adapter.resource.actions:
                     # Evaluated against the actual scoped ORM records; no frontend-only ACL.
@@ -871,7 +893,7 @@ class Admin:
                 result = await adapter.create(session, ctx.payload, principal)
                 ctx.record = await adapter.get(session, str(result[adapter.pk_name]), principal)
                 await self._run_hooks(adapter, "after_create", ctx)
-                read_fields = await self._allowed_fields(principal, name, view="show")
+                read_fields = await self._allowed_fields(principal, name, view="show", record=ctx.record)
                 self.log_event("resource", "resource.created", principal=principal, resource=name,
                                record_id=result.get(adapter.pk_name))
                 await self._publish(ResourceCreated(
@@ -939,7 +961,7 @@ class Admin:
                 adapter = self._adapter(name)
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "show", record)
-                return {"record": adapter.serialize(record, await self._allowed_fields(principal, name, view="show")),
+                return {"record": adapter.serialize(record, await self._allowed_fields(principal, name, view="show", record=record)),
                         "actions": await self._visible_actions(principal, name, record)}
             finally:
                 await maybe_await(session.close())
@@ -958,7 +980,7 @@ class Admin:
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "edit", record)
                 self._require_version(adapter, record, request)
-                write_fields = await self._allowed_fields(principal, name, edit=True, view="edit")
+                write_fields = await self._allowed_fields(principal, name, edit=True, view="edit", record=record)
                 rejected = set(payload) - write_fields
                 if rejected:
                     if all(not adapter.writable(name) for name in rejected if name in adapter.columns) and all(
@@ -980,7 +1002,7 @@ class Admin:
                 await self._run_hooks(adapter, "after_update", ctx)
                 changed = [field_name for field_name, old in before.items()
                            if old != getattr(record, field_name)]
-                read_fields = await self._allowed_fields(principal, name, view="show")
+                read_fields = await self._allowed_fields(principal, name, view="show", record=record)
                 self.log_event("resource", "resource.updated", principal=principal, resource=name,
                                record_id=identifier)
                 if changed:
@@ -1163,7 +1185,7 @@ class Admin:
                         name=relation_name, kind="relationship"),), **event_context(),
                 ))
                 return {"record": target.serialize(
-                    child, await self._allowed_fields(principal, target.resource.name, view="show"))}
+                    child, await self._allowed_fields(principal, target.resource.name, view="show", record=child))}
             finally:
                 await maybe_await(session.close())
 
@@ -1193,6 +1215,8 @@ class Admin:
                     session, principal, record, relation_name,
                     self._adapter(target_name), offset, limit, query=q,
                     allowed_fields=await self._allowed_fields(principal, target_name, view="list"),
+                    per_record_fields=lambda row: self._allowed_fields(
+                        principal, target_name, view="list", record=row),
                 )
             finally:
                 await maybe_await(session.close())

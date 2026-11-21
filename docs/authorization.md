@@ -76,3 +76,18 @@ Scopes must be applied consistently in the application's other data-access route
 | Bridge | Require authenticated principal and optional `min_role`. |
 
 For full threat-model guidance, consult [SECURITY.md](../SECURITY.md).
+
+## Contextual resource and field policies
+
+A resource can further restrict operations using `operation_policy(principal,
+action, record) -> bool`, which can be sync or async. `record` is `None`
+for collection-level permissions and is an ORM instance for record actions.
+`False` denies the operation on the server, regardless of UI visibility.
+
+Fields can independently use `Field(read_when=..., write_when=...)`. Both
+predicates receive `(principal, record)` and may be sync or async. The
+field is redacted from each unauthorized record in list/show responses and
+write attempts return HTTP 403. A field with conditional read permission
+cannot be used in sorting, text search or advanced filters (even by probing
+query parameters) because those operations could reveal hidden data. Use
+`Resource.scope` to enforce database-level row isolation.

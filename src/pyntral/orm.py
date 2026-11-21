@@ -464,6 +464,7 @@ class MapperAdapter:
         desc: bool = False, filters: dict[str, str] | None = None,
         allowed_fields: set[str] | None = None,
         filter_fields: set[str] | None = None,
+        per_record_fields: Any = None,
     ) -> dict[str, Any]:
         if offset < 0:
             raise AdminError(422, "offset must be nonnegative")
@@ -487,15 +488,20 @@ class MapperAdapter:
         total_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
         total = (await maybe_await(session.execute(total_stmt))).scalar_one()
         if sort:
-            if sort not in self.columns or not self.visible(sort) or (allowed_fields is not None and sort not in allowed_fields):
+            if (sort not in self.columns or not self.visible(sort) or
+                (allowed_fields is not None and sort not in allowed_fields) or
+                (self._field(sort) is not None and self._field(sort).read_when is not None)):
                 raise AdminError(422, "Invalid sort column")
             key = getattr(self.resource.model, sort)
         else:
             key = getattr(self.resource.model, self.pk_name)
         stmt = stmt.order_by(key.desc() if desc else key.asc()).limit(limit).offset(offset)
         result = await maybe_await(session.execute(stmt))
-        return {"items": [self.serialize(row, allowed_fields) for row in result.scalars().all()],
-                "total": total, "offset": offset, "limit": limit}
+        serialized = []
+        for row in result.scalars().all():
+            fields = await per_record_fields(row) if per_record_fields is not None else allowed_fields
+            serialized.append(self.serialize(row, fields))
+        return {"items": serialized, "total": total, "offset": offset, "limit": limit}
 
     async def get(self, session: Any, identifier: str, principal: Principal) -> Any:
         stmt = await self._scope(
@@ -609,6 +615,7 @@ class MapperAdapter:
         self, session: Any, principal: Principal, record: Any, name: str,
         target: "MapperAdapter", offset: int = 0, limit: int = 20, query: str = "",
         allowed_fields: set[str] | None = None,
+        per_record_fields: Any = None,
     ) -> dict[str, Any]:
         if name not in self.relations:
             raise AdminError(404, "Relationship not found", "not_found")
@@ -642,5 +649,8 @@ class MapperAdapter:
         results = await maybe_await(session.execute(
             stmt.order_by(getattr(target.resource.model, target.pk_name)).offset(offset).limit(min(limit, 100))
         ))
-        return {"items": [target.serialize(row, allowed_fields) for row in results.scalars()],
-                "total": count, "offset": offset, "limit": limit}
+        items = []
+        for row in results.scalars():
+            fields = await per_record_fields(row) if per_record_fields is not None else allowed_fields
+            items.append(target.serialize(row, fields))
+        return {"items": items, "total": count, "offset": offset, "limit": limit}
