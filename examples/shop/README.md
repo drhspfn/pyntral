@@ -184,3 +184,17 @@ per-record `operation_policy` (hard delete is denied) and the `body` field's
 fields remain editable; restrictions are checked on the server. Separate
 `Field.read_when` conditions can redact data on a per-row basis, including
 in related lists; such fields cannot be sorted or filtered to avoid leaks.
+
+### Generate a resource API reference without Node.js
+
+From the repository root, run:
+
+```bash
+uv run pyntral schema examples.shop.app:app --out .pyntral/shop-schema.md
+uv run pyntral schema examples.shop.app:app --format json --out .pyntral/shop-schema.json
+```
+
+The generated documents list the registered resources, view-visible fields,
+relationships, action scopes and bridge names. They never include sample record
+values or password hashes. These developer-only documents are **not** served
+as an unauthenticated HTTP route; permissions remain enforced at runtime.

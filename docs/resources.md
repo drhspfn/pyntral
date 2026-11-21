@@ -379,3 +379,12 @@ S3 credentials come from boto3's standard environment/credentials chain;
 never embed them in frontend JSON schemas. A file deletion is not a transaction
 across the object store and SQL database; applications requiring coordinated
 cleanup should use a durable outbox.
+
+## Offline schema reference generation
+
+Use `pyntral schema module:app --out .pyntral/schema.md` (or `--format json`) to
+create a value-free developer reference from the same resource registry used
+by the application. No Vite, Node.js or browser process is needed. This static
+file is **not** a user-scoped authorization view: do not publish it to untrusted
+parties if your model names or field metadata are confidential. Hidden mapped
+fields are excluded. See [the Shop example](../examples/shop/README.md).

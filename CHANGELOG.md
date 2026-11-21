@@ -26,3 +26,5 @@ See [release readiness](docs/deployment.md#release-readiness) for verification r
 - PyPI-first release pipeline embeds the generic SPA inside wheel/sdist; custom TSX builds remain optional for consuming applications.
 
 - Add guarded CRUD lifecycle hooks with consistent before/after commit semantics.
+
+- Add offline resource schema reference generation in Markdown/JSON (`pyntral schema`).

@@ -432,6 +432,10 @@ def main() -> None:
     types_parser.add_argument("--watch", action="store_true", help="Regenerate on Python changes")
     types_parser.add_argument("--out", type=Path, help="Copy generated client into a project-owned path")
     types_parser.add_argument("--editor", action="store_true", help="Configure root VS Code TypeScript project")
+    schema_parser = commands.add_parser("schema", help="Export resource documentation without building the SPA")
+    schema_parser.add_argument("app", help="Import path, e.g. examples.shop.app:app")
+    schema_parser.add_argument("--out", type=Path, default=Path(".pyntral/schema.md"))
+    schema_parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
     commands.add_parser("doctor", help="Inspect toolchain and bundle")
     local_env = commands.add_parser("init-env", help="Generate local development credentials")
     local_env.add_argument("--username", default="admin")
@@ -461,6 +465,26 @@ def main() -> None:
                 if args.editor:
                     configure_editor(args.project)
                 print(f"[pyntral] Generated: {generated}")
+        elif args.command == "schema":
+            import importlib
+            from .schema_docs import write_schema_docs
+            from .typegen import _load_env_file
+            project = args.project.resolve()
+            _load_env_file(project / ".env")
+            if str(project) not in sys.path:
+                sys.path.insert(0, str(project))
+            if ":" not in args.app:
+                raise ValueError("App must look like module:app")
+            module_name, attribute = args.app.split(":", 1)
+            target = importlib.import_module(module_name)
+            for name in attribute.split("."):
+                target = getattr(target, name)
+            admin = getattr(target.state, "pyntral", None)
+            if admin is None:
+                raise ValueError("FastAPI app does not have Pyntral mounted")
+            destination = args.out if args.out.is_absolute() else project / args.out
+            write_schema_docs(admin, destination, format=args.format)
+            print(f"[pyntral] Resource reference: {destination}")
         elif args.command == "doctor":
             sys.exit(doctor(args.project))
         elif args.command == "init-env":
