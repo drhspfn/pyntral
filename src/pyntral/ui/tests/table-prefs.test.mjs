@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTablePreferences, orderedColumns } from '../src/table-prefs.ts';
+import { defaultTablePreferences, moveColumn, setColumnVisible, parseTablePreferences, orderedColumns } from '../src/table-prefs.ts';
 
 test('table preferences reject unknown columns and validate density', () => {
   const state = parseTablePreferences({order: ['b','bad','a'], hidden:['b','invalid'],
@@ -14,4 +14,20 @@ test('table preferences reject unknown columns and validate density', () => {
 test('table order and visibility never expose a hidden server column', () => {
   const prefs = parseTablePreferences({order:['b','a'],hidden:['a']}, ['a','b']);
   assert.deepEqual(orderedColumns(['a','b'],prefs),['b']);
+});
+
+test('columns cannot all be hidden; hiding a pinned column releases the pin', () => {
+  const prefs = {order: ['a', 'b'], hidden:['b'], pinned:'a', density:'comfortable',presets:{}};
+  assert.deepEqual(setColumnVisible(['a','b'], prefs, 'a', false), prefs);
+  const unhidden = setColumnVisible(['a','b'], prefs, 'b', true);
+  const hidden = setColumnVisible(['a','b'], unhidden, 'a', false);
+  assert.deepEqual(hidden.hidden, ['a']);
+  assert.equal(hidden.pinned, null);
+});
+test('moveColumn preserves a stable complete ordering', () => {
+  const prefs = defaultTablePreferences();
+  const moved = moveColumn(['a','b','c'], prefs, 'b', -1);
+  assert.deepEqual(moved.order,['b','a','c']);
+  assert.deepEqual(moveColumn(['a','b','c'],moved,'b',-1), moved);
+  assert.deepEqual(moveColumn(['a','b','c'],moved,'b',1).order,['a','b','c']);
 });

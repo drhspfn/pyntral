@@ -40,3 +40,20 @@ export function orderedColumns(names: string[], prefs: TablePreferences): string
         (bi < 0 ? names.indexOf(b) + names.length : bi);
     });
 }
+
+/** Preserve column order, allow at least one visible column, and clear stale pins. */
+export function setColumnVisible(names: string[], prefs: TablePreferences, name: string, visible: boolean): TablePreferences {
+  if (!names.includes(name)) return prefs;
+  const available = orderedColumns(names, prefs);
+  if (!visible && available.length <= 1 && available.includes(name)) return prefs;
+  return { ...prefs, hidden: visible ? prefs.hidden.filter((v) => v !== name) :
+    [...new Set([...prefs.hidden, name])],
+    pinned: !visible && prefs.pinned === name ? null : prefs.pinned };
+}
+export function moveColumn(names: string[], prefs: TablePreferences, name: string, direction: -1 | 1): TablePreferences {
+  const next = orderedColumns(names, { ...prefs, hidden: [] });
+  const from = next.indexOf(name), to = from + direction;
+  if (from < 0 || to < 0 || to >= next.length) return prefs;
+  [next[from], next[to]] = [next[to], next[from]];
+  return { ...prefs, order: next };
+}

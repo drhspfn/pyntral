@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Boxes,
@@ -11,7 +11,7 @@ import { fields as customFields, pages as customPages, actions as customActions,
 import { SidebarNavigation } from "./navigation";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
-import { AsyncSelect, DatePicker, FormField, SearchInput, Select, TextInput, Textarea,
+import { AsyncSelect, Checkbox, DatePicker, FormField, SearchInput, Select, TextInput, Textarea,
   type SelectOption } from "./ui";
 import { RelationInput } from "./relation";
 import { AdvancedFilterField, serializeFilters, filterOperators, type FilterValues } from "./filters";
@@ -20,6 +20,7 @@ import { applyTheme, resolveMode } from "./theme";
 import { CurrentAdminProvider, useCurrentAdmin } from "./currentAdmin";
 import { I18nProvider, useI18n } from "./i18n";
 import { defaultTablePreferences, parseTablePreferences, orderedColumns, type TablePreferences } from "./table-prefs";
+import { TableSettings } from "./table-settings";
 import { api, base, buildQuery, getAuth, setCsrf } from "./api";
 import type {
   ActionDef, AuthState, CustomFieldProps, CustomCrudProps, CustomCollectionActionProps, FieldDef, JobDef, RecordData, ResourceDef, Schema, ThemeMode,
@@ -186,17 +187,18 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
   return <div className={preferences?.density === "compact" ? "ra-table-compact" : ""}
     style={{ "--ra-pin-left": selectable ? "46px" : "0px" } as CSSProperties}>
     <div className="table-scroll"><table className="data-table"><thead><tr>
-    {selectable && <th><input type="checkbox" aria-label="Select all visible records"
+    {selectable && <th className="ra-select-cell"><Checkbox aria-label="Select all visible records"
       checked={keys.length > 0 && keys.every((key) => selection.includes(key))}
-      onChange={(event) => onSelectionChange?.(event.target.checked ? Array.from(new Set([...selection, ...keys])) : selection.filter((key) => !keys.includes(key)))}/></th>}
+      indeterminate={keys.some((key) => selection.includes(key)) && !keys.every((key) => selection.includes(key))}
+      onCheckedChange={(checked) => onSelectionChange?.(checked ? Array.from(new Set([...selection, ...keys])) : selection.filter((key) => !keys.includes(key)))}/></th>}
     {columns.map((field) => <th key={field.name} className={preferences?.pinned === field.name ? "ra-column-pinned" : ""}>
       {field.label}</th>)}<th className="actions-head">ACTION</th>
   </tr></thead><tbody>
     {data.items.map((row) => <tr key={String(row[resource.primaryKey])}>
-      {selectable && <td><input type="checkbox" aria-label={`Select record ${String(row[resource.primaryKey])}`}
-        checked={selection.includes(String(row[resource.primaryKey]))} onChange={(event) => {
+      {selectable && <td className="ra-select-cell"><Checkbox aria-label={`Select record ${String(row[resource.primaryKey])}`}
+        checked={selection.includes(String(row[resource.primaryKey]))} onCheckedChange={(checked) => {
           const key = String(row[resource.primaryKey]);
-          onSelectionChange?.(event.target.checked ? [...selection, key] : selection.filter((value) => value !== key));
+          onSelectionChange?.(checked ? Array.from(new Set([...selection, key])) : selection.filter((value) => value !== key));
         }}/></td>}
       {columns.map((field, idx) => <td key={field.name}
         className={`${idx === 0 ? "strong-cell" : ""} ${preferences?.pinned === field.name ? "ra-column-pinned" : ""}`}>
@@ -321,6 +323,21 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
     catch { return defaultTablePreferences(); }
   });
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const columnsButtonRef = useRef<HTMLButtonElement>(null);
+  const columnsPanelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!columnsOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!columnsButtonRef.current?.contains(target) && !columnsPanelRef.current?.contains(target)) setColumnsOpen(false);
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setColumnsOpen(false); columnsButtonRef.current?.focus(); }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+    return () => { document.removeEventListener("pointerdown", onPointerDown); document.removeEventListener("keydown", onEscape); };
+  }, [columnsOpen]);
   const [presetName, setPresetName] = useState("");
   useEffect(() => { try { localStorage.setItem(prefKey, JSON.stringify(preferences)); } catch { /* storage may be disabled */ } }, [prefKey, preferences]);
   const [filters, setFilters] = useState<FilterValues>({});
@@ -346,43 +363,24 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
         {resource.capabilities.create && <button className="btn primary" onClick={() => navigate(`resources/${resource.id}/new`)}><Plus size={17}/> {t("actions.new", "New record")}</button>}
       </div>
     </div>
-    <div className="surface">
+    <div className={"surface ra-table-surface " + (columnsOpen ? "is-preferences-open" : "")}>
       <div className="table-toolbar">
         {resource.showSearch && <SearchInput value={text} onChange={setText}
           className="ra-list-search" aria-label="Search records"
           placeholder={resource.searchFields.length ? `Search ${resource.label.toLowerCase()}…` : "Search not configured"}
           disabled={!resource.searchFields.length} />}
-        <div className="toolbar-buttons"><button className="btn subtle" type="button"
-          aria-expanded={columnsOpen} onClick={() => setColumnsOpen(!columnsOpen)} title="Table columns and density">
+        <div className="toolbar-buttons"><button ref={columnsButtonRef} className={"btn subtle " + (columnsOpen ? "selected" : "")} type="button"
+          aria-expanded={columnsOpen} aria-controls="ra-table-settings" aria-haspopup="true"
+          onClick={() => setColumnsOpen(!columnsOpen)} title="Table columns and density">
           {t("table.columns", "Columns")}</button><button className={`btn subtle ra-filter-toggle ${filtersOpen ? "selected" : ""}`} aria-expanded={filtersOpen}
           onClick={() => setFiltersOpen(!filtersOpen)}><Filter size={16}/> {t("table.filters", "Filters")}
           <span className={`ra-filter-count ${activeFilterCount === 0 ? "is-empty" : ""}`} aria-hidden={activeFilterCount === 0}>{activeFilterCount || "0"}</span></button>
           <button className="btn subtle" onClick={() => records.refetch()} title="Refresh"><RefreshCw size={16}/></button></div>
       </div>
-      {columnsOpen && <div className="ra-table-preferences" aria-label="Table preferences">
-        <div className="ra-table-preferences-heading"><strong>Columns</strong>
-          <button type="button" className="btn subtle" onClick={() => setPreferences(defaultTablePreferences())}>Reset</button></div>
-        {resource.listFields.map((name) => <div className="ra-table-preference-row" key={name}>
-          <label><input type="checkbox" checked={!preferences.hidden.includes(name)} onChange={(event) =>
-            setPreferences(prev => ({ ...prev, hidden: event.target.checked ? prev.hidden.filter(v => v !== name) : [...prev.hidden, name] }))}/>
-            {resource.fields.find(f => f.name === name)?.label ?? name}</label>
-          <button type="button" title="Move left" onClick={() => setPreferences(prev => {
-            const order = prev.order.length ? [...prev.order] : [...resource.listFields];
-            const index = order.indexOf(name); if (index > 0) [order[index-1], order[index]] = [order[index], order[index-1]];
-            return { ...prev, order };
-          })}>←</button>
-          <button type="button" title="Move right" onClick={() => setPreferences(prev => {
-            const order = prev.order.length ? [...prev.order] : [...resource.listFields];
-            const index = order.indexOf(name); if (index >= 0 && index < order.length - 1) [order[index+1], order[index]] = [order[index], order[index+1]];
-            return { ...prev, order };
-          })}>→</button>
-          <button type="button" title="Pin column" aria-pressed={preferences.pinned === name}
-            onClick={() => setPreferences(prev => ({...prev, pinned: prev.pinned === name ? null : name}))}>
-            {preferences.pinned === name ? "Unpin" : "Pin"}</button>
-        </div>)}
-        <label>Density <select value={preferences.density} onChange={(event) => setPreferences(prev =>
-          ({...prev, density: event.target.value === "compact" ? "compact" : "comfortable"}))}>
-          <option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+      {columnsOpen && <div id="ra-table-settings" className="ra-table-settings-anchor" ref={columnsPanelRef}>
+        <TableSettings columns={resource.listFields.map((name) => ({
+          name, label: resource.fields.find((field) => field.name === name)?.label ?? name,
+        }))} preferences={preferences} onChange={setPreferences} onClose={() => { setColumnsOpen(false); columnsButtonRef.current?.focus(); }}/>
       </div>}
       {filtersOpen && <div className="filters-panel">
         <div className="ra-filter-heading"><span className="filter-caption">REFINE RESULTS</span>
@@ -462,8 +460,8 @@ function InputField({ field, resource, record, value, onChange, mode = "edit" }:
     {dynamicOptions.error && <span role="alert" className="muted">Unable to load options</span>}
   </div>;
   else if (field.relation) input = <RelationInput field={field} value={value} onChange={onChange} />;
-  else if (field.kind === "boolean") input = <label className="check-field"><input id={id} type="checkbox" checked={Boolean(value)}
-    onChange={(e) => onChange(e.target.checked)}/><span>Enabled</span></label>;
+  else if (field.kind === "boolean") input = <Checkbox id={id} label="Enabled" checked={Boolean(value)}
+    onCheckedChange={onChange}/>;
   else if (field.options?.length) {
     const options: SelectOption<string | number>[] = field.options.map((o) => typeof o === "string"
       ? { label: o, value: o } : o);
@@ -683,8 +681,8 @@ function RelatedRecords({ resource, identifier, relation, target, navigate }: {
       {relation.layout === "cards" ? <div className="ra-related-cards">{rows.data.items.map((row) => {
         const id = String(row[target.primaryKey]);
         return <article className="ra-related-card" key={id}>
-          {selectable && <label className="ra-related-card-check"><input type="checkbox" checked={selection.includes(id)}
-            onChange={(event) => onSelection?.(event.target.checked ? [...selection, id] : selection.filter((entry) => entry !== id))} /> Select</label>}
+          {selectable && <div className="ra-related-card-check"><Checkbox label="Select" checked={selection.includes(id)}
+            onCheckedChange={(checked) => onSelection?.(checked ? [...selection, id] : selection.filter((entry) => entry !== id))}/></div>}
           <button type="button" onClick={() => navigate(`resources/${target.id}/${encodeURIComponent(id)}`)}>
             {String(row[target.titleField] ?? id)}</button>
           <small>#{id}</small>
