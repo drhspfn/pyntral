@@ -716,7 +716,7 @@ class Admin:
                 if set(ctx.payload) - write_fields:
                     raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
                 await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
-                result = await adapter.create(session, ctx.payload)
+                result = await adapter.create(session, ctx.payload, principal)
                 ctx.record = await adapter.get(session, str(result[adapter.pk_name]), principal)
                 await self._run_hooks(adapter, "after_create", ctx)
                 read_fields = await self._allowed_fields(principal, name, view="show")
@@ -824,7 +824,7 @@ class Admin:
                 await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
                 before = {field_name: getattr(record, field_name) for field_name in ctx.payload
                           if field_name in adapter.columns}
-                result = await adapter.update(session, record, ctx.payload)
+                result = await adapter.update(session, record, ctx.payload, principal)
                 await self._run_hooks(adapter, "after_update", ctx)
                 changed = [field_name for field_name, old in before.items()
                            if old != getattr(record, field_name)]
@@ -855,7 +855,7 @@ class Admin:
                 self._require_version(adapter, record, request)
                 ctx = OperationContext("delete", name, principal, session, record=record)
                 await self._run_hooks(adapter, "before_delete", ctx)
-                await adapter.delete(session, record)
+                await adapter.delete(session, record, principal)
                 await self._run_hooks(adapter, "after_delete", ctx)
                 self.log_event("resource", "resource.deleted", principal=principal, resource=name,
                                record_id=identifier)

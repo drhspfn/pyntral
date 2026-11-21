@@ -129,3 +129,12 @@ used by the Shop login backend.
 `created_at` timestamp remains unchanged while `updated_at` advances. Both
 fields are managed by `TimestampFeature` and cannot be written via JSON input.
 Existing local SQLite databases are migrated without dropping user records.
+
+### Transactional audit trail
+
+**Commerce → Editorial Drafts:** Create or edit a draft, then open **Security →
+Audit entries** to see an audit row containing the resource name, record ID,
+administrator ID, operation and changed field names. No previous/new values
+are stored. Audit rows are inserted in the same database transaction as the
+normal mapped CRUD operation. Actions and M:N mutations have separate
+semantics and are not automatically audited by this feature.

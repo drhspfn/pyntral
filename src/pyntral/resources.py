@@ -183,6 +183,7 @@ class Resource(Generic[ModelT]):
     _features_applied: bool = field(default=False, init=False, repr=False)
     _server_defaults: dict[str, Callable[[], Any]] = field(default_factory=dict, init=False, repr=False)
     _server_onupdate: dict[str, Callable[[], Any]] = field(default_factory=dict, init=False, repr=False)
+    _audit_enabled: bool = field(default=False, init=False, repr=False)
     scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
     access: RoleAccess | None = None
     allow_create: bool = True

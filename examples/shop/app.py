@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    ResourceUpdated, ResourceHook, VirtualField, LayoutSection, PasswordFeature, SoftDeleteFeature, TimestampFeature,
+    ResourceUpdated, ResourceHook, VirtualField, LayoutSection, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase,
 )
 
 
@@ -176,6 +176,7 @@ SessionLocal = sessionmaker(engine, expire_on_commit=False)
 
 def seed() -> None:
     Base.metadata.create_all(engine)
+    AuditBase.metadata.create_all(engine)
     # Add non-destructive demonstration columns for users upgrading an older Shop DB.
     if db_url.startswith("sqlite"):
         from sqlalchemy import inspect as sql_inspect, text
@@ -391,6 +392,12 @@ admin.add_resource(Resource(
     hooks=[ResourceHook(before_create=validate_product_stock, before_update=validate_product_stock)],
     create_schema=ProductPriceRules, edit_schema=ProductPriceRules,
 ))
+admin.add_resource(Resource(
+    AuditEntry, icon="shield-check", navigation="Security", name="audit-entries",
+    label="Audit entries", list_fields=["id", "occurred_at", "resource", "record_id", "actor_id", "operation"],
+    allow_create=False, allow_edit=False, allow_delete=False,
+    fields={"field_names": Field(readonly=True)},
+))
 # This resource deliberately uses a custom CRUD list while retaining the
 # standard create, edit and detail screens and all server-side permissions.
 admin.add_resource(Resource(
@@ -410,7 +417,7 @@ admin.add_resource(Resource(
     EditorialDraft, icon="file-text", navigation="Commerce", name="editorial-drafts",
     list_fields=["id", "title", "body", "version"],
     fields={"version": Field(readonly=True)}, version_field="version",
-    features=[TimestampFeature()],
+    features=[TimestampFeature(), AuditFeature()],
     form_sections=[
         LayoutSection("overview", "Overview", ["title"], kind="tab"),
         LayoutSection("body", "Content", ["body"], kind="tab"),

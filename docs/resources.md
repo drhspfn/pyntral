@@ -338,3 +338,14 @@ adds both timestamps during creation and advances only `updated_at` on
 subsequent edits. Both mapped columns are read-only in Pyntral and the values
 are produced inside the ORM transaction, rather than trusting the browser.
 Model columns must exist and be nullable or accept timezone-aware UTC datetimes.
+
+## Transactional AuditFeature
+
+`AuditFeature()` creates one `pyntral_audit_entries` row per normal CRUD
+mutation using the same SQLAlchemy transaction. Rows contain operation,
+resource/record/actor identifiers and **field names only**, not values.
+Create the table with `AuditBase.metadata.create_all(engine)` during local
+demo setup; production projects should use an Alembic migration instead.
+Register `Resource(AuditEntry, allow_create=False, allow_edit=False,
+allow_delete=False)` to inspect the audit trail from a secured admin view.
+Arbitrary custom Actions and M:N operations are not part of this CRUD hook.

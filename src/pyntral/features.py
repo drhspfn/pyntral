@@ -111,3 +111,13 @@ class TimestampFeature:
         resource._server_defaults[self.created_field] = now
         resource._server_defaults[self.updated_field] = now
         resource._server_onupdate[self.updated_field] = now
+
+
+@dataclass(slots=True)
+class AuditFeature:
+    """Write an audit row in the same database transaction as normal CRUD."""
+
+    def apply(self, resource: Any) -> None:
+        if resource._audit_enabled:
+            raise ValueError("Duplicate AuditFeature on a resource")
+        resource._audit_enabled = True

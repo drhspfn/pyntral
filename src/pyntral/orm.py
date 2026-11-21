@@ -506,7 +506,19 @@ class MapperAdapter:
             raise AdminError(404, "Record not found", "not_found")
         return record
 
-    async def create(self, session: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _audit(self, session: Any, record: Any, operation: str,
+                     principal: Principal | None, field_names: list[str]) -> None:
+        if not self.resource._audit_enabled:
+            return
+        from .audit import AuditEntry
+        session.add(AuditEntry(
+            resource=self.resource.name, record_id=str(getattr(record, self.pk_name)),
+            actor_id=str(principal.id) if principal is not None else "system",
+            operation=operation, field_names=sorted(set(field_names)),
+        ))
+
+    async def create(self, session: Any, payload: dict[str, Any],
+                     principal: Principal | None = None) -> dict[str, Any]:
         parsed = self.parsed_payload(payload, create=True)
         mapped = {key: value for key, value in parsed.items() if key in self.columns}
         for key, factory in self.resource._server_defaults.items():
@@ -516,11 +528,15 @@ class MapperAdapter:
             if key in self.resource.virtual_fields:
                 await maybe_await(self.resource.virtual_fields[key].setter(record, value))
         session.add(record)
+        if self.resource._audit_enabled:
+            await maybe_await(session.flush())
+            await self._audit(session, record, "create", principal, list(payload))
         await self._commit(session)
         await maybe_await(session.refresh(record))
         return self.serialize(record)
 
-    async def update(self, session: Any, record: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    async def update(self, session: Any, record: Any, payload: dict[str, Any],
+                     principal: Principal | None = None) -> dict[str, Any]:
         for name, value in self.parsed_payload(payload, create=False).items():
             if name in self.resource.virtual_fields:
                 await maybe_await(self.resource.virtual_fields[name].setter(record, value))
@@ -528,11 +544,14 @@ class MapperAdapter:
                 setattr(record, name, value)
         for key, factory in self.resource._server_onupdate.items():
             setattr(record, key, factory())
+        await self._audit(session, record, "update", principal, list(payload))
         await self._commit(session)
         await maybe_await(session.refresh(record))
         return self.serialize(record)
 
-    async def delete(self, session: Any, record: Any) -> None:
+    async def delete(self, session: Any, record: Any,
+                     principal: Principal | None = None) -> None:
+        await self._audit(session, record, "delete", principal, [])
         await maybe_await(session.delete(record))
         await self._commit(session)
 
