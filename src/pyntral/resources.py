@@ -12,6 +12,21 @@ from sqlalchemy.orm import DeclarativeBase
 
 
 @dataclass(slots=True)
+class FieldView:
+    """Context-specific presentation override; None inherits the base Field value.
+
+    Per-view visibility is a presentation control, not a way to bypass
+    Field.visible=False or backend role permissions.
+    """
+    visible: bool | None = None
+    readonly: bool | None = None
+    required: bool | None = None
+    component: str | None = None
+    order: int | None = None
+    operators: list[str] | None = None  # Only meaningful for filter view
+
+
+@dataclass(slots=True)
 class Field:
     label: str | None = None
     visible: bool = True
@@ -26,6 +41,11 @@ class Field:
     write_role: str | None = None  # Optional minimum role to modify this field
     filter_operators: list[str] | None = None  # Restrict supported filter operations for this field
     filter_width: int | None = None  # Optional filter control width in px; auto-sized otherwise
+    list: FieldView | None = None
+    edit: FieldView | None = None
+    create: FieldView | None = None
+    show: FieldView | None = None
+    filter: FieldView | None = None
 
     def __post_init__(self) -> None:
         if self.span not in (1, 2):
@@ -49,8 +69,11 @@ class Action:
     dialog: str | None = None  # React extension dialog body, shown before invoking the action
     icon: str | None = None
     visible: bool | Callable[..., Any] = True  # (principal, record) -> bool, async supported
+    kind: str = "record"  # record | bulk | resource
 
     def __post_init__(self) -> None:
+        if self.kind not in ("record", "bulk", "resource"):
+            raise ValueError("Action kind must be record, bulk or resource")
         if self.position not in ("row", "detail", "both"):
             raise ValueError("Action position must be row, detail or both")
         if self.appearance not in ("button", "badge", "menu"):
@@ -144,6 +167,7 @@ class Resource(Generic[ModelT]):
     relationships: dict[str, Relationship] = field(default_factory=dict)
     form_layout: str = "stack"  # stack | grid
     detail_layout: str = "stack"  # stack | grid
+    crud_views: dict[str, str] = field(default_factory=dict)  # list/create/edit/show -> extension ID
     scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
     access: RoleAccess | None = None
     allow_create: bool = True
@@ -154,6 +178,9 @@ class Resource(Generic[ModelT]):
     def __post_init__(self) -> None:
         if self.form_layout not in ("stack", "grid") or self.detail_layout not in ("stack", "grid"):
             raise ValueError("Layout must be stack or grid")
+        if any(k not in {"list", "create", "edit", "show"} or not v or not isinstance(v, str)
+               for k, v in self.crud_views.items()):
+            raise ValueError("crud_views must map list/create/edit/show to component IDs")
         if self.page_size < 1 or self.page_size > 200:
             raise ValueError("page_size must be between 1 and 200")
         if self.name is None:

@@ -87,3 +87,31 @@ uv run pyntral build --app examples.shop.app:app
 The CLI hashes the component config and referenced TSX files. `dev` uses Vite HMR; `build` compiles TypeScript and writes `.pyntral/dist/`. Modifying a Python resource's metadata alone does not require a JS build; changing extension source code does.
 
 For full frontend props, inspect [`src/pyntral/ui/src/types.ts`](../src/pyntral/ui/src/types.ts) and [`ui.tsx`](../src/pyntral/ui/src/ui.tsx): these are the authoritative TypeScript contracts for this beta.
+
+## Replacing complete CRUD screens
+
+Register an optional `crud` entry in `pyntral.components.json` and assign it
+to a resource through `crud_views`. This replaces an entire default
+`list`, `create`, `edit` or `show` screen while preserving the existing secured
+REST API and server-side permissions.
+
+```json
+{
+  "crud": {"people-list": "admin/PeopleList.tsx"}
+}
+```
+
+```python
+admin.add_resource(Resource(Person, crud_views={"list": "people-list"}))
+```
+
+A TSX component receives `CustomCrudProps` from `@pyntral/types`, including
+`mode`, `schema`, `resource`, optional `record`, `navigate`, `loadList(params)`,
+`save(data)`, `remove()` and `reload()`. Helpers use the authenticated, CSRF-
+protected Pyntral API; custom pages do not bypass resource permissions.
+`remove()` presents the standard destructive confirmation. You may use any
+available Pyntral UI primitive or React component inside the override.
+
+For resource/bulk action pages, register an action component as usual. It
+receives `CustomCollectionActionProps`, with `selectedIds` and `invoke(payload)`;
+all IDs are revalidated by the backend on invocation.

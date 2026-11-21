@@ -125,6 +125,10 @@ class MapperAdapter:
                 supported = self.filter_operators(name, ignore_custom=True)
                 if any(operator not in supported for operator in configuration.filter_operators):
                     raise ValueError(f"Unsupported filter operator for {resource.name}.{name}")
+            if configuration.filter and configuration.filter.operators is not None:
+                supported = self.filter_operators(name, ignore_custom=True)
+                if any(operator not in supported for operator in configuration.filter.operators):
+                    raise ValueError(f"Unsupported filter operator for {resource.name}.{name}")
         for name in (resource.list_fields or []) + resource.search_fields:
             if name not in self.columns:
                 raise ValueError(f"Unknown column in {resource.name}: {name}")
@@ -166,8 +170,11 @@ class MapperAdapter:
         base = (("eq", "neq") if name in self.foreign_key_fields else
                 supported_operators(column_kind(self.columns[name])))
         config = self._field(name)
-        if not ignore_custom and config and config.filter_operators is not None:
-            return tuple(config.filter_operators)
+        if not ignore_custom and config:
+            if config.filter and config.filter.operators is not None:
+                return tuple(config.filter.operators)
+            if config.filter_operators is not None:
+                return tuple(config.filter_operators)
         return base
 
     def visible(self, name: str) -> bool:
@@ -175,6 +182,16 @@ class MapperAdapter:
         return (opt is None or opt.visible) and not (
             opt is None and any(secret in name.lower() for secret in PRIVATE_NAMES)
         )
+
+    def view_config(self, name: str, view: str) -> Any:
+        opt = self._field(name)
+        return getattr(opt, view, None) if opt else None
+
+    def view_visible(self, name: str, view: str) -> bool:
+        if not self.visible(name):
+            return False
+        override = self.view_config(name, view)
+        return override is None or override.visible is not False
 
     def writable(self, name: str) -> bool:
         col = self.columns[name]
@@ -217,6 +234,18 @@ class MapperAdapter:
                 and not column.primary_key
                 and not column.identity
             )
+            view_configs = {}
+            for view in ("list", "create", "edit", "show", "filter"):
+                cfg = self.view_config(name, view)
+                view_configs[view] = {
+                    "visible": self.view_visible(name, view),
+                    "readonly": (cfg.readonly if cfg and cfg.readonly is not None else not self.writable(name)),
+                    "required": (cfg.required if cfg and cfg.required is not None else
+                                 options.required if options and options.required is not None else is_required),
+                    "component": (cfg.component if cfg and cfg.component is not None else
+                                  options.components.get(view) if options else None),
+                    "order": cfg.order if cfg else None,
+                }
             fields.append(
                 {
                     "name": name,
@@ -240,6 +269,7 @@ class MapperAdapter:
                     "relation": relation if relation and relation["resource"] else None,
                     "components": options.components if options else {},
                     "span": options.span if options else 1,
+                    "views": view_configs,
                 }
             )
         return {
@@ -254,10 +284,11 @@ class MapperAdapter:
             "detailLayout": self.resource.detail_layout,
             "pageSize": self.resource.page_size,
             "showSearch": self.resource.show_search,
+            "crudViews": self.resource.crud_views,
             "fields": fields,
             "listFields": [
                 name for name in (self.resource.list_fields or list(self.columns)[:6])
-                if self.visible(name)
+                if self.view_visible(name, "list")
             ],
             "searchFields": self.resource.search_fields,
             "relationships": [
@@ -271,6 +302,8 @@ class MapperAdapter:
                     if name in self.resource.relationships else False,
                     "layout": self.resource.relationships[name].layout
                     if name in self.resource.relationships else "table",
+                    **({"editable": True} if prop.uselist and prop.secondary is not None and
+                        not prop.viewonly else {}),
                 }
                 for name, prop in self.relations.items()
                 if self._related_resource(prop, registry) is not None
@@ -280,7 +313,7 @@ class MapperAdapter:
                 {"name": a.name, "label": a.label or a.name.replace("_", " ").title(),
                  "variant": a.variant, "confirmation": a.confirmation,
                  "position": a.position, "appearance": a.appearance,
-                 "component": a.component, "dialog": a.dialog, "icon": a.icon}
+                 "component": a.component, "dialog": a.dialog, "icon": a.icon, "kind": a.kind}
                 for a in self.resource.actions
             ],
             "capabilities": {
@@ -321,6 +354,9 @@ class MapperAdapter:
             })
         out = {}
         for name, value in payload.items():
+            view = self.view_config(name, "create" if create else "edit")
+            if view and view.required and (value is None or value == ""):
+                raise AdminError(422, f"{name} is required", "validation_error")
             col = self.columns[name]
             if value is None and not col.nullable:
                 raise AdminError(422, f"{name} cannot be null", "validation_error")
@@ -331,6 +367,12 @@ class MapperAdapter:
                 if self.writable(name) and not col.nullable and col.default is None
                 and col.server_default is None and name not in out
             ]
+            missing.extend(
+                name for name in self.columns if name not in out and
+                self.view_visible(name, "create") and
+                (override := self.view_config(name, "create")) is not None and
+                override.required is True and name not in missing
+            )
             if missing:
                 raise AdminError(422, "Missing required fields", "validation_error", {"fields": missing})
         return out
@@ -345,6 +387,7 @@ class MapperAdapter:
         limit: int | None = None, q: str = "", sort: str | None = None,
         desc: bool = False, filters: dict[str, str] | None = None,
         allowed_fields: set[str] | None = None,
+        filter_fields: set[str] | None = None,
     ) -> dict[str, Any]:
         if offset < 0:
             raise AdminError(422, "offset must be nonnegative")
@@ -356,8 +399,8 @@ class MapperAdapter:
                 func.lower(getattr(self.resource.model, n)).like(f"%{q.lower().replace('%', r'\%').replace('_', r'\_')}%", escape="\\")
                 for n in searchable
             )))
-        exposed = {name for name in self.columns if self.visible(name) and
-                   (allowed_fields is None or name in allowed_fields)}
+        exposed = {name for name in self.columns if self.view_visible(name, "filter") and
+                   (filter_fields is None or name in filter_fields)}
         overrides = {name: self.filter_operators(name) for name in self.columns}
         clauses = validate_filters(filters or {}, self.columns, exposed, overrides)
         for name, operator, raw in clauses:

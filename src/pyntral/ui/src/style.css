@@ -374,3 +374,12 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .ra-filter-range-input input[type="number"] {-moz-appearance:textfield;appearance:textfield}
 .ra-filter-range-input input[type="number"]::-webkit-outer-spin-button,
 .ra-filter-range-input input[type="number"]::-webkit-inner-spin-button {-webkit-appearance:none;margin:0}
+
+/* Resource-wide actions and editable many-to-many controls. */
+.ra-bulk-bar,.ra-relation-editor { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 16px; }
+.ra-bulk-bar { border-top:1px solid var(--border, #ddd); }
+.ra-attach-picker { min-width:180px; flex:1 1 240px; max-width:460px; }
+.ra-relation-create { padding:16px; margin-block:12px; }
+.ra-collection-action { position:relative; display:inline-flex; }
+.ra-collection-panel { position:absolute; right:0; top:calc(100% + 8px); z-index:20; min-width:min(420px,90vw); padding:16px; }
+@media(max-width:680px) { .ra-relation-editor,.ra-bulk-bar { align-items:stretch; } .ra-attach-picker { max-width:100%; } }

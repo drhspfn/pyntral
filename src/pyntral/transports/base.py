@@ -5,7 +5,7 @@ import json
 from typing import Any
 
 from ..events import (
-    ActionExecuted, AdminEvent, CustomEvent, DeliveryReport, InMemoryEventBus,
+    ActionExecuted, CollectionActionExecuted, AdminEvent, CustomEvent, DeliveryReport, InMemoryEventBus,
     LoginFailed, LoginSucceeded, LogoutSucceeded, ResourceCreated, ResourceDeleted,
     ResourceUpdated, validate_event,
 )
@@ -17,7 +17,7 @@ class EventDecodeError(ValueError):
 
 # Never import arbitrary event classes or deserialize arbitrary Python objects.
 _KNOWN = {cls.event_name: cls for cls in (
-    ResourceCreated, ResourceUpdated, ResourceDeleted, ActionExecuted,
+    ResourceCreated, ResourceUpdated, ResourceDeleted, ActionExecuted, CollectionActionExecuted,
     LoginSucceeded, LoginFailed, LogoutSucceeded,
 )}
 _MAX_BYTES = 65536
