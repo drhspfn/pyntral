@@ -99,6 +99,21 @@ creating/editing a product. `ProductPriceRules` rejects it with a field-level
 validation error before SQLAlchemy commits. Validators receive only authorized
 fields, and raw input is excluded from error payloads.
 
+### Customer field validation
+
+**Commerce → Customers → New record:** Email uses the browser's email input
+type for immediate feedback, and `CustomerCreateRules` checks email shape
+on the Python backend. Submitting `123`, an address without a domain, a blank
+name, or a name shorter than two characters returns HTTP 422 without creating
+a row. Leading/trailing whitespace in a valid name is stripped.
+
+The existing database uniqueness constraint still rejects duplicate emails
+with HTTP 409. On Edit, `CustomerEditRules` validates changed names, while the
+email field remains read-only. The frontend input is a convenience, not the
+security boundary. The demo regex targets common email addresses, not every
+RFC-valid address; applications requiring full email standards support can use
+Pydantic's `EmailStr` with the `email-validator` dependency.
+
 ### Optimistic concurrency
 
 **Commerce → Editorial Drafts:** Open the same draft in two browser tabs, save

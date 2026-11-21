@@ -475,7 +475,7 @@ function InputField({ field, resource, record, value, onChange, mode = "edit" }:
   else if (["json", "array"].includes(field.kind)) input = <Textarea id={id} rows={5} spellCheck={false}
     value={typeof value === "string" ? value : value == null ? "" : JSON.stringify(value, null, 2)}
     onChange={(e) => onChange(e.target.value)} placeholder="Valid JSON" />;
-  else input = <TextInput id={id} type={["integer", "number"].includes(field.kind) ? "number" : "text"}
+  else input = <TextInput id={id} type={["integer", "number"].includes(field.kind) ? "number" : field.widget === "email" ? "email" : "text"}
     step={field.kind === "integer" ? "1" : "any"} required={field.required}
     value={value == null ? "" : String(value)} placeholder={`Enter ${field.label.toLowerCase()}`}
     onChange={(e) => onChange(e.target.value)} />;
@@ -593,8 +593,6 @@ function RecordEditor({ resource, id, navigate, notify }: {
             <button className="btn primary" type="submit" disabled={mutation.isPending || (!isNew && !dirty)}>
               {mutation.isPending && <LoaderCircle className="spin" size={16}/>} {isNew ? t("actions.create", "Create record") : t("actions.save", "Save changes")}<ArrowRight size={16}/></button></div>
         </div>
-        <aside className="editor-aside"><div className="surface hint-card"><div className="hint-icon"><ShieldCheck size={18}/></div>
-          <strong>Data integrity</strong><p>Validation and access control are enforced by the Python backend, not by the form.</p></div></aside>
       </form>}
   </>;
 }

@@ -12,7 +12,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import Enum
 from base64 import b64encode
-from pydantic import BaseModel, field_validator
+from typing import Annotated
+from pydantic import BaseModel, StringConstraints, field_validator
 
 from fastapi import FastAPI
 from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String, Table, create_engine, event, select
@@ -370,6 +371,31 @@ admin.add_group(NavigationGroup("Security", icon="shield-check", order=40))
 admin.add_group(NavigationGroup("Agents", icon="bot", order=30))
 admin.add_group(NavigationGroup("Agents/Operations", icon="cpu", order=10))
 
+# Demonstrate server-side validation on a normal CRUD resource. SQLAlchemy
+# String(length) and NOT NULL do not validate email syntax by themselves.
+CustomerName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=120)]
+CustomerEmail = Annotated[str, StringConstraints(
+    strip_whitespace=True, min_length=6, max_length=240,
+    pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$",
+)]
+
+
+class CustomerCreateRules(BaseModel):
+    name: CustomerName
+    email: CustomerEmail
+
+
+class CustomerEditRules(BaseModel):
+    name: CustomerName | None = None
+
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_null(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("Customer name must not be null")
+        return value
+
+
 admin.add_resource(Resource(
     Customer, icon="users", navigation="Commerce",
     list_fields=["id", "name", "email", "active", "created_at"],
@@ -379,8 +405,9 @@ admin.add_resource(Resource(
                       list=FieldView(order=1)),
         # Per-view settings: the email remains readable on Show but is omitted
         # from List, and cannot be changed after customer creation.
-        "email": Field(list=FieldView(visible=False), show=FieldView(visible=True),
-                       edit=FieldView(readonly=True),
+        "email": Field(widget="email", help="Example: name@example.com",
+                       list=FieldView(visible=False), show=FieldView(visible=True),
+                       create=FieldView(required=True), edit=FieldView(readonly=True),
                        filter=FieldView(operators=["eq", "contains"])),
         "created_at": Field(readonly=True, create=FieldView(visible=False),
                             edit=FieldView(visible=False), show=FieldView(order=20)),
@@ -396,6 +423,7 @@ admin.add_resource(Resource(
         Action("reactivate_all", reactivate_all_customers, kind="resource",
                label="Reactivate all", confirmation="Reactivate all customers?"),
     ],
+    create_schema=CustomerCreateRules, edit_schema=CustomerEditRules,
 ))
 CITY_OPTIONS = {
     "Moldova": ["Bălți", "Chișinău", "Cahul"],

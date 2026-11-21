@@ -279,6 +279,13 @@ admin.add_resource(Resource(Product,
 Pyntral returns 422 with affected field names, deliberately omitting raw
 input and validator exception text to avoid exposing secrets in responses.
 
+Validation in Pyntral is opt-in per resource, not inferred automatically from
+`SQLAlchemy.String(240)` or a unique index. The Shop Customer demonstration
+uses `CustomerCreateRules` and `CustomerEditRules` to reject malformed email
+addresses, blank names and invalid edits with HTTP 422; duplicate addresses
+remain a database uniqueness violation (HTTP 409). The email field also uses
+`Field(widget="email")` for native browser feedback.
+
 ## Optimistic concurrency
 
 Opt in with `Resource(..., version_field="version")` and a SQLAlchemy integer

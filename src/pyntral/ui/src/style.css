@@ -152,7 +152,7 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .empty-icon{color:var(--ra-muted);margin-bottom:10px}
 .empty strong{font-size:14px}.empty p{font-size:12px;color:var(--ra-muted);margin:9px 0 0}
 .muted{color:var(--ra-muted)}
-.editor-grid{display:grid;grid-template-columns:minmax(0,1fr) 215px;gap:14px;align-items:start}
+.editor-grid{display:block}
 .editor-card-title,.relation-header{padding:17px 20px;border-bottom:1px solid var(--ra-border)}
 .editor-card-title h2,.relation-header h3{margin:0 0 4px;font-size:14px}
 .editor-card-title p{margin:0;color:var(--ra-muted);font-size:11px}
@@ -168,8 +168,6 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .check-field input{accent-color:var(--ra-primary)}
 .relation-input{display:flex;flex-direction:column;gap:6px}
 .form-actions{display:flex;justify-content:flex-end;gap:8px;padding:13px 20px;border-top:1px solid var(--ra-border)}
-.hint-card{padding:17px}.hint-icon{color:var(--ra-primary);margin-bottom:9px}
-.hint-card strong{font-size:12px}.hint-card p{font-size:11px;line-height:1.6;color:var(--ra-muted);margin:8px 0}
 .details-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin:0;padding:5px 20px 15px;gap:0 30px}
 .detail-item{padding:13px 0;border-bottom:1px solid var(--ra-border);min-width:0}
 .detail-item dt{font-size:11px;color:var(--ra-muted);margin-bottom:7px}
@@ -198,7 +196,7 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .login-submit{justify-content:space-between;margin-top:6px}
 .login-note{display:flex;align-items:center;gap:7px;justify-content:center;margin-top:24px}
 .mobile-backdrop{display:none}
-@media(max-width:1000px){.main-content{padding:25px}.topbar{padding:0 25px}.editor-grid{grid-template-columns:1fr}.editor-aside{display:none}}
+@media(max-width:1000px){.main-content{padding:25px}.topbar{padding:0 25px}}
 @media(max-width:800px){.sidebar{transform:translateX(-105%);transition:transform var(--ra-motion-duration);box-shadow:var(--ra-shadow)}.sidebar.open{transform:translateX(0)}.mobile-backdrop{display:block;position:fixed;inset:0;background:#0007;z-index:19}.main-column{margin-left:0}.mobile-menu{display:grid}.topbar{padding:0 15px}}
 @media(max-width:600px){.page-heading{align-items:flex-start;flex-direction:column}.field-grid,.details-grid{grid-template-columns:1fr}.table-toolbar{flex-wrap:wrap}.searchbox{width:100%}.pager{flex-wrap:wrap;gap:8px}.login-page{grid-template-columns:1fr}.login-side{display:none}.login-panel{padding:24px}.main-content{padding:19px}.topbar-breadcrumb{display:none}}
 /* Public feedback system. All appearance is based on overridable --ra-* tokens. */
