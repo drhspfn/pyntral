@@ -291,6 +291,11 @@ admin = Admin(
     secure_cookie=os.environ.get("ADMIN_SECURE_COOKIE", "true").lower() == "true",
     title="Shop demo",
     default_theme="system",
+    theme_resolver=lambda principal: {
+        "default": "dark" if "admin" in principal.roles else "light",
+        "tokens": {"dark": {"primary": "#b2b5ff"},
+                   "light": {"primary": "#346a99"}},
+    },
     default_locale=os.environ.get("SHOP_LOCALE", "en"),
     translations={"ru": {"nav.overview": "Обзор", "nav.sign_out": "Выйти",
                          "table.filters": "Фильтры", "table.clear_filters": "Очистить фильтры",

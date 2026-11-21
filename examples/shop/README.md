@@ -166,3 +166,12 @@ for key navigation, toolbar, CRUD and table actions; dates follow the resolved
 language. The default is English. Host applications may provide their own
 language dictionaries and per-principal locale resolver. Model field labels
 and resource names remain independently configurable in Python.
+
+### Per-admin theme preferences
+
+The server selects `light`/`dark` preferences and accent tokens using
+`theme_resolver(principal)`. For this example the administrator receives a
+dark-mode accent; the function may also read persisted user preferences.
+`Admin(theme={...})` remains the global fallback, and only the verified
+principal influences the server-provided defaults. Users can still toggle
+their local theme from the header.

@@ -69,6 +69,7 @@ class Admin:
         default_locale: str = "en",
         translations: dict[str, dict[str, str]] | None = None,
         locale_resolver: Callable[[Principal], Any] | None = None,
+        theme_resolver: Callable[[Principal], Any] | None = None,
     ):
         if not isinstance(secret_key, str) or len(secret_key) < 32:
             raise ValueError("secret_key must contain at least 32 characters")
@@ -83,6 +84,7 @@ class Admin:
         self.default_locale = default_locale
         self.translations = translations or {}
         self.locale_resolver = locale_resolver
+        self.theme_resolver = theme_resolver
         for locale, messages in self.translations.items():
             if not isinstance(messages, dict) or any(not isinstance(k, str) or not isinstance(v, str)
                                                       for k, v in messages.items()):
@@ -627,6 +629,29 @@ class Admin:
                 resolved = await maybe_await(self.locale_resolver(principal))
                 if isinstance(resolved, str) and re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", resolved):
                     locale = resolved
+            theme_default = self.default_theme
+            theme_tokens = {mode: dict(self.theme.get(mode, {})) for mode in ("light", "dark")}
+            if self.theme_resolver is not None:
+                # The principal is server-verified; never accept theme overrides
+                # supplied by the browser as authorization or trusted metadata.
+                preferences = await maybe_await(self.theme_resolver(principal))
+                if not isinstance(preferences, dict):
+                    raise ValueError("theme_resolver must return a dictionary")
+                preferred = preferences.get("default")
+                if preferred is not None:
+                    if preferred not in ("system", "light", "dark"):
+                        raise ValueError("theme_resolver.default must be system, light or dark")
+                    theme_default = preferred
+                overrides = preferences.get("tokens", {})
+                if not isinstance(overrides, dict) or set(overrides) - {"light", "dark"}:
+                    raise ValueError("theme_resolver.tokens must contain light/dark mappings")
+                for mode, tokens in overrides.items():
+                    if not isinstance(tokens, dict) or any(
+                        not isinstance(k, str) or re.fullmatch(r"[a-z][a-z0-9-]{0,63}", k) is None
+                        or not isinstance(v, str) or len(v) > 256 for k, v in tokens.items()
+                    ):
+                        raise ValueError("Invalid theme token override")
+                    theme_tokens[mode].update(tokens)
             return {"title": self.title, "resources": resources,
                     "localization": {"code": locale, "messages": self.translations.get(locale, {})},
                     "navigation": {"groups": [
@@ -634,9 +659,9 @@ class Admin:
                         for g in self.groups.values() if any(
                             path == g.path or path.startswith(g.path + "/") for path in visible_paths
                         )], "showDashboard": self.show_dashboard},
-                    "theme": {"default": self.default_theme,
+                    "theme": {"default": theme_default,
                               "animations": self.animations,
-                              "tokens": self.theme},
+                              "tokens": theme_tokens},
                     "bridges": [b.metadata() for b in self.bridges.values()
                                 if (b.min_role is None or self._role_ok(principal, b.min_role))
                                 and await maybe_await(self.auth.authorize(principal, "bridge:" + b.name, "invoke"))],

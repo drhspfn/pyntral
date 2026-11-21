@@ -109,3 +109,12 @@ keys with English fallback. Calendars format months, weekdays and dates using
 the locale; custom components can import `useI18n()` from `@pyntral/i18n`.
 Unknown translation keys fall back to their English source text. External
 login screens must provide their own localized strings.
+
+## Server-resolved per-user themes
+
+`Admin(theme_resolver=callback)` supports sync or async callbacks taking a
+verified `Principal`. Return `{"default": "dark", "tokens": {"dark":
+{"primary": "#b2b5ff"}}}` to override the theme for that user.
+Only `light` and `dark` token maps are accepted; unrecognized token names,
+non-string values and invalid mode names fail explicitly. All values are
+presentation data, never permission/role controls.
