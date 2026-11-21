@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import asyncio
 from contextlib import asynccontextmanager
 import json
 import re
@@ -16,7 +17,7 @@ from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from sqlalchemy import select
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -28,6 +29,7 @@ from .events import (
 from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
 from .hooks import OperationContext
+from .realtime import RealtimeNotifier
 from .validation import validate_payload
 from .storage import StorageBackend, UploadEntry, safe_upload_name, normalize_mime
 from .bridge import Bridge, BridgeContext
@@ -70,6 +72,7 @@ class Admin:
         translations: dict[str, dict[str, str]] | None = None,
         locale_resolver: Callable[[Principal], Any] | None = None,
         theme_resolver: Callable[[Principal], Any] | None = None,
+        realtime_updates: bool = False,
     ):
         if not isinstance(secret_key, str) or len(secret_key) < 32:
             raise ValueError("secret_key must contain at least 32 characters")
@@ -97,6 +100,7 @@ class Admin:
         self.groups: dict[str, NavigationGroup] = {}
         self.bridges: dict[str, Bridge] = {}
         self.events = event_bus if event_bus is not None else InMemoryEventBus()
+        self.realtime = RealtimeNotifier(self.events) if realtime_updates else None
         if auto_start_events:
             # Mounted sub-app lifespans are not driven by Starlette. Compose the
             # existing *parent* lifespan instead of using the removed FastAPI
@@ -575,6 +579,34 @@ class Admin:
             await self._publish(LogoutSucceeded(actor_id=str(_principal.id), **event_context()))
             return {"ok": True}
 
+        @api.get("/api/realtime", include_in_schema=False)
+        async def realtime_feed(
+            request: Request, _principal: Principal = Depends(self._principal),
+        ):
+            if self.realtime is None:
+                raise AdminError(404, "Realtime updates are disabled", "not_found")
+            try:
+                queue, unsubscribe = self.realtime.listen()
+            except RuntimeError as exc:
+                raise AdminError(429, "Too many realtime subscribers", "rate_limited") from exc
+
+            async def stream():
+                try:
+                    yield ": connected\n\n"
+                    while not await request.is_disconnected():
+                        try:
+                            await asyncio.wait_for(queue.get(), timeout=20.0)
+                        except asyncio.TimeoutError:
+                            yield ": ping\n\n"
+                        else:
+                            yield "event: invalidate\ndata: {}\n\n"
+                finally:
+                    unsubscribe()
+
+            return StreamingResponse(stream(), media_type="text/event-stream",
+                                     headers={"Cache-Control": "no-store",
+                                              "X-Accel-Buffering": "no"})
+
         @api.get("/api/schema")
         async def schema(principal: Principal = Depends(self._principal)) -> dict:
             resources = []
@@ -671,7 +703,8 @@ class Admin:
                     ):
                         raise ValueError("Invalid theme token override")
                     theme_tokens[mode].update(tokens)
-            return {"title": self.title, "resources": resources,
+            return {"title": self.title, "realtime": self.realtime is not None,
+                    "resources": resources,
                     "localization": {"code": locale, "messages": self.translations.get(locale, {})},
                     "navigation": {"groups": [
                         {"path": g.path, "icon": g.icon, "order": g.order}

@@ -85,6 +85,7 @@ export interface ThemeConfig {
 }
 export interface LocalizationConfig { code: string; messages: Record<string, string>; }
 export interface Schema {
+  realtime?: boolean;
   localization?: LocalizationConfig;
   title: string; resources: ResourceDef[]; pages: PageDef[];
   navigation: NavigationConfig; theme: ThemeConfig;

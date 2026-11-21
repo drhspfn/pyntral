@@ -207,3 +207,14 @@ open the City picker. The available cities come from the authenticated
 The previous city selection is cleared automatically. Sending an incompatible
 country/city combination to the REST API is rejected with HTTP 422 by a
 Python `ResourceHook`, independent of the React UI.
+
+### Optional realtime invalidation
+
+Open **Commerce → Products** in two logged-in browser tabs. Edit a product in
+one tab; the other tab's active table/record queries are invalidated through
+an authenticated SSE connection and refetched without a manual refresh. The
+stream carries only a generic invalidation signal — no resource names, record
+IDs or values. The Shop enables `Admin(realtime_updates=True)`; production
+applications can leave it disabled. Delivery is best effort, and multi-worker
+broadcast requires an appropriate broker topology (not a shared competing
+consumer queue).

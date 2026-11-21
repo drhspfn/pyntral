@@ -316,6 +316,7 @@ admin = Admin(
                          "actions.save": "Сохранить изменения",
                          "resources.description": "Просмотр и управление записями."}},
     animations=True,
+    realtime_updates=True,
     storage=LocalStorage(Path(os.environ.get("SHOP_UPLOAD_ROOT", ".pyntral/uploads"))),
     theme={"light": {"primary": "#276b9e"}, "dark": {"primary": "#88c2e9"}},
 )

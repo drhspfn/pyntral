@@ -859,6 +859,17 @@ function AdminApp() {
   const schema = useQuery({ queryKey: ["schema", auth.data?.user?.id], enabled: !!auth.data?.user,
     queryFn: () => api<Schema>("/api/schema") });
   const feedback = useAdminFeedback();
+  useEffect(() => {
+    if (!auth.data?.user || !schema.data?.realtime) return;
+    const source = new EventSource(`${base}/api/realtime`, { withCredentials: true });
+    source.addEventListener("invalidate", () => {
+      void client.invalidateQueries({ queryKey: ["list"] });
+      void client.invalidateQueries({ queryKey: ["related"] });
+      void client.invalidateQueries({ queryKey: ["record"] });
+      void client.invalidateQueries({ queryKey: ["stats"] });
+    });
+    return () => source.close();
+  }, [auth.data?.user?.id, schema.data?.realtime, client]);
   const setNotice = useCallback((message: string) => feedback.toast(message, { kind: "success" }), [feedback]);
   const [preferredTheme, setPreferredTheme] = useState(() => localStorage.getItem("pyntral-theme") || "system");
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
