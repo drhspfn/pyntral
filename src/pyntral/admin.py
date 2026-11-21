@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hmac
+import csv
+import io
 import asyncio
 from contextlib import asynccontextmanager
 import json
@@ -905,6 +907,96 @@ class Admin:
                 return result
             finally:
                 await maybe_await(session.close())
+
+        @api.get("/api/resources/{name}/export")
+        async def export_records(
+            name: str, request: Request, principal: Principal = Depends(self._principal),
+        ) -> Response:
+            """Export a bounded, authorized snapshot of the current resource query."""
+            await self._authorize(principal, name, "list")
+            params = request.query_params
+            fmt = params.get("format", "csv")
+            if fmt not in ("csv", "json"):
+                raise AdminError(422, "Export format must be csv or json", "validation_error")
+            try:
+                offset = int(params.get("offset", "0"))
+                limit = int(params.get("limit", "1000"))
+            except ValueError:
+                raise AdminError(422, "Invalid export range", "validation_error") from None
+            if offset < 0 or not 1 <= limit <= 10000:
+                raise AdminError(422, "Export offset must be nonnegative and limit 1..10000", "validation_error")
+            if len([key for key in params.keys() if key.startswith("filter.")]) > 80:
+                raise AdminError(422, "Too many filters", "invalid_filter")
+            if any(len(params.getlist(key)) > 1 for key in params.keys() if
+                   key.startswith("filter.") or key == "columns"):
+                raise AdminError(422, "Duplicate export parameter", "validation_error")
+            adapter = self._adapter(name)
+            read_fields = await self._allowed_fields(principal, name, view="list")
+            filter_fields = await self._allowed_fields(principal, name, view="filter")
+            available = [field for field in adapter.metadata(self.resources)["listFields"]
+                         if field in read_fields]
+            requested = params.get("columns")
+            columns = requested.split(",") if requested is not None else available
+            if (not columns or len(columns) > 100 or len(set(columns)) != len(columns)
+                    or any(column not in available for column in columns)):
+                raise AdminError(422, "Invalid or unauthorized export columns", "validation_error")
+            filters = {key.removeprefix("filter."): value for key, value in params.items()
+                       if key.startswith("filter.")}
+            session = self.session_factory()
+            try:
+                async def fields_for_row(row: Any) -> set[str]:
+                    return await self._allowed_fields(principal, name, view="list", record=row)
+
+                rows: list[dict[str, Any]] = []
+                while len(rows) < limit:
+                    batch = await adapter.list(
+                        session, principal, offset=offset + len(rows),
+                        limit=min(200, limit - len(rows)), q=params.get("q", ""),
+                        sort=params.get("sort"), desc=params.get("desc") == "true",
+                        filters=filters, allowed_fields=read_fields, filter_fields=filter_fields,
+                        per_record_fields=fields_for_row,
+                    )
+                    if not batch["items"]:
+                        break
+                    rows.extend(batch["items"])
+                    if offset + len(rows) >= batch["total"]:
+                        break
+            finally:
+                await maybe_await(session.close())
+
+            exported = [{field: row.get(field) for field in columns} for row in rows]
+            if fmt == "json":
+                body = json.dumps(exported, ensure_ascii=False, default=str)
+                media_type = "application/json"
+            else:
+                stream = io.StringIO(newline="")
+                writer = csv.writer(stream)
+                writer.writerow(columns)
+                for row in exported:
+                    cells = []
+                    for column in columns:
+                        value = row[column]
+                        if isinstance(value, (dict, list)):
+                            value = json.dumps(value, ensure_ascii=False, default=str)
+                        elif value is None:
+                            value = ""
+                        else:
+                            value = str(value)
+                        # Spreadsheet apps interpret untrusted leading =,+,-,@ as formulae.
+                        if value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n")):
+                            value = "'" + value
+                        cells.append(value)
+                    writer.writerow(cells)
+                body = "\ufeff" + stream.getvalue()
+                media_type = "text/csv"
+            return Response(
+                body, media_type=media_type,
+                headers={
+                    "Content-Disposition": f'attachment; filename="{name}.{fmt}"',
+                    "Cache-Control": "private, no-store",
+                    "X-Export-Rows": str(len(rows)),
+                },
+            )
 
         @api.post("/api/resources/{name}", status_code=201)
         async def create(name: str, request: Request, principal: Principal = Depends(self._principal)) -> dict:

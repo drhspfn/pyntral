@@ -51,7 +51,7 @@ def test_commit_time_version_race_is_a_precondition_failure():
     session.rollback = AsyncMock()
     with pytest.raises(AdminError) as result:
         asyncio.run(adapter._commit(session))
-    assert result.value.status_code == 412
+    assert result.value.status == 412
     assert result.value.code == "precondition_failed"
     session.rollback.assert_awaited_once()
 
