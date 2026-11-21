@@ -1,4 +1,5 @@
 """The installed Python package serves its embedded SPA without a frontend toolchain."""
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -59,3 +60,32 @@ def test_custom_bundle_takes_precedence(tmp_path, monkeypatch):
                                 secret_key="c" * 48, secure_cookie=False,
                                 dist_dir=direct)
     assert admin_with_override._dist() == direct
+
+
+def test_installed_wheel_smoke_ignores_checkout_bundle(tmp_path, monkeypatch):
+    """A custom checkout build must not shadow embedded wheel assets in CI."""
+    import pyntral
+    import pyntral.admin as admin_module
+    from runpy import run_path
+    smoke_installed = run_path(str(Path(__file__).resolve().parents[1] / "scripts" / "smoke_installed.py"))["main"]
+
+    package = tmp_path / "installed" / "pyntral"
+    assets = package / "web_dist" / "assets"
+    assets.mkdir(parents=True)
+    (package / "web_dist" / "index.html").write_text("<html>generic wheel</html>")
+    (assets / "generic.js").write_text("console.log('wheel')")
+    monkeypatch.setattr(pyntral, "__file__", str(package / "__init__.py"))
+    monkeypatch.setattr(admin_module, "__file__", str(package / "admin.py"))
+
+    checkout = tmp_path / "checkout"
+    custom = checkout / ".pyntral" / "dist"
+    custom.mkdir(parents=True)
+    (custom / "index.html").write_text("<html>custom checkout</html>")
+    (custom / "assets").mkdir()
+    (custom / "assets" / "custom.js").write_text("console.log('custom')")
+    monkeypatch.chdir(checkout)
+    monkeypatch.setenv("PYNTRAL_DIST", str(custom))
+
+    smoke_installed()
+    assert Path.cwd() == checkout
+    assert os.environ["PYNTRAL_DIST"] == str(custom)
