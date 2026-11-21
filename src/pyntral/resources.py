@@ -179,6 +179,8 @@ class Resource(Generic[ModelT]):
     version_field: str | None = None  # Requires SQLAlchemy mapper.version_id_col
     form_sections: list[LayoutSection] = field(default_factory=list)
     detail_sections: list[LayoutSection] = field(default_factory=list)
+    features: list[Any] = field(default_factory=list)  # ResourceFeature protocol; applied on registration
+    _features_applied: bool = field(default=False, init=False, repr=False)
     scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
     access: RoleAccess | None = None
     allow_create: bool = True

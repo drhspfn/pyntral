@@ -113,3 +113,12 @@ uses SQLAlchemy `version_id_col` for an atomic optimistic version check.
 *tab* sections without requiring custom React. **Show** renders Summary as a
 section and Full content as an accordion. Non-declared fields still render in
 an "Other details" fallback, so adding a model column does not hide it.
+
+### Composable features
+
+**Security → Demo staff:** Create a demo staff record with a username and a
+password. `PasswordFeature` hashes the password into the hidden column; the
+write-only input and resulting hash never appear in list/show responses.
+On the record page use Archive, then Restore to exercise `SoftDeleteFeature`.
+Hard deletion is disabled. These are demonstration accounts, not identities
+used by the Shop login backend.

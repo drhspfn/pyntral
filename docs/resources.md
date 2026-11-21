@@ -309,3 +309,24 @@ Resource(Article, form_sections=[
     LayoutSection("body", "Body", ["body"], kind="accordion"),
 ])
 ```
+
+## Composable resource features
+
+A feature implements `apply(resource)` and may register virtual fields,
+configuration, actions and CRUD hooks. Features are applied before ORM
+introspection, once for a given resource object. A registration conflict
+raises an error rather than silently replacing an existing field/action.
+
+`PasswordFeature` creates a write-only `new_password` input and hashes into a
+hidden SQLAlchemy `password_hash` column. `SoftDeleteFeature` adds Archive and
+Restore record actions on a nullable `deleted_at` column and disables hard
+delete by default. The latter **does not globally hide archived records**;
+resource-level scopes should be configured if needed.
+
+```python
+from pyntral import PasswordFeature, SoftDeleteFeature
+Resource(StaffAccount, features=[PasswordFeature(), SoftDeleteFeature()])
+```
+
+The Shop Demo has **Security → Demo staff**, a live example. These records are
+not connected to the Shop authentication backend.

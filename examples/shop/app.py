@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    ResourceUpdated, ResourceHook, VirtualField, LayoutSection,
+    ResourceUpdated, ResourceHook, VirtualField, LayoutSection, PasswordFeature, SoftDeleteFeature,
 )
 
 
@@ -90,6 +90,14 @@ class OrderItem(Base):
     order: Mapped[Order] = relationship(back_populates="items")
     product: Mapped[Product] = relationship(back_populates="items")
 
+
+
+class DemoStaffAccount(Base):
+    __tablename__ = "demo_staff_accounts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(100), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class EditorialDraft(Base):
@@ -312,6 +320,7 @@ def reactivate_all_customers(session, _principal, _payload):
 
 admin.add_group(NavigationGroup("Commerce", icon="boxes", order=10))
 admin.add_group(NavigationGroup("Commerce/Orders", icon="folder", order=20))
+admin.add_group(NavigationGroup("Security", icon="shield-check", order=40))
 admin.add_group(NavigationGroup("Agents", icon="bot", order=30))
 admin.add_group(NavigationGroup("Agents/Operations", icon="cpu", order=10))
 
@@ -379,6 +388,13 @@ admin.add_resource(Resource(
     list_fields=["id", "name", "color"], search_fields=["name"],
     crud_views={"list": "tags-list"},
     relationships={"products": Relationship(label="Tagged products")},
+))
+# Feature composition: create a demo staff account with a write-only password,
+# then Archive/Restore it. These are sample records, not actual login identities.
+admin.add_resource(Resource(
+    DemoStaffAccount, name="demo-staff", navigation="Security", label="Demo staff",
+    list_fields=["id", "username", "deleted_at"],
+    features=[PasswordFeature(), SoftDeleteFeature()],
 ))
 admin.add_resource(Resource(
     EditorialDraft, icon="file-text", navigation="Commerce", name="editorial-drafts",

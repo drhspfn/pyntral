@@ -204,6 +204,12 @@ class Admin:
         if isinstance(resource, type):
             resource = Resource(resource)
         validate_navigation(resource.navigation)
+        if not resource._features_applied:
+            for feature in resource.features:
+                if not callable(getattr(feature, "apply", None)):
+                    raise TypeError("Resource features must implement apply(resource)")
+                feature.apply(resource)
+            resource._features_applied = True
         adapter = MapperAdapter(resource)
         if resource.access:
             thresholds = [resource.access.read, resource.access.select, resource.access.write,
