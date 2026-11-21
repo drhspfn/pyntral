@@ -1,6 +1,7 @@
 """Composable FastAPI + SQLAlchemy admin backend with a React SPA."""
 
 from .admin import Admin
+from .hooks import ResourceHook, OperationContext
 from .auth import CallbackAuth, LocalAuth, ModelAuth, Principal, hash_password, verify_password
 from .resources import Action, Field, FieldView, Page, Resource, NavigationGroup, Relationship, RoleAccess
 from .bridge import Bridge, BridgeContext
@@ -12,7 +13,7 @@ from .transports.kafka import KafkaEventBus
 from .logging import LoggingConfig, EventFormatter, configure_logging, forward_to_loguru, stop_logging
 
 __all__ = [
-    "Admin",
+    "Admin", "ResourceHook", "OperationContext",
     "AdminEvent", "FieldRef", "ResourceEvent", "ResourceCreated", "ResourceUpdated", "ResourceDeleted",
     "ActionExecuted", "CollectionActionExecuted", "LoginSucceeded", "LoginFailed", "LogoutSucceeded", "CustomEvent",
     "InMemoryEventBus", "EventBus", "EventTransport", "DeliveryReport",

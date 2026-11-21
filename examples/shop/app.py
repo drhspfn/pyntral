@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    ResourceUpdated,
+    ResourceUpdated, ResourceHook,
 )
 
 
@@ -39,7 +39,6 @@ class Customer(Base):
     active: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     orders: Mapped[list[Order]] = relationship(back_populates="customer")
-
 
 
 # Simple association table: unlinking a tag does not delete it from the catalog.
@@ -330,11 +329,19 @@ admin.add_resource(Resource(
                label="Reactivate all", confirmation="Reactivate all customers?"),
     ],
 ))
+def validate_product_stock(ctx):
+    """Prevent invalid inventory in both create and edit flows."""
+    if "stock" in ctx.payload and int(ctx.payload["stock"]) < 0:
+        from pyntral.orm import AdminError
+        raise AdminError(422, "Stock cannot be negative", "validation_error")
+
+
 admin.add_resource(Resource(
     Product, icon="boxes", navigation="Commerce",
     list_fields=["id", "name", "sku", "price", "stock", "active"],
     search_fields=["name", "sku"], title_field="name",
     relationships={"tags": Relationship(label="Product tags", selectable=True)},
+    hooks=[ResourceHook(before_create=validate_product_stock, before_update=validate_product_stock)],
 ))
 # This resource deliberately uses a custom CRUD list while retaining the
 # standard create, edit and detail screens and all server-side permissions.

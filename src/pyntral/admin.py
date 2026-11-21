@@ -27,6 +27,7 @@ from .events import (
 )
 from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
+from .hooks import OperationContext
 from .bridge import Bridge, BridgeContext
 from .logging import (LoggingConfig, configure_logging, emit as emit_log, request_id_var)
 from pydantic import ValidationError
@@ -159,6 +160,20 @@ class Admin:
             # Even a custom bus must not corrupt the result of an already committed write.
             self.log_event("events", "events.dispatch_failed", level="ERROR",
                            event_type=event.type)
+
+    async def _run_hooks(self, adapter: MapperAdapter, phase: str, ctx: OperationContext) -> None:
+        for hook in adapter.resource.hooks:
+            callback = getattr(hook, phase)
+            if callback is None:
+                continue
+            if phase.startswith("after_"):
+                try:
+                    await maybe_await(callback(ctx))
+                except Exception:
+                    self.log_event("resource", "resource.after_hook_failed", level="ERROR",
+                                   resource=ctx.resource, hook=phase)
+            else:
+                await maybe_await(callback(ctx))
 
     async def read_event_record(self, event: AdminEvent, principal: Principal) -> dict[str, Any]:
         """Explicit, scoped read: an event grants no permission to retrieve data.
@@ -662,8 +677,14 @@ class Admin:
                 raise AdminError(403, "Cannot write one or more fields", "forbidden")
             session = self.session_factory()
             try:
-                await self._verify_foreign_keys(session, principal, adapter, payload)
-                result = await adapter.create(session, payload)
+                ctx = OperationContext("create", name, principal, session, payload=payload.copy())
+                await self._run_hooks(adapter, "before_create", ctx)
+                if set(ctx.payload) - write_fields:
+                    raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
+                await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
+                result = await adapter.create(session, ctx.payload)
+                ctx.record = await adapter.get(session, str(result[adapter.pk_name]), principal)
+                await self._run_hooks(adapter, "after_create", ctx)
                 read_fields = await self._allowed_fields(principal, name, view="show")
                 self.log_event("resource", "resource.created", principal=principal, resource=name,
                                record_id=result.get(adapter.pk_name))
@@ -759,9 +780,15 @@ class Admin:
                         raise AdminError(422, "Unknown or read-only fields", "validation_error",
                                          {"fields": sorted(rejected)})
                     raise AdminError(403, "Cannot write one or more fields", "forbidden")
-                await self._verify_foreign_keys(session, principal, adapter, payload)
-                before = {field_name: getattr(record, field_name) for field_name in payload}
-                result = await adapter.update(session, record, payload)
+                ctx = OperationContext("update", name, principal, session, record=record,
+                                       payload=payload.copy())
+                await self._run_hooks(adapter, "before_update", ctx)
+                if set(ctx.payload) - write_fields:
+                    raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
+                await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
+                before = {field_name: getattr(record, field_name) for field_name in ctx.payload}
+                result = await adapter.update(session, record, ctx.payload)
+                await self._run_hooks(adapter, "after_update", ctx)
                 changed = [field_name for field_name, old in before.items()
                            if old != getattr(record, field_name)]
                 read_fields = await self._allowed_fields(principal, name, view="show")
@@ -788,7 +815,10 @@ class Admin:
                 adapter = self._adapter(name)
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "delete", record)
+                ctx = OperationContext("delete", name, principal, session, record=record)
+                await self._run_hooks(adapter, "before_delete", ctx)
                 await adapter.delete(session, record)
+                await self._run_hooks(adapter, "after_delete", ctx)
                 self.log_event("resource", "resource.deleted", principal=principal, resource=name,
                                record_id=identifier)
                 await self._publish(ResourceDeleted(

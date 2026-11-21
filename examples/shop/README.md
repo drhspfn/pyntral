@@ -77,3 +77,10 @@ uv run pytest -v tests/test_view_actions_relations.py
 Do not copy this demo's unscoped resource-wide Reactivate action directly into
 a multi-tenant application: production handlers should explicitly enforce
 tenant and row scopes as well as Pyntral authorization.
+
+### CRUD lifecycle hooks
+
+**Commerce → Products:** Try creating a product with `Stock = -1`, or editing
+an existing product to a negative stock. The request is rejected with HTTP 422
+and the database remains unchanged. The example uses `ResourceHook` for both
+`before_create` and `before_update`.

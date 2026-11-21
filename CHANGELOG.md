@@ -24,3 +24,5 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 See [release readiness](docs/deployment.md#release-readiness) for verification requirements.
 
 - PyPI-first release pipeline embeds the generic SPA inside wheel/sdist; custom TSX builds remain optional for consuming applications.
+
+- Add guarded CRUD lifecycle hooks with consistent before/after commit semantics.

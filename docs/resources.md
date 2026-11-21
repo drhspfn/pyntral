@@ -207,3 +207,27 @@ permission, target select permission and row scopes; create additionally
 requires target create access. `viewonly` and non-secondary relations remain
 read-only. Association tables requiring additional mandatory columns should
 be handled by a custom action or an explicitly mapped association model.
+
+## CRUD hooks
+
+Use `Resource(hooks=[ResourceHook(...)])` for reusable lifecycle logic.
+`before_create`, `before_update`, and `before_delete` run after authentication
+and initial permission checks but before commit; hooks may reject an operation
+with `AdminError`. A before-hook may edit `ctx.payload`, but Pyntral validates
+all resulting keys again against the active principal's field permissions.
+`after_*` hooks run after commit: failures are logged and do not undo the write.
+Never use after-hooks for guaranteed delivery; use a transactional outbox for
+that purpose.
+
+```python
+from pyntral import Resource, ResourceHook
+from pyntral.orm import AdminError
+
+def validate_stock(ctx):
+    if ctx.payload.get("stock", 0) < 0:
+        raise AdminError(422, "Stock cannot be negative", "validation_error")
+
+admin.add_resource(Resource(Product, hooks=[ResourceHook(
+    before_create=validate_stock, before_update=validate_stock,
+)]))
+```
