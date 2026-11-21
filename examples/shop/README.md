@@ -218,3 +218,13 @@ IDs or values. The Shop enables `Admin(realtime_updates=True)`; production
 applications can leave it disabled. Delivery is best effort, and multi-worker
 broadcast requires an appropriate broker topology (not a shared competing
 consumer queue).
+
+### Background resource actions with progress and cancellation
+
+**Commerce → Products → Rebuild inventory report:** The button launches a
+bounded in-process async job, displays progress and supports cancellation.
+The job explicitly creates a new SQLAlchemy session if needed; it never retains
+request-scoped sessions. This demo does not change inventory data. Job status
+is visible only to the administrator who launched it. It is intentionally not
+a durable queue — production jobs requiring crash recovery must use a worker
+system (RabbitMQ, Redis Streams, etc.) rather than this convenience feature.

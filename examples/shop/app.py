@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import os
 import random
 from pathlib import Path
@@ -18,7 +20,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FieldDependency, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    ResourceUpdated, ResourceHook, VirtualField, LayoutSection, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase, UploadFeature, LocalStorage, UploadBase,
+    ResourceUpdated, ResourceHook, VirtualField, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase, UploadFeature, LocalStorage, UploadBase,
 )
 
 
@@ -453,8 +455,20 @@ def validate_product_stock(ctx):
         raise AdminError(422, "Stock cannot be negative", "validation_error")
 
 
+async def prepare_inventory_report(ctx):
+    """Demonstration job with progress; it does not modify inventory."""
+    for step in range(1, 11):
+        await asyncio.sleep(0.12)
+        ctx.progress(step * 10, "Checking inventory" if step < 10 else "Ready")
+    # Open a fresh session inside the job; never reuse the request session.
+    with ctx.session_factory() as session:
+        _ = session.scalar(select(Product.id).limit(1))
+
+
 admin.add_resource(Resource(
     Product, icon="boxes", navigation="Commerce",
+    jobs=[JobAction("inventory-report", prepare_inventory_report,
+                    label="Rebuild inventory report", confirmation="Rebuild demo report?")],
     list_fields=["id", "name", "sku", "price", "stock", "active", "display_label"],
     search_fields=["name", "sku"], title_field="name",
     virtual_fields={

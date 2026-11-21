@@ -32,6 +32,12 @@ export interface FieldDef {
   components: Partial<Record<"list" | "edit" | "show" | "filter", string>>;
   views?: Partial<Record<FieldContext, FieldViewDef>>;
 }
+export interface JobDef {
+  name: string;
+  label: string;
+  confirmation?: string | null;
+  cancellable: boolean;
+}
 export interface ActionDef {
   name: string; label: string; variant: string; confirmation?: string | null;
   position: "row" | "detail" | "both";
@@ -70,6 +76,7 @@ export interface ResourceDef {
   relationships: { name: string; resource: string; many: boolean; label: string; selectable: boolean;
     layout: "table" | "cards"; editable?: boolean }[];
   actions: ActionDef[];
+  jobs?: JobDef[];
   capabilities: { list: boolean; select: boolean; create: boolean; edit: boolean; delete: boolean; show: boolean };
 }
 export interface PageDef {

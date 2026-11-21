@@ -399,3 +399,16 @@ Do not rely on the option list as a permission check: validate the final selecti
 server-side using Pydantic or a `ResourceHook`. Both the bridge and the resource
 mutation enforce their own authentication and permissions. The Shop's Shipping
 locations resource illustrates this behavior.
+
+## Async resource jobs (in-process only)
+
+Define `JobAction(name, async_handler, timeout_seconds=300)` in `Resource(jobs=[...])`.
+The handler receives `JobContext(principal, payload, session_factory)` and may
+call `ctx.progress(percent, message)` while it runs. `POST` to
+`/admin/api/resources/{name}/jobs/{job_name}` returns an opaque job ID; the
+initiating principal may poll `GET /admin/api/jobs/{id}` or request cancellation
+with `DELETE /admin/api/jobs/{id}`. These routes require sessions, CSRF on
+writes, and resource-action permissions. Requests are bounded, jobs time out,
+completed entries expire, and tasks are cancelled during FastAPI shutdown.
+**Jobs are not persisted or transferred between workers.** Use a real broker
+and durable worker for long-running, must-not-lose tasks.

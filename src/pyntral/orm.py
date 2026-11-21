@@ -380,6 +380,11 @@ class MapperAdapter:
                 if self._related_resource(prop, registry) is not None
                 and (name not in self.resource.relationships or self.resource.relationships[name].visible)
             ],
+            "jobs": [
+                {"name": a.name, "label": a.label or a.name.replace("_", " ").title(),
+                 "confirmation": a.confirmation, "cancellable": a.cancellable}
+                for a in self.resource.jobs
+            ],
             "actions": [
                 {"name": a.name, "label": a.label or a.name.replace("_", " ").title(),
                  "variant": a.variant, "confirmation": a.confirmation,

@@ -30,6 +30,7 @@ from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
 from .hooks import OperationContext
 from .realtime import RealtimeNotifier
+from .jobs import JobManager
 from .validation import validate_payload
 from .storage import StorageBackend, UploadEntry, safe_upload_name, normalize_mime
 from .bridge import Bridge, BridgeContext
@@ -101,24 +102,27 @@ class Admin:
         self.bridges: dict[str, Bridge] = {}
         self.events = event_bus if event_bus is not None else InMemoryEventBus()
         self.realtime = RealtimeNotifier(self.events) if realtime_updates else None
-        if auto_start_events:
-            # Mounted sub-app lifespans are not driven by Starlette. Compose the
-            # existing *parent* lifespan instead of using the removed FastAPI
-            # add_event_handler() API or deprecated startup/shutdown callbacks.
-            # This also preserves lifespan contexts supplied by host applications.
-            previous_lifespan = app.router.lifespan_context
-            event_transport = self.events
+        self.jobs = JobManager()
+        # Jobs must be cancelled on shutdown even if the external EventBus
+        # lifecycle is controlled by the host application.
+        # Mounted sub-app lifespans are not driven by Starlette. Compose the
+        # existing parent lifespan and stop all jobs during shutdown.
+        previous_lifespan = app.router.lifespan_context
+        event_transport = self.events
 
-            @asynccontextmanager
-            async def admin_events_lifespan(host_app: FastAPI):
-                async with previous_lifespan(host_app):
+        @asynccontextmanager
+        async def admin_events_lifespan(host_app: FastAPI):
+            async with previous_lifespan(host_app):
+                if auto_start_events:
                     await event_transport.start()
-                    try:
-                        yield
-                    finally:
+                try:
+                    yield
+                finally:
+                    await self.jobs.close()
+                    if auto_start_events:
                         await event_transport.close()
 
-            app.router.lifespan_context = admin_events_lifespan
+        app.router.lifespan_context = admin_events_lifespan
         if default_theme not in ("light", "dark", "system"):
             raise ValueError("default_theme must be system, light or dark")
         self.theme = theme or {}
@@ -630,7 +634,7 @@ class Admin:
                     "delete": permitted and await self._can(principal, name, "delete"),
                 }
                 if not permitted:
-                    metadata.update(fields=[], listFields=[], searchFields=[], relationships=[], actions=[])
+                    metadata.update(fields=[], listFields=[], searchFields=[], relationships=[], actions=[], jobs=[])
                 else:
                     read_fields = await self._allowed_fields(principal, name)
                     edit_fields = await self._allowed_fields(principal, name, edit=True)
@@ -665,6 +669,8 @@ class Admin:
                             relation["editable"] = (metadata["capabilities"]["edit"]
                                 and can_select.get(relation["resource"], False))
                     metadata["actions"] = [a for a in metadata["actions"]
+                        if await self._can(principal, name, "action:" + a["name"])]
+                    metadata["jobs"] = [a for a in metadata["jobs"]
                         if await self._can(principal, name, "action:" + a["name"])]
                 resources.append(metadata)
             visible_paths = [r["navigation"] for r in resources
@@ -936,6 +942,52 @@ class Admin:
                 return {"record": {k: v for k, v in result.items() if k in read_fields}}
             finally:
                 await maybe_await(session.close())
+
+        @api.post("/api/resources/{name}/jobs/{job_name}", status_code=202)
+        async def start_resource_job(
+            name: str, job_name: str, request: Request,
+            principal: Principal = Depends(self._principal),
+        ) -> dict:
+            self._csrf(request)
+            adapter = self._adapter(name)
+            job = next((item for item in adapter.resource.jobs if item.name == job_name), None)
+            if job is None:
+                raise AdminError(404, "Job action not found", "not_found")
+            await self._authorize(principal, name, "action:" + job_name)
+            payload = await self._body(request)
+            if len(json.dumps(payload)) > 8192:
+                raise AdminError(413, "Job input too large", "request_too_large")
+            try:
+                record = self.jobs.submit(job, resource=name, principal=principal,
+                                          payload=payload, session_factory=self.session_factory)
+            except RuntimeError as exc:
+                raise AdminError(429, "Too many background jobs", "rate_limited") from exc
+            self.log_event("action", "job.started", resource=name, action=job_name,
+                           principal=principal)
+            return {"job": record.public()}
+
+        @api.get("/api/jobs/{job_id}")
+        async def get_resource_job(
+            job_id: str, principal: Principal = Depends(self._principal),
+        ) -> dict:
+            record = self.jobs.get(job_id, owner_id=str(principal.id))
+            if record is None:
+                raise AdminError(404, "Job not found", "not_found")
+            return {"job": record.public()}
+
+        @api.delete("/api/jobs/{job_id}")
+        async def cancel_resource_job(
+            job_id: str, request: Request,
+            principal: Principal = Depends(self._principal),
+        ) -> dict:
+            self._csrf(request)
+            record = self.jobs.get(job_id, owner_id=str(principal.id))
+            if record is None:
+                raise AdminError(404, "Job not found", "not_found")
+            if not record.cancellable:
+                raise AdminError(403, "Job cancellation is disabled", "forbidden")
+            self.jobs.cancel(job_id, owner_id=str(principal.id))
+            return {"job": record.public()}
 
         @api.post("/api/resources/{name}/actions/{action_name}")
         async def run_collection_action(

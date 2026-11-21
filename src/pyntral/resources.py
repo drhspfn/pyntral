@@ -13,6 +13,7 @@ from sqlalchemy.orm import DeclarativeBase
 from .hooks import ResourceHook
 from .virtual import VirtualField
 from .layout import LayoutSection
+from .jobs import JobAction
 
 
 @dataclass(slots=True)
@@ -186,6 +187,7 @@ class Resource(Generic[ModelT]):
     show_search: bool = False  # Optional quick search above the advanced filters
     fields: dict[str, Field] = field(default_factory=dict)
     actions: list[Action] = field(default_factory=list)
+    jobs: list[JobAction] = field(default_factory=list)
     page_size: int = 20
     title_field: str | None = None  # String field name; use visible_name for static typing
     visible_name: InstrumentedAttribute[str] | InstrumentedAttribute[int] | InstrumentedAttribute[UUID] | None = None
@@ -217,6 +219,9 @@ class Resource(Generic[ModelT]):
     allow_show: bool = True
 
     def __post_init__(self) -> None:
+        action_names = [action.name for action in self.actions] + [action.name for action in self.jobs]
+        if len(action_names) != len(set(action_names)):
+            raise ValueError("Job and action names must be distinct")
         for schema in (self.create_schema, self.edit_schema):
             if schema is not None and (not isinstance(schema, type) or not issubclass(schema, BaseModel)):
                 raise TypeError("create_schema and edit_schema must inherit Pydantic BaseModel")

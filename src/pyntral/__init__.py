@@ -5,6 +5,7 @@ from .hooks import ResourceHook, OperationContext
 from .virtual import VirtualField
 from .layout import LayoutSection
 from .schema_docs import describe_resources, render_markdown, write_schema_docs
+from .jobs import JobAction, JobContext, JobManager
 from .features import ResourceFeature, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, UploadFeature
 from .audit import AuditEntry, AuditBase
 from .storage import StorageBackend, LocalStorage, S3Storage, UploadBase, UploadEntry
@@ -20,6 +21,7 @@ from .logging import LoggingConfig, EventFormatter, configure_logging, forward_t
 
 __all__ = [
     "describe_resources", "render_markdown", "write_schema_docs",
+    "JobAction", "JobContext", "JobManager",
     "Admin", "ResourceHook", "OperationContext", "VirtualField", "LayoutSection", "ResourceFeature", "PasswordFeature", "SoftDeleteFeature", "TimestampFeature", "AuditFeature", "AuditEntry", "AuditBase", "UploadFeature", "StorageBackend", "LocalStorage", "S3Storage", "UploadBase", "UploadEntry",
     "AdminEvent", "FieldRef", "ResourceEvent", "ResourceCreated", "ResourceUpdated", "ResourceDeleted",
     "ActionExecuted", "CollectionActionExecuted", "LoginSucceeded", "LoginFailed", "LogoutSucceeded", "CustomEvent",

@@ -29,6 +29,19 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
 
             schema = client.get("/admin/api/schema").json()
             resources = {resource["id"]: resource for resource in schema["resources"]}
+            products = resources["products"]
+            assert any(job["name"] == "inventory-report" for job in products["jobs"])
+            job_url = "/admin/api/resources/products/jobs/inventory-report"
+            assert client.post(job_url, json={}).status_code == 403
+            started = client.post(job_url, json={}, headers=csrf)
+            assert started.status_code == 202, started.text
+            job_id = started.json()["job"]["id"]
+            polled = client.get(f"/admin/api/jobs/{job_id}")
+            assert polled.status_code == 200, polled.text
+            assert polled.json()["job"]["status"] in ("queued", "running", "completed")
+            assert "result" not in polled.json()["job"]
+            cancel = client.delete(f"/admin/api/jobs/{job_id}", headers=csrf)
+            assert cancel.status_code == 200, cancel.text
             locations = resources["shipping-locations"]
             city_field = next(field for field in locations["fields"] if field["name"] == "city")
             assert city_field["dependency"] == {

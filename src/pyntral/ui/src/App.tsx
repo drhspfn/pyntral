@@ -22,7 +22,7 @@ import { I18nProvider, useI18n } from "./i18n";
 import { defaultTablePreferences, parseTablePreferences, orderedColumns, type TablePreferences } from "./table-prefs";
 import { api, base, buildQuery, getAuth, setCsrf } from "./api";
 import type {
-  ActionDef, AuthState, CustomFieldProps, CustomCrudProps, CustomCollectionActionProps, FieldDef, RecordData, ResourceDef, Schema, ThemeMode,
+  ActionDef, AuthState, CustomFieldProps, CustomCrudProps, CustomCollectionActionProps, FieldDef, JobDef, RecordData, ResourceDef, Schema, ThemeMode,
 } from "./types";
 import { viewFields } from "./types";
 
@@ -262,6 +262,49 @@ function CollectionAction({ schema, resource, action, selected, navigate, clearS
   </div>;
 }
 
+interface BackgroundJobState {
+  id: string; status: "queued" | "running" | "completed" | "failed" | "cancelled" | "timed_out";
+  progress: number; message: string; cancellable: boolean;
+}
+
+function BackgroundJobButton({ resource, job }: { resource: ResourceDef; job: JobDef }) {
+  const feedback = useAdminFeedback();
+  const [jobId, setJobId] = useState<string | null>(null);
+  const details = useQuery({
+    queryKey: ["job", jobId], enabled: jobId !== null,
+    queryFn: () => api<{ job: BackgroundJobState }>(`/api/jobs/${encodeURIComponent(jobId!)}`),
+    refetchInterval: (query) => ["queued", "running"].includes(query.state.data?.job.status ?? "") ? 800 : false,
+  });
+  const start = useMutation({
+    mutationFn: () => api<{ job: BackgroundJobState }>(
+      `/api/resources/${resource.id}/jobs/${encodeURIComponent(job.name)}`,
+      { method: "POST", body: JSON.stringify({}) }),
+    onSuccess: (data) => { setJobId(data.job.id); feedback.toast(`${job.label} started`, { kind: "info" }); },
+    onError: (error: unknown) => feedback.toast(error instanceof Error ? error.message : "Could not start job", { kind: "error" }),
+  });
+  const cancel = useMutation({
+    mutationFn: () => api(`/api/jobs/${encodeURIComponent(jobId!)}`, { method: "DELETE" }),
+    onSuccess: () => { void details.refetch(); feedback.toast("Cancellation requested", { kind: "info" }); },
+    onError: (error: unknown) => feedback.toast(error instanceof Error ? error.message : "Could not cancel job", { kind: "error" }),
+  });
+  const status = details.data?.job;
+  const running = status?.status === "queued" || status?.status === "running";
+  return <div className="ra-background-job">
+    <button type="button" className="btn subtle" disabled={start.isPending || running}
+      onClick={() => { void (async () => {
+        if (job.confirmation && !await feedback.confirm({ title: job.label, message: job.confirmation })) return;
+        start.mutate();
+      })(); }}>{start.isPending ? "Starting…" : job.label}</button>
+    {status && <div className="ra-job-status" role="status" aria-live="polite">
+      <span>{status.status}: {status.progress}%{status.message ? ` — ${status.message}` : ""}</span>
+      <progress aria-label={`${job.label} progress`} max={100} value={status.progress}/>
+      {running && status.cancellable && <button type="button" className="btn subtle"
+        disabled={cancel.isPending} onClick={() => cancel.mutate()}>Cancel</button>}
+    </div>}
+    {details.error && <span role="alert">Unable to load job progress</span>}
+  </div>;
+}
+
 function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void }) {
   const { t } = useI18n();
   const [text, setText] = useState("");
@@ -296,6 +339,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
     <div className="page-heading"><div><div className="eyebrow">DATA / {resource.id.toUpperCase()}</div>
       <h1>{resource.label}</h1><p>{t("resources.description", "View, organize, and manage your records.")}</p></div>
       <div className="heading-actions">
+        {(resource.jobs ?? []).map((job) => <BackgroundJobButton key={job.name} resource={resource} job={job}/>)}
         {resource.actions.filter((action) => action.kind === "resource").map((action) =>
           <CollectionAction key={action.name} schema={schema} resource={resource} action={action}
             selected={[]} navigate={navigate} clearSelection={() => undefined}/>)}

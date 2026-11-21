@@ -427,3 +427,9 @@ h2 {font-size:15px;letter-spacing:-.2px}
   padding: .4rem .6rem; }
 @media (max-width: 640px) { .ra-table-preference-row { gap: .35rem; }
   .ra-table-preference-row label { min-width: 0; } }
+
+/* Resource background actions: progress stays compact in the header. */
+.ra-background-job { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ra-job-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ra-text-muted); }
+.ra-job-status progress { width: 90px; height: 8px; accent-color: var(--ra-primary); }
+@media (max-width: 720px) { .ra-background-job { width: 100%; } }
