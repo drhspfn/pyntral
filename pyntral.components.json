@@ -14,5 +14,7 @@
   "dialogs": {
     "archive-notice": "admin/ArchiveNotice.tsx"
   },
-  "crud": {}
+  "crud": {
+    "tags-list": "admin/TagCatalog.tsx"
+  }
 }

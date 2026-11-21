@@ -38,3 +38,42 @@ docker compose -f examples/shop/compose.yaml down
 # To discard the seeded SQLite data as well:
 docker compose -f examples/shop/compose.yaml down -v
 ```
+
+## Interactive feature showcase (latest API)
+
+The Shop example demonstrates Pyntral features using real SQLAlchemy models,
+not mock endpoints. From the repository root, start the development UI:
+
+```bash
+uv sync --extra dev
+uv run pyntral init-env  # only if you do not already have .env
+uv run pyntral dev examples.shop.app:app
+```
+
+Open <http://127.0.0.1:5173/admin/>. The sample database is seeded once on
+startup; existing customer, product and order data is preserved. New Tags and
+product-tag associations are added independently when upgrading an existing
+`shop.db` that has not yet been tagged.
+
+| Feature | Where to try it | Expected behavior |
+| --- | --- | --- |
+| Per-view `FieldView` | **Commerce → Customers** | Email is absent from the list, visible on Show, readonly on Edit, and filterable with Equals/Contains; name is required on Create. |
+| Record actions | **Customers → a customer** | Existing Archive and Profile actions remain available. |
+| Bulk action | **Customers → select at least one row → Archive selected** | The selected customers become inactive after confirmation. No rows are deleted. |
+| Resource action | **Customers → Reactivate all** | After confirmation, all inactive customers become active again. |
+| Custom CRUD screen | **Commerce → Tags** | A custom `admin/TagCatalog.tsx` React list renders colored tag cards. Click a tag for the normal Show page or **New tag** for the generated Create form. |
+| Editable many-to-many | **Commerce → Products → a product → Product tags** | Search/link existing tags, unlink without deleting them, or create-and-link a new tag. The linked tags remain available as regular records. |
+| Other extensions | **Agents / Insights / Orders** | Existing custom Image field, custom page, badge, record actions and bridge continue to work. |
+
+The matching registration lives in `examples/shop/app.py`, the custom CRUD
+component lives in `admin/TagCatalog.tsx`, and `pyntral.components.json` maps
+its extension ID. For a standalone regression check, run:
+
+```bash
+uv run pytest -v tests/test_shop_feature_demo.py
+uv run pytest -v tests/test_view_actions_relations.py
+```
+
+Do not copy this demo's unscoped resource-wide Reactivate action directly into
+a multi-tenant application: production handlers should explicitly enforce
+tenant and row scopes as well as Pyntral authorization.

@@ -12,11 +12,11 @@ from base64 import b64encode
 from pydantic import BaseModel
 
 from fastapi import FastAPI
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, create_engine, event, select
+from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String, Table, create_engine, event, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 from pyntral import (
-    Action, Admin, Bridge, CallbackAuth, Field, LocalAuth, NavigationGroup, Page, Resource, Relationship,
+    Action, Admin, Bridge, CallbackAuth, Field, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
     ResourceUpdated,
 )
 
@@ -41,6 +41,23 @@ class Customer(Base):
     orders: Mapped[list[Order]] = relationship(back_populates="customer")
 
 
+
+# Simple association table: unlinking a tag does not delete it from the catalog.
+product_tags = Table(
+    "product_tags", Base.metadata,
+    Column("product_id", ForeignKey("products.id"), primary_key=True),
+    Column("tag_id", ForeignKey("tags.id"), primary_key=True),
+)
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(60), unique=True)
+    color: Mapped[str] = mapped_column(String(7), default="#5577aa")
+    products: Mapped[list[Product]] = relationship(secondary=product_tags, back_populates="tags")
+
+
 class Product(Base):
     __tablename__ = "products"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -50,6 +67,7 @@ class Product(Base):
     stock: Mapped[int] = mapped_column(default=0)
     active: Mapped[bool] = mapped_column(default=True)
     items: Mapped[list[OrderItem]] = relationship(back_populates="product")
+    tags: Mapped[list[Tag]] = relationship(secondary=product_tags, back_populates="products")
 
 
 class Order(Base):
@@ -168,6 +186,7 @@ def seed() -> None:
                     session.add(OrderItem(order=order, product=product, quantity=rng.randint(1, 4), price=product.price))
             session.commit()
     seed_agents()
+    seed_tags()
 
 
 def seed_agents() -> None:
@@ -183,6 +202,30 @@ def seed_agents() -> None:
         session.add_all(agents)
         session.flush()
         session.add_all([AgentRun(agent_id=agents[i % 3].id, outcome="completed") for i in range(12)])
+        session.commit()
+
+
+def seed_tags() -> None:
+    """Seed the new feature without replacing any existing Shop data.
+
+    This is intentionally independent of the initial Customer/Product seeding:
+    users with an existing shop.db should see M:N examples after upgrading.
+    """
+    with SessionLocal() as session:
+        if session.scalar(select(Tag.id).limit(1)) is not None:
+            return
+        tags = [Tag(name=name, color=color) for name, color in [
+            ("Featured", "#3875bd"), ("Workstation", "#16836f"),
+            ("Portable", "#ae6b30"), ("Accessories", "#8355af"),
+        ]]
+        session.add_all(tags)
+        session.flush()
+        # Existing Product rows may already exist; don't depend on seed IDs.
+        products = session.scalars(select(Product).order_by(Product.id).limit(8)).all()
+        for index, product in enumerate(products):
+            product.tags.append(tags[index % len(tags)])
+            if index % 2 == 0:
+                product.tags.append(tags[(index + 1) % len(tags)])
         session.commit()
 
 
@@ -238,21 +281,69 @@ def preview_customer(record: Customer, _session, _principal, _payload):
     return {"name": record.name, "email": record.email}
 
 
+def archive_selected_customers(records: list[Customer], session, _principal, _payload):
+    """Bulk action: the framework checks all selected rows and scope first."""
+    for customer in records:
+        customer.active = False
+    session.commit()
+    return {"archived": len(records)}
+
+
+def reactivate_all_customers(session, _principal, _payload):
+    """Resource action for this admin-only demo; handles the DB commit itself."""
+    inactive = session.scalars(select(Customer).where(Customer.active.is_(False))).all()
+    for customer in inactive:
+        customer.active = True
+    session.commit()
+    return {"reactivated": len(inactive)}
+
+
 admin.add_group(NavigationGroup("Commerce", icon="boxes", order=10))
 admin.add_group(NavigationGroup("Commerce/Orders", icon="folder", order=20))
 admin.add_group(NavigationGroup("Agents", icon="bot", order=30))
 admin.add_group(NavigationGroup("Agents/Operations", icon="cpu", order=10))
 
-admin.add_resource(Resource(Customer, icon="users", navigation="Commerce", list_fields=["id", "name", "email", "active", "created_at"],
-                            search_fields=["name", "email"], title_field="name",
-                            fields={"created_at": Field(readonly=True)},
-                            actions=[Action("archive", archive_customer, label="Archive", position="row",
-                                            appearance="badge", dialog="archive-notice",
-                                            visible=lambda _principal, record: record.active),
-                                     Action("preview", preview_customer, label="Profile", position="both",
-                                            component="customer-profile", appearance="button")]))
-admin.add_resource(Resource(Product, icon="boxes", navigation="Commerce", list_fields=["id", "name", "sku", "price", "stock", "active"],
-                            search_fields=["name", "sku"], title_field="name"))
+admin.add_resource(Resource(
+    Customer, icon="users", navigation="Commerce",
+    list_fields=["id", "name", "email", "active", "created_at"],
+    search_fields=["name", "email"], title_field="name",
+    fields={
+        "name": Field(create=FieldView(required=True, order=1),
+                      list=FieldView(order=1)),
+        # Per-view settings: the email remains readable on Show but is omitted
+        # from List, and cannot be changed after customer creation.
+        "email": Field(list=FieldView(visible=False), show=FieldView(visible=True),
+                       edit=FieldView(readonly=True),
+                       filter=FieldView(operators=["eq", "contains"])),
+        "created_at": Field(readonly=True, create=FieldView(visible=False),
+                            edit=FieldView(visible=False), show=FieldView(order=20)),
+    },
+    actions=[
+        Action("archive", archive_customer, label="Archive", position="row",
+               appearance="badge", dialog="archive-notice",
+               visible=lambda _principal, record: record.active),
+        Action("preview", preview_customer, label="Profile", position="both",
+               component="customer-profile", appearance="button"),
+        Action("archive_selected", archive_selected_customers, kind="bulk",
+               label="Archive selected", confirmation="Archive selected customers?"),
+        Action("reactivate_all", reactivate_all_customers, kind="resource",
+               label="Reactivate all", confirmation="Reactivate all customers?"),
+    ],
+))
+admin.add_resource(Resource(
+    Product, icon="boxes", navigation="Commerce",
+    list_fields=["id", "name", "sku", "price", "stock", "active"],
+    search_fields=["name", "sku"], title_field="name",
+    relationships={"tags": Relationship(label="Product tags", selectable=True)},
+))
+# This resource deliberately uses a custom CRUD list while retaining the
+# standard create, edit and detail screens and all server-side permissions.
+admin.add_resource(Resource(
+    Tag, icon="folder", navigation="Commerce", name="tags", title_field="name",
+    list_fields=["id", "name", "color"], search_fields=["name"],
+    crud_views={"list": "tags-list"},
+    relationships={"products": Relationship(label="Tagged products")},
+))
 admin.add_resource(Resource(Order, icon="activity", navigation="Commerce/Orders", list_fields=["id", "customer_id", "status", "created_at"],
                             title_field="id", relationships={"items": Relationship(label="Order items", selectable=True)},
                             fields={"created_at": Field(readonly=True),
