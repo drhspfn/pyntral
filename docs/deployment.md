@@ -15,7 +15,10 @@ uv run pyntral build --app your_app.main:app --base /admin/
 
 **Customized installation:** `pyntral build --app your.module:app` writes `.pyntral/dist/`. On deployment, preserve the generated `index.html` and `assets/` together. Set the bundle location with `Admin(dist_dir=...)` or `PYNTRAL_DIST`. Start the host ASGI app using its normal deployment command and proxy HTTPS traffic to it.
 
-The build output is tied to the base path. If you mount at `/ops`, build with `--base /ops/`. The mounted FastAPI sub-app serves the SPA history fallback so client routes are reachable directly.
+The bundled and customized production SPAs resolve their URLs from the ASGI
+mount path, including a reverse-proxy `root_path`. Use `--base` to match the
+Vite development proxy. Rebuild custom bundles made before runtime mount support
+when deploying under a different prefix.
 
 ## Secrets and cookies
 

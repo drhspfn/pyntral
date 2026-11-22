@@ -89,3 +89,26 @@ def test_installed_wheel_smoke_ignores_checkout_bundle(tmp_path, monkeypatch):
     smoke_installed()
     assert Path.cwd() == checkout
     assert os.environ["PYNTRAL_DIST"] == str(custom)
+
+
+def test_bundle_mount_respects_reverse_proxy_prefix(tmp_path):
+    from urllib.parse import urljoin
+    from re import search
+
+    assets = tmp_path / "assets"
+    assets.mkdir()
+    (assets / "main.js").write_text("window.integrationReady = true;", encoding="utf-8")
+    (tmp_path / "index.html").write_text(
+        '<base data-pyntral-base href="./" /><script type="module" src="./assets/main.js"></script>',
+        encoding="utf-8",
+    )
+    app = FastAPI()
+    Admin(app, session_factory=lambda: None, path="/ops", dist_dir=tmp_path,
+          auth=LocalAuth("demo", hash_password("example")), secret_key="x" * 48)
+    with TestClient(app, root_path="/prefix") as client:
+        page = client.get("/prefix/ops/resources/example/42")
+        assert page.status_code == 200
+        base = search(r'<base [^>]*href="([^"]+)"', page.text).group(1)
+        script = search(r'<script [^>]*src="([^"]+)"', page.text).group(1)
+        assert base == "/prefix/ops/"
+        assert client.get(urljoin(base, script)).status_code == 200

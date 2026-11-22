@@ -3,7 +3,8 @@ import type { Principal } from "./types";
 export interface AuthState { user: Principal | null; csrf: string | null }
 let csrf: string | null = null;
 export function setCsrf(value: string | null) { csrf = value; }
-export const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const mount = document.querySelector<HTMLBaseElement>("base[data-pyntral-base]");
+export const base = (mount ? new URL(mount.href).pathname : import.meta.env.BASE_URL).replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) {

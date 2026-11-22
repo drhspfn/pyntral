@@ -95,8 +95,8 @@ function extensionDependencies(): Plugin {
   };
 }
 
-export default defineConfig({
-  base,
+export default defineConfig(({ command }) => ({
+  base: command === "build" ? "./" : base,
   plugins: [react(), extensions(), extensionDependencies()],
   resolve: { alias: [
     ...Object.entries({
@@ -119,4 +119,4 @@ export default defineConfig({
     },
   },
   build: { target: "es2022", sourcemap: false, emptyOutDir: true },
-});
+}));

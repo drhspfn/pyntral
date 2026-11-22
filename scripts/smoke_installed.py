@@ -35,7 +35,10 @@ def main() -> None:
                     root = client.get("/admin/")
                     assert root.status_code == 200, root.text
                     assert "text/html" in root.headers["content-type"]
-                    assert root.content == (dist / "index.html").read_bytes()
+                    bundled = (dist / "index.html").read_text(encoding="utf-8")
+                    assert root.text == bundled.replace(
+                        '<base data-pyntral-base href="./"', '<base data-pyntral-base href="/admin/"', 1,
+                    )
                     assert client.get("/admin/resources/anything").content == root.content
                     assert client.get("/admin/api/schema").status_code == 401
                     asset = client.get("/admin/assets/" + assets[0].name)

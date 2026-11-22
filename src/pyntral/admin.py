@@ -17,11 +17,11 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from sqlalchemy import delete, inspect as sa_inspect, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
@@ -1623,7 +1623,7 @@ class Admin:
                 await maybe_await(session.close())
 
         @api.get("/{asset_path:path}", include_in_schema=False)
-        async def spa(asset_path: str) -> Any:
+        async def spa(asset_path: str, request: Request) -> Any:
             dist = self._dist()
             if not (dist / "index.html").is_file():
                 return JSONResponse(
@@ -1638,11 +1638,14 @@ class Admin:
                 return FileResponse(candidate)
             if "." in Path(asset_path).name:
                 raise AdminError(404, "Asset not found", "not_found")
-            return FileResponse(dist / "index.html", headers={"Cache-Control": "no-store"})
+            html = (dist / "index.html").read_text(encoding="utf-8")
+            mount = quote(request.scope.get("root_path", self.path).rstrip("/") + "/", safe="/")
+            html = html.replace('<base data-pyntral-base href="./"', f'<base data-pyntral-base href="{mount}"', 1)
+            return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
         @api.get("/", include_in_schema=False)
-        async def spa_root() -> Any:
-            return await spa("")
+        async def spa_root(request: Request) -> Any:
+            return await spa("", request)
 
     async def _body(self, request: Request, *, max_bytes: int | None = None) -> dict:
         limit = self.max_json_bytes if max_bytes is None else min(self.max_json_bytes, max_bytes)
