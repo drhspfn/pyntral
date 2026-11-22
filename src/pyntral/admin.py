@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
+from copy import deepcopy
 import csv
 import io
 import asyncio
@@ -35,6 +37,7 @@ from .hooks import OperationContext
 from .realtime import RealtimeNotifier
 from .jobs import JobManager
 from .validation import validate_payload
+from .sessions import MemorySessionStore, SessionIdentity, SessionStore
 from .storage import _PENDING_DELETE_RECORD, StorageBackend, UploadEntry, safe_upload_name, normalize_mime
 from .bridge import Bridge, BridgeContext
 from .logging import (LoggingConfig, configure_logging, emit as emit_log, request_id_var)
@@ -61,6 +64,11 @@ class Admin:
         secret_key: str,
         path: str = "/admin",
         secure_cookie: bool = True,
+        session_cookie: str = "pyntral_session",
+        session_cookie_path: str = "/",
+        session_max_age: int = 12 * 60 * 60,
+        session_store: SessionStore | None = None,
+        enable_jobs: bool = True,
         dist_dir: str | Path | None = None,
         title: str = "Pyntral",
         theme: dict[str, Any] | None = None,
@@ -92,6 +100,16 @@ class Admin:
             raise ValueError("max_json_bytes must be a positive integer")
         self.event_publish_timeout = event_publish_timeout
         self.max_json_bytes = max_json_bytes
+        if type(session_max_age) is not int or session_max_age < 1:
+            raise ValueError("session_max_age must be a positive integer")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", session_cookie):
+            raise ValueError("session_cookie must be a valid cookie name")
+        if not session_cookie_path.startswith("/") or any(c in session_cookie_path for c in ";\r\n"):
+            raise ValueError("session_cookie_path must be an absolute cookie path")
+        self.session_max_age = session_max_age
+        self.session_store = session_store if session_store is not None else MemorySessionStore()
+        self._session_audience = hashlib.sha256(f"{path}:{session_cookie}:{session_cookie_path}".encode()).hexdigest()
+        self.enable_jobs = enable_jobs
         self.session_factory = session_factory
         self.storage = storage
         self._upload_cleanup_wakeup: asyncio.Event | None = None
@@ -173,8 +191,9 @@ class Admin:
         self.api.add_middleware(
             SessionMiddleware,
             secret_key=secret_key,
-            session_cookie="pyntral_session",
-            max_age=60 * 60 * 12,
+            session_cookie=session_cookie,
+            path=session_cookie_path,
+            max_age=session_max_age,
             same_site="lax",
             https_only=secure_cookie,
         )
@@ -541,27 +560,46 @@ class Admin:
             raise AdminError(404, "Resource not found", "not_found")
         return adapter
 
-    async def _principal(self, request: Request) -> Principal:
-        raw = request.session.get("principal")
-        if not isinstance(raw, dict):
+    async def _session_identity(self, session_id: object) -> tuple[Principal, SessionIdentity]:
+        if not isinstance(session_id, str):
             raise AdminError(401, "Sign in required", "unauthorized")
-        try:
-            identity = Principal(
-                id=str(raw["id"]),
-                username=str(raw["username"]),
-                roles=list(raw.get("roles", [])),
-                display_name=raw.get("display_name"),
-                email=raw.get("email"),
-                attributes=dict(raw.get("attributes") or {}),
-            )
-        except (KeyError, TypeError, ValueError):
-            request.session.clear()
-            raise AdminError(401, "Session invalid", "unauthorized") from None
-        resolved = await maybe_await(self.auth.resolve(identity))
-        if resolved is None:
-            request.session.clear()
+        identity = await self.session_store.get(session_id)
+        if (identity is None or identity.audience != self._session_audience
+                or identity.expires_at <= time.time()):
             raise AdminError(401, "Session expired", "unauthorized")
-        return resolved
+        resolved = await maybe_await(self.auth.resolve(deepcopy(identity.principal)))
+        if resolved is None or resolved.id != identity.principal.id:
+            await self.session_store.revoke(session_id)
+            raise AdminError(401, "Session expired", "unauthorized")
+        return resolved, identity
+
+    async def _principal(self, request: Request) -> Principal:
+        try:
+            principal, identity = await self._session_identity(request.session.get("sid"))
+        except AdminError as error:
+            if error.status == 401:
+                request.session.clear()
+            raise
+        request.state.pyntral_csrf = identity.csrf
+        return principal
+
+    async def _end_session(self, request: Request) -> None:
+        session_id = request.session.get("sid")
+        if isinstance(session_id, str):
+            identity = await self.session_store.get(session_id)
+            if identity is not None and identity.audience == self._session_audience:
+                await self.session_store.revoke(session_id)
+        request.session.clear()
+
+    async def _start_session(self, request: Request, principal: Principal) -> dict:
+        await self._end_session(request)
+        session_id = secrets.token_urlsafe(32)
+        csrf = secrets.token_urlsafe(32)
+        await self.session_store.put(session_id, SessionIdentity(
+            deepcopy(principal), csrf, self._session_audience, time.time() + self.session_max_age,
+        ))
+        request.session["sid"] = session_id
+        return {"user": principal.as_dict(), "csrf": csrf}
 
     @staticmethod
     def _require_version(adapter: MapperAdapter, record: Any, request: Request) -> None:
@@ -576,9 +614,9 @@ class Admin:
             raise AdminError(412, "Record changed since it was loaded", "precondition_failed")
 
     def _csrf(self, request: Request) -> None:
-        token = request.session.get("csrf")
+        token = getattr(request.state, "pyntral_csrf", None)
         supplied = request.headers.get("X-CSRF-Token", "")
-        if not isinstance(token, str) or not hmac.compare_digest(token, supplied):
+        if not isinstance(token, str) or not hmac.compare_digest(token.encode(), supplied.encode()):
             raise AdminError(403, "Invalid CSRF token", "csrf_error")
 
     async def _authorize(
@@ -655,7 +693,7 @@ class Admin:
                 principal = await self._principal(request)
             except AdminError:
                 return {"user": None, "csrf": None}
-            return {"user": principal.as_dict(), "csrf": request.session.get("csrf")}
+            return {"user": principal.as_dict(), "csrf": request.state.pyntral_csrf}
 
         @api.post("/auth/login")
         async def login(request: Request) -> dict:
@@ -670,16 +708,14 @@ class Admin:
             if not isinstance(username, str) or not isinstance(password, str) or len(username) > 320 or len(password) > 4096:
                 raise AdminError(422, "Invalid credentials format", "validation_error")
             user = await maybe_await(self.auth.login(username, password))
-            if user is None:
+            if not isinstance(user, Principal):
                 self.log_event("auth", "auth.login_failed", level="WARNING")
                 await self._publish(LoginFailed(**event_context()))
                 raise AdminError(401, "Invalid username or password", "invalid_credentials")
-            request.session.clear()
-            request.session["principal"] = user.as_dict()
-            request.session["csrf"] = secrets.token_urlsafe(32)
+            state = await self._start_session(request, user)
             self.log_event("auth", "auth.login_success", principal=user)
             await self._publish(LoginSucceeded(actor_id=str(user.id), **event_context()))
-            return {"user": user.as_dict(), "csrf": request.session["csrf"]}
+            return state
 
         @api.post("/auth/external")
         async def external_login(request: Request) -> dict:
@@ -703,17 +739,15 @@ class Admin:
                 self.log_event("auth", "auth.external_login_failed", level="WARNING")
                 await self._publish(LoginFailed(**event_context()))
                 raise AdminError(401, "External authentication failed", "invalid_credentials")
-            request.session.clear()
-            request.session["principal"] = user.as_dict()
-            request.session["csrf"] = secrets.token_urlsafe(32)
+            state = await self._start_session(request, user)
             self.log_event("auth", "auth.login_success", principal=user)
             await self._publish(LoginSucceeded(actor_id=str(user.id), **event_context()))
-            return {"user": user.as_dict(), "csrf": request.session["csrf"]}
+            return state
 
         @api.post("/auth/logout")
         async def logout(request: Request, _principal: Principal = Depends(self._principal)) -> dict:
             self._csrf(request)
-            request.session.clear()
+            await self._end_session(request)
             self.log_event("auth", "auth.logout", principal=_principal)
             await self._publish(LogoutSucceeded(actor_id=str(_principal.id), **event_context()))
             return {"ok": True}
@@ -729,16 +763,29 @@ class Admin:
             except RuntimeError as exc:
                 raise AdminError(429, "Too many realtime subscribers", "rate_limited") from exc
 
+            session_id = request.session.get("sid")
+
             async def stream():
+                deadline = time.monotonic() + 300
                 try:
                     yield ": connected\n\n"
                     while not await request.is_disconnected():
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            return
                         try:
-                            await asyncio.wait_for(queue.get(), timeout=20.0)
-                        except asyncio.TimeoutError:
-                            yield ": ping\n\n"
+                            await asyncio.wait_for(queue.get(), timeout=min(20.0, remaining))
+                        except TimeoutError:
+                            message = ": ping\n\n"
                         else:
-                            yield "event: invalidate\ndata: {}\n\n"
+                            message = "event: invalidate\ndata: {}\n\n"
+                        if time.monotonic() >= deadline:
+                            return
+                        try:
+                            await self._session_identity(session_id)
+                        except AdminError:
+                            return
+                        yield message
                 finally:
                     unsubscribe()
 
@@ -805,8 +852,8 @@ class Admin:
                                 and can_select.get(relation["resource"], False))
                     metadata["actions"] = [a for a in metadata["actions"]
                         if await self._can(principal, name, "action:" + a["name"])]
-                    metadata["jobs"] = [a for a in metadata["jobs"]
-                        if await self._can(principal, name, "action:" + a["name"])]
+                    metadata["jobs"] = [a for a in metadata["jobs"] if self.enable_jobs
+                        and await self._can(principal, name, "action:" + a["name"])]
                 resources.append(metadata)
             visible_paths = [r["navigation"] for r in resources
                              if r["navigation"] and r["navigationState"] != "hidden"]
@@ -1211,7 +1258,7 @@ class Admin:
         ) -> dict:
             self._csrf(request)
             adapter = self._adapter(name)
-            job = next((item for item in adapter.resource.jobs if item.name == job_name), None)
+            job = next((item for item in adapter.resource.jobs if item.name == job_name), None) if self.enable_jobs else None
             if job is None:
                 raise AdminError(404, "Job action not found", "not_found")
             await self._authorize(principal, name, "action:" + job_name)

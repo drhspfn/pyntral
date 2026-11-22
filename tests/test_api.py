@@ -252,3 +252,29 @@ def test_unicode_local_auth_and_streaming_json_limit():
         chunks = iter((b'{"username":"demo","password":"', b'x' * 128, b'"}'))
         rejected = client.post("/admin/auth/login", content=chunks)
         assert rejected.status_code == 413
+
+
+def test_shared_sql_sessions_are_revoked_across_admin_instances(tmp_path):
+    from pyntral import SessionBase, SQLSessionStore
+
+    engine = create_engine(f"sqlite:///{(tmp_path / 'sessions.db').as_posix()}")
+    SessionBase.metadata.create_all(engine)
+    sessions = sessionmaker(engine)
+
+    def app():
+        host = FastAPI()
+        Admin(host, path="/ops", session_factory=lambda: None,
+              auth=CallbackAuth(lambda *_: Principal(id="operator", username="operator")),
+              session_store=SQLSessionStore(sessions), session_cookie="ops_session",
+              session_cookie_path="/ops", secret_key="s" * 64, secure_cookie=False)
+        return host
+
+    with TestClient(app()) as first, TestClient(app()) as second:
+        auth = first.post("/ops/auth/login", json={"username": "operator", "password": "fixture"})
+        assert auth.status_code == 200
+        assert "path=/ops" in auth.headers["set-cookie"].lower()
+        second.cookies.update(first.cookies)
+        assert second.get("/ops/auth/me").json()["user"]["id"] == "operator"
+        assert first.post("/ops/auth/logout", headers={"X-CSRF-Token": auth.json()["csrf"]}).status_code == 200
+        assert second.get("/ops/auth/me").json()["user"] is None
+    engine.dispose()
