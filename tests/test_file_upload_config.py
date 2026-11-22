@@ -36,3 +36,11 @@ def test_file_widget_requires_mapped_json_column():
     with pytest.raises(ValueError, match="JSON column"):
         MapperAdapter(Resource(AssetDraft,
             fields={"name": Field(file_upload=FileUploadConfig())}))
+
+def test_mock_field_payload_cannot_be_persisted_as_fake_file_refs():
+    from pyntral.orm import AdminError
+    adapter = MapperAdapter(Resource(AssetDraft,
+        fields={"attachments": Field(file_upload=FileUploadConfig())}))
+    with pytest.raises(AdminError) as exc:
+        adapter.parsed_payload({"attachments": [{"key": "spoofed-object"}]}, create=False)
+    assert exc.value.status == 422
