@@ -149,14 +149,24 @@ class JobManager:
         if state and state.cancellable and state.finished_at is None:
             task = self._tasks.get(key)
             if task is not None:
-                task.cancel()
+                self._cancel_task(state, task)
         return state
+
+    @staticmethod
+    def _cancel_task(state: JobState, task: asyncio.Task[None]) -> None:
+        # A coroutine cancelled before its first turn never runs its finally block.
+        if state.status == "queued":
+            state.status = "cancelled"
+            state.message = "Cancelled"
+            state.finished_at = time.monotonic()
+        task.cancel()
 
     async def close(self) -> None:
         self._closing = True
-        for task in self._tasks.values():
+        tasks = tuple(self._tasks.items())
+        for key, task in tasks:
             if not task.done():
-                task.cancel()
-        if self._tasks:
-            await asyncio.gather(*self._tasks.values(), return_exceptions=True)
+                self._cancel_task(self._states[key], task)
+        if tasks:
+            await asyncio.gather(*(task for _, task in tasks), return_exceptions=True)
         self._prune()

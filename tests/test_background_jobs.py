@@ -50,6 +50,25 @@ async def test_cancellation_and_shutdown():
     await manager.close()
 
 
+@pytest.mark.asyncio
+async def test_cancelling_before_start_releases_job_capacity():
+    manager = JobManager(max_running=1)
+    principal = Principal(id="owner", username="owner")
+
+    async def handler(_context):
+        pytest.fail("A queued task must not run after cancellation")
+
+    action = JobAction("queued-job", handler)
+    kwargs = dict(resource="users", principal=principal, payload={}, session_factory=lambda: None)
+    first = manager.submit(action, **kwargs)
+    assert manager.cancel(first.id, owner_id="owner").status == "cancelled"
+    assert first.finished_at is not None
+    second = manager.submit(action, **kwargs)
+    await manager.close()
+    assert second.status == "cancelled"
+    assert second.finished_at is not None
+
+
 def test_job_action_validation():
     with pytest.raises(TypeError, match="must be async"):
         JobAction("sync", lambda ctx: None)
