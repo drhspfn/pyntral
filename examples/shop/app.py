@@ -16,11 +16,11 @@ from typing import Annotated
 from pydantic import BaseModel, StringConstraints, field_validator
 
 from fastapi import FastAPI
-from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String, Table, create_engine, event, select
+from sqlalchemy import Column, DateTime, ForeignKey, JSON, Numeric, String, Table, create_engine, event, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 from pyntral import (
-    Action, Admin, Bridge, CallbackAuth, Field, FieldDependency, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
+    Action, Admin, Bridge, CallbackAuth, Field, FileUploadConfig, FieldDependency, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
     ResourceUpdated, ResourceHook, VirtualField, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase, UploadFeature, LocalStorage, UploadBase,
 )
 
@@ -120,6 +120,14 @@ class EditorialDraft(Base):
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __mapper_args__ = {"version_id_col": version}
+
+
+class UploadSandbox(Base):
+    """Demo-only metadata row. Files picked in its form never leave the browser."""
+    __tablename__ = "upload_sandbox"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(120))
+    attachments: Mapped[list] = mapped_column(JSON, default=list)
 
 
 class FileAsset(Base):
@@ -561,6 +569,16 @@ admin.add_resource(Resource(Order, icon="activity", navigation="Commerce/Orders"
                                             confirmation="Mark this order as fulfilled?", position="both",
                                             appearance="badge", visible=lambda _principal, record:
                                                 record.status == OrderStatus.pending)]))
+admin.add_resource(Resource(
+    UploadSandbox, name="upload-sandbox", label="File picker sandbox",
+    navigation="Agents/Operations", icon="folder", title_field="title",
+    list_fields=["id", "title"], search_fields=["title"],
+    fields={"attachments": Field(label="Files (mock only)", span=2,
+        file_upload=FileUploadConfig(multiple=True, max_files=4,
+            max_size_bytes=2_000_000, max_total_bytes=6_000_000,
+            accept="image/png,image/jpeg,image/webp,application/pdf",
+            preview=True, allow_paste=True))},
+))
 admin.add_resource(Resource(OrderItem, name="order-items", icon="boxes", navigation="Commerce/Orders", list_fields=["id", "order_id", "product_id", "quantity", "price"]))
 
 
