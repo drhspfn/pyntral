@@ -21,6 +21,7 @@ import { CurrentAdminProvider, useCurrentAdmin } from "./currentAdmin";
 import { I18nProvider, useI18n } from "./i18n";
 import { defaultTablePreferences, parseTablePreferences, orderedColumns, type TablePreferences } from "./table-prefs";
 import { TableSettings } from "./table-settings";
+import { Popover, PopoverTrigger, PopoverContent } from "./popover-component";
 import { ExportControls } from "./export-controls";
 import { api, base, buildQuery, getAuth, setCsrf } from "./api";
 import type {
@@ -324,21 +325,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
     catch { return defaultTablePreferences(); }
   });
   const [columnsOpen, setColumnsOpen] = useState(false);
-  const columnsButtonRef = useRef<HTMLButtonElement>(null);
-  const columnsPanelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!columnsOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!columnsButtonRef.current?.contains(target) && !columnsPanelRef.current?.contains(target)) setColumnsOpen(false);
-    };
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { setColumnsOpen(false); columnsButtonRef.current?.focus(); }
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onEscape);
-    return () => { document.removeEventListener("pointerdown", onPointerDown); document.removeEventListener("keydown", onEscape); };
-  }, [columnsOpen]);
+
   const [presetName, setPresetName] = useState("");
   useEffect(() => { try { localStorage.setItem(prefKey, JSON.stringify(preferences)); } catch { /* storage may be disabled */ } }, [prefKey, preferences]);
   const [filters, setFilters] = useState<FilterValues>({});
@@ -364,27 +351,30 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
         {resource.capabilities.create && <button className="btn primary" onClick={() => navigate(`resources/${resource.id}/new`)}><Plus size={17}/> {t("actions.new", "New record")}</button>}
       </div>
     </div>
-    <div className={"surface ra-table-surface " + (columnsOpen ? "is-preferences-open" : "")}>
+    <div className="surface ra-table-surface">
       <div className="table-toolbar">
         {resource.showSearch && <SearchInput value={text} onChange={setText}
           className="ra-list-search" aria-label="Search records"
           placeholder={resource.searchFields.length ? `Search ${resource.label.toLowerCase()}…` : "Search not configured"}
           disabled={!resource.searchFields.length} />}
         <div className="toolbar-buttons"><ExportControls resource={resource} query={query} offset={offset}
-          total={records.data?.total ?? 0} pageRows={records.data?.items.length ?? 0} preferences={preferences}/><button ref={columnsButtonRef} className={"btn subtle " + (columnsOpen ? "selected" : "")} type="button"
-          aria-expanded={columnsOpen} aria-controls="ra-table-settings" aria-haspopup="true"
-          onClick={() => setColumnsOpen(!columnsOpen)} title="Table columns and density">
-          {t("table.columns", "Columns")}</button><button className={`btn subtle ra-filter-toggle ${filtersOpen ? "selected" : ""}`} aria-expanded={filtersOpen}
-          onClick={() => setFiltersOpen(!filtersOpen)}><Filter size={16}/> {t("table.filters", "Filters")}
-          <span className={`ra-filter-count ${activeFilterCount === 0 ? "is-empty" : ""}`} aria-hidden={activeFilterCount === 0}>{activeFilterCount || "0"}</span></button>
-          <button className="btn subtle" onClick={() => records.refetch()} title="Refresh"><RefreshCw size={16}/></button></div>
-      </div>
-      {columnsOpen && <div id="ra-table-settings" className="ra-table-settings-anchor" ref={columnsPanelRef}>
-        <TableSettings columns={resource.listFields.map((name) => ({
-          name, label: resource.fields.find((field) => field.name === name)?.label ?? name,
-        }))} preferences={preferences} onChange={setPreferences} onClose={() => { setColumnsOpen(false); columnsButtonRef.current?.focus(); }}/>
-      </div>}
-      {filtersOpen && <div className="filters-panel">
+          total={records.data?.total ?? 0} pageRows={records.data?.items.length ?? 0} preferences={preferences}/>
+          <Popover open={columnsOpen} onOpenChange={setColumnsOpen}>
+            <PopoverTrigger asChild><button className={"btn subtle " + (columnsOpen ? "selected" : "")}
+              type="button" title="Table columns and density">{t("table.columns", "Columns")}</button></PopoverTrigger>
+            <PopoverContent width={455} maxHeight={610} minHeight={240} padded={false} className="ra-columns-popover">
+              <TableSettings columns={resource.listFields.map((name) => ({
+                name, label: resource.fields.find((field) => field.name === name)?.label ?? name,
+              }))} preferences={preferences} onChange={setPreferences} onClose={() => setColumnsOpen(false)}/>
+            </PopoverContent>
+          </Popover>
+          <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <PopoverTrigger asChild><button className={`btn subtle ra-filter-toggle ${filtersOpen ? "selected" : ""}`} type="button">
+              <Filter size={16}/> {t("table.filters", "Filters")}
+              <span className={`ra-filter-count ${activeFilterCount === 0 ? "is-empty" : ""}`} aria-hidden={activeFilterCount === 0}>{activeFilterCount || "0"}</span>
+            </button></PopoverTrigger>
+            <PopoverContent width={620} maxHeight={650} minHeight={260} padded={false} className="ra-filters-popover">
+              <div className="filters-panel">
         <div className="ra-filter-heading"><span className="filter-caption">REFINE RESULTS</span>
           <span className="ra-filter-hint">Choose a comparison using the icon beside each field</span></div>
         <div className="filters-fields">{viewFields(resource.fields, "filter").filter((f) => filterOperators(f).length > 0).map((field) =>
@@ -410,7 +400,11 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
             onClick={() => { const name = presetName.trim(); if (!name) return;
               setPreferences(prev => ({ ...prev, presets: {...prev.presets, [name]: filters} })); setPresetName(""); }}>Save preset</button>
         </div>
-      </div>}
+      </div>
+            </PopoverContent>
+          </Popover>
+          <button className="btn subtle" onClick={() => records.refetch()} title="Refresh"><RefreshCw size={16}/></button></div>
+      </div>
       <div className="sortbar"><span>{records.data ? `${records.data.total} total records` : "Records"}</span>
         <div className="sort-controls">{t("table.sort_by", "Sort by")} <div className="ra-sort-select"><Select searchable={false} clearable={false} ariaLabel="Sort column" value={sort}
           onChange={(value) => { if (typeof value === "string") setSort(value); }}
@@ -878,20 +872,18 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
       <span className="topbar-breadcrumb">Workspace <ChevronRight size={14}/> <strong>{route ? route.split("/")[1] || "Dashboard" : "Overview"}</strong></span></div>
       <div className="topbar-right"><button onClick={toggleTheme} aria-label="Toggle theme" title="Toggle theme"
         className="topbar-icon">{themeMode === "light" ? <Moon size={18}/> : <Sun size={18}/>}</button>
-        <div className="ra-profile-wrap">
-          <button className="ra-profile-trigger" onClick={() => setProfileOpen((value) => !value)}
-            aria-expanded={profileOpen} aria-label="Account menu" aria-haspopup="menu">
+        <Popover open={profileOpen} onOpenChange={setProfileOpen}>
+          <PopoverTrigger asChild><button type="button" className="ra-profile-trigger" aria-label="Account menu">
             <span className="topbar-avatar">{user.username.slice(0, 2).toUpperCase()}</span>
-          </button>
-          {profileOpen && <><button className="ra-profile-dismiss" aria-label="Close account menu" onClick={() => setProfileOpen(false)}/>
-            <div className="ra-profile-menu" role="menu">
+          </button></PopoverTrigger>
+          <PopoverContent width={275} maxHeight={450} minHeight={110} padded={false} role="menu" className="ra-profile-menu">
               <div className="ra-profile-header"><strong>{user.display_name || user.username}</strong>
                 <span>{user.roles.join(", ") || "Member"}</span></div>
               {customProfileMenu && <ProfileMenuExtension user={user} schema={schema} navigate={(url) => {
                 navigateAndClose(url); setProfileOpen(false); }} close={() => setProfileOpen(false)}/>}
               <button role="menuitem" onClick={() => { setProfileOpen(false); onLogout(); }}><LogOut size={16}/> {t("nav.sign_out", "Sign out")}</button>
-            </div></>}
-        </div></div></header>
+          </PopoverContent>
+        </Popover></div></header>
       <main className="main-content page-enter" key={route}>{children}</main>
     </div>
   </div>;

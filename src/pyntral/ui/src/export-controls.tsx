@@ -5,7 +5,7 @@ import { base } from "./api";
 import { useAdminFeedback } from "./feedback";
 import { orderedColumns, type TablePreferences } from "./table-prefs";
 import type { ResourceDef } from "./types";
-import { Select, TextInput } from "./ui";
+import { Select, TextInput, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter } from "./ui";
 
 type Scope = "page" | "filtered" | "range";
 type Format = "csv" | "json";
@@ -65,11 +65,10 @@ export function ExportControls({ resource, query, offset, total, pageRows, prefe
     }
   };
 
-  return <div className="ra-export-controls">
-    <button type="button" className="btn subtle" aria-expanded={open}
-      onClick={() => setOpen(!open)}><Download size={15}/> Export</button>
-    {open && <div className="ra-export-panel">
-      <h3>Export records</h3>
+  return <Popover open={open} onOpenChange={setOpen}>
+    <PopoverTrigger asChild><button type="button" className="btn subtle"><Download size={15}/> Export</button></PopoverTrigger>
+    <PopoverContent width={425} minHeight={250} maxHeight={560} className="ra-export-panel">
+      <PopoverHeader><h3>Export records</h3></PopoverHeader>
       <div className="ra-export-field"><span className="ra-export-label">Format</span>
         <Select<Format> value={format} searchable={false} clearable={false}
           onChange={v => { if (typeof v === "string") setFormat(v as Format); }}
@@ -96,8 +95,8 @@ export function ExportControls({ resource, query, offset, total, pageRows, prefe
       </div>
       <p aria-live="polite">{rows} of {total} matching rows · {selectedColumns.length} columns
         {scope === "filtered" && total > 10000 ? " · Limited to first 10,000" : ""}</p>
-      <button type="button" className="btn primary" disabled={!rows || !selectedColumns.length || working}
-        onClick={() => { void download(); }}>{working ? "Exporting…" : `Download ${rows} rows`}</button>
-    </div>}
-  </div>;
+      <PopoverFooter><button type="button" className="btn primary" disabled={!rows || !selectedColumns.length || working}
+        onClick={() => { void download(); }}>{working ? "Exporting…" : `Download ${rows} rows`}</button></PopoverFooter>
+    </PopoverContent>
+  </Popover>;
 }

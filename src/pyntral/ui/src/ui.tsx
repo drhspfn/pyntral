@@ -224,7 +224,7 @@ export function Select<T extends string | number = string | number>({
           <ChevronDown size={16}/></button>
       </span>
     </div>
-    {opened && !disabled && createPortal(<div ref={panel} className="ra-select-menu" style={popupStyle}
+    {opened && !disabled && createPortal(<div ref={panel} className="ra-select-menu" data-ra-popover-nested="" style={popupStyle}
       id={listId} role="listbox" aria-multiselectable={multiple}>
       {loadError && <div className="ra-select-empty" role="alert">{loadError} <button type="button" onClick={() => setRetries((n) => n + 1)}>Retry</button></div>}
       {!loading && !loadError && candidateOptions.length === 0 && <div className="ra-select-empty">{emptyLabel}</div>}
@@ -307,7 +307,7 @@ export function DatePicker({ value, onChange, includeTime = false, min, max, id,
       startIcon={<CalendarDays size={16}/>} onClick={() => setOpen(!open)}>
       {value ? (valid ? parsed!.toLocaleString(locale) : value) : placeholder}</Button>
     {value && <button type="button" className="ra-date-clear" title="Clear date" onClick={() => onChange(null)}><X size={14}/></button>}
-    {open && createPortal(<div ref={panel} className="ra-date-popover" style={popupStyle}><Calendar value={date} min={min?.slice(0,10)} max={max?.slice(0,10)}
+    {open && createPortal(<div ref={panel} className="ra-date-popover" data-ra-popover-nested="" style={popupStyle}><Calendar value={date} min={min?.slice(0,10)} max={max?.slice(0,10)}
       onChange={(day) => { onChange(serialize(day, time)); if (!includeTime) setOpen(false); }}/>
       {includeTime && <div className="ra-date-time"><label>Time <input type="time" value={time}
         onChange={(event) => { if (date) onChange(serialize(date, event.target.value)); }}/></label>

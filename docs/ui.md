@@ -195,3 +195,7 @@ Pyntral bundles basic core UI translations for `ru`, `es`, and `fr`, and uses th
 ## Theme token audit
 
 Core CSS palette, overlay colors, component elevation shadows, and primary-button contrast are defined through `--ra-*` variables instead of component-local color literals. The automated `test_theme_tokens.py` guard rejects hard-coded hex or RGB colors in built-in component declarations. Themes may override those tokens in either light or dark mode. This audit covers the bundled stylesheet, not user-provided TSX extension styles or inline third-party widget styles.
+
+## Compound Popover
+
+Import `Popover`, `PopoverTrigger`, `PopoverContent`, `PopoverHeader`, `PopoverFooter`, and `PopoverClose` from `@pyntral/ui`. Example: `<Popover interaction="click"><PopoverTrigger asChild><button>Options</button></PopoverTrigger><PopoverContent width={360} minHeight={180} maxHeight={520} align="end"><PopoverHeader>Options</PopoverHeader>Content<PopoverFooter>Actions</PopoverFooter></PopoverContent></Popover>`. Supports `open`/`onOpenChange`, `defaultOpen`, `interaction="click"|"hover"|"both"`, delays in milliseconds, outside/Escape dismissal flags, responsive positioning with automatic upward flip, clipped-height scrolling, and nested portalled Select/DatePicker/operator menus. Export, Columns, Filters and the profile menu use this atom.

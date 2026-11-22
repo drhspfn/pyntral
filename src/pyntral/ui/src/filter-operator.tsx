@@ -82,7 +82,7 @@ export function FilterOperatorButton({ operator, operators, label, onChange }: {
       <Icon size={16} strokeWidth={1.9}/><ChevronDown size={12} strokeWidth={2}/>
     </button>
     {open && createPortal(<div ref={menu} role="menu" aria-label={`${label} filter comparison`}
-      onKeyDown={onMenuKeyDown} className="ra-filter-operator-menu" style={popupStyle}>
+      onKeyDown={onMenuKeyDown} className="ra-filter-operator-menu" data-ra-popover-nested="" style={popupStyle}>
       <div className="ra-filter-menu-caption">Comparison</div>
       {operators.map((candidate) => {
         const CandidateIcon = ICONS[candidate];
