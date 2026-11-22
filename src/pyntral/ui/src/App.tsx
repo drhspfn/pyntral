@@ -622,12 +622,12 @@ function RecordEditor({ resource, id, navigate, notify }: {
   });
   const visibleFields = viewFields(resource.fields, isNew ? "create" : "edit").filter((f) => !f.readonly);
   return <>
-    <button className="back-link" onClick={() => navigate(isNew ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(id)}`)}><ArrowLeft size={16}/> {isNew ? `Back to ${resource.label}` : "Back to record"}</button>
+    <button className="back-link" onClick={() => navigate(isNew ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(id!)}`)}><ArrowLeft size={16}/> {isNew ? `Back to ${resource.label}` : "Back to record"}</button>
     <div className="page-heading"><div><div className="eyebrow">{resource.label.toUpperCase()} / {isNew ? "CREATE" : "EDIT"}</div>
       <h1>{isNew ? `New ${resource.label.replace(/s$/, "")}` : "Edit record"}</h1><p>Provide the details below and save your changes.</p></div>
       {!isNew && <div className="heading-actions">
         {resource.capabilities.show && <button type="button" className="btn subtle"
-          onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id)}`)}>
+          onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id!)}`)}>
           <ExternalLink size={16}/> View record</button>}
         {resource.capabilities.delete && <button type="button" className="btn danger"
           disabled={deleting || mutation.isPending || !record.data?.record}
@@ -651,7 +651,7 @@ function RecordEditor({ resource, id, navigate, notify }: {
               }); setDirty(true); }} />}/>
             : <p className="muted">No editable fields</p>}
           {mutation.error != null && <Alert error={mutation.error} />}
-          <div className="form-actions"><button type="button" className="btn subtle" onClick={() => navigate(isNew ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(id)}`)}>Cancel</button>
+          <div className="form-actions"><button type="button" className="btn subtle" onClick={() => navigate(isNew ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(id!)}`)}>Cancel</button>
             <button className="btn primary" type="submit" disabled={mutation.isPending || (!isNew && !dirty)}>
               {mutation.isPending && <LoaderCircle className="spin" size={16}/>} {isNew ? t("actions.create", "Create record") : t("actions.save", "Save changes")}<ArrowRight size={16}/></button></div>
         </div>
