@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { matchesAccept, selectFiles } from "../src/file-upload-state.ts";
+import { matchesAccept, selectFiles, formatFileRejection } from "../src/file-upload-state.ts";
 const file = (name, type="image/png", size=100, lastModified=1) => ({ name, type, size, lastModified });
 
 test("accept supports extension, MIME and wildcard without trusting filenames alone", () => {
@@ -21,4 +21,14 @@ test("enforces max count, size, total budget, duplicate and single mode", () => 
 });
 test("untrusted MIME is validated before any network operation",()=>{
   assert.equal(selectFiles([], [file("x.svg","image/svg+xml")],{accept:"image/png,image/jpeg"}).rejected[0].reason,"type");
+});
+
+test("human-readable errors include actual file size and configured limits", () => {
+  const tooBig = file("view.png", "image/png", 3 * 1024 * 1024);
+  assert.equal(formatFileRejection({ file: tooBig, reason: "size" }, {maxSizeBytes: 2 * 1024 * 1024}),
+    "view.png: file is 3.0 MB, maximum allowed is 2.0 MB.");
+  assert.match(formatFileRejection({file: file("other.exe"), reason:"type"}, {accept:"image/png"}), /allowed: image\/png/);
+  assert.match(formatFileRejection({file: file("duplicate.png"), reason:"duplicate"}), /already selected/);
+  assert.match(formatFileRejection({file: file("extra.png"), reason:"count"}, {maxFiles:2}), /up to 2/);
+  assert.match(formatFileRejection({file: file("large.png"), reason:"total_size"}, {maxTotalBytes:1024}), /1.0 KB/);
 });

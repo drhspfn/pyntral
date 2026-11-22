@@ -2,8 +2,9 @@ import { useState } from "react";
 import { ArrowRight, Bell, Image as ImageIcon } from "lucide-react";
 import type { CustomPageProps } from "@pyntral/types";
 import { useAdminFeedback } from "@pyntral/feedback";
-import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, FileUpload, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, RadioGroup, SearchInput, Select, SortableList, Switch, TextInput, ToggleGroup,
+import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, FileUpload, formatFileRejection, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, RadioGroup, SearchInput, Select, SortableList, Switch, TextInput, ToggleGroup,
   type SelectOption } from "@pyntral/ui";
+
 import { api } from "@pyntral/api";
 
 /** Demonstrates that extensions use the same UI primitives/theme/feedback as the core. */
@@ -106,7 +107,11 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
             multiple maxFiles={4} maxSizeBytes={2 * 1024 * 1024}
             maxTotalBytes={6 * 1024 * 1024} accept="image/png,image/jpeg,image/webp,application/pdf"
             preview allowPaste onRejected={(errors) => feedback.toast(
-              errors.map(error => error.reason).join(", "), { kind: "error" })}/>
+              errors.map(error => formatFileRejection(error, {
+                multiple: true, maxFiles: 4, maxSizeBytes: 2 * 1024 * 1024,
+                maxTotalBytes: 6 * 1024 * 1024,
+                accept: "image/png,image/jpeg,image/webp,application/pdf",
+              })).join(" "), { kind: "error", duration: 6500 })}/>
           <FileUpload files={singleDemoFiles} onFilesChange={setSingleDemoFiles}
             multiple={false} maxFiles={1} accept="image/png,image/jpeg"
             preview={false} allowPaste={false} label="Choose one image (without preview)"/>

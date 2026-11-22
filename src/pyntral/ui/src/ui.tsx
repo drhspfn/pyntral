@@ -13,6 +13,7 @@ export { FilterOperatorButton } from "./filter-operator";
 export { Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup } from "./controls";
 export { SortableList } from "./sortable";
 export { FileUpload } from "./file-upload";
+export { formatFileRejection } from "./file-upload-state";
 export type { FileUploadProps, FileUploadReceipt, FileUploadContext } from "./file-upload";
 export { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, PopoverClose, usePopover } from "./popover-component";
 export type { PopoverProps, PopoverContentProps } from "./popover-component";

@@ -52,3 +52,23 @@ export function formatFileSize(size: number): string {
   if (size < 1024 * 1024) return (size / 1024).toFixed(1) + " KB";
   return (size / (1024 * 1024)).toFixed(1) + " MB";
 }
+
+/** Human-readable, actionable validation feedback; stable reason codes remain public. */
+export function formatFileRejection<T extends FileLike>(
+  rejection: FileRejection<T>, options: FileConstraints = {},
+): string {
+  const { file, reason } = rejection;
+  const label = file.name || "Unnamed file";
+  switch (reason) {
+    case "type":
+      return `${label}: unsupported file type${options.accept ? ` (allowed: ${options.accept})` : ""}.`;
+    case "size":
+      return `${label}: file is ${formatFileSize(file.size)}, maximum allowed is ${formatFileSize(options.maxSizeBytes ?? 10 * 1024 * 1024)}.`;
+    case "total_size":
+      return `${label}: adding this file would exceed the total ${formatFileSize(options.maxTotalBytes ?? 50 * 1024 * 1024)} limit.`;
+    case "count":
+      return `${label}: you can select up to ${options.multiple === false ? 1 : options.maxFiles ?? 10} file(s).`;
+    case "duplicate":
+      return `${label}: this file is already selected.`;
+  }
+}

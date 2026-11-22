@@ -1,7 +1,7 @@
 /** Controlled file picker. File bytes remain in the browser unless an explicit upload callback runs. */
 import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import { FileImage, FilePlus2, FileText, LoaderCircle, Paperclip, Trash2, UploadCloud, X } from "lucide-react";
-import { formatFileSize, selectFiles, type FileConstraints, type FileRejection } from "./file-upload-state";
+import { formatFileSize, formatFileRejection, selectFiles, type FileConstraints, type FileRejection } from "./file-upload-state";
 
 export interface FileUploadReceipt {
   /** Server-verified object identifier; never derive it from the filename. */
@@ -58,7 +58,7 @@ export function FileUpload({
     if (disabled || uploading || !incoming.length) return;
     const result = selectFiles(files, incoming, constraints);
     if (result.rejected.length) {
-      setError(result.rejected.map(item => `${item.file.name}: ${item.reason.replace("_", " ")}`).join("; "));
+      setError(result.rejected.map(item => formatFileRejection(item, constraints)).join(" "));
       onRejected?.(result.rejected);
     } else setError(null);
     if (result.files.length !== files.length) onFilesChange(result.files);
