@@ -357,6 +357,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
   const [columnsOpen, setColumnsOpen] = useState(false);
 
   const [presetName, setPresetName] = useState("");
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   useEffect(() => { try { localStorage.setItem(prefKey, JSON.stringify(preferences)); } catch { /* storage may be disabled */ } }, [prefKey, preferences]);
   const [filters, setFilters] = useState<FilterValues>({});
   const [appliedFilters, setAppliedFilters] = useState<FilterValues>({});
@@ -414,18 +415,18 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
               (field.kind === "enum" && filterOperators(field).includes("in") && filterOperators(field).includes("not_in")))}px` } as CSSProperties}>
             <span className="ra-filter-label">{field.label}</span>
             <AdvancedFilterField field={field} resource={resource} value={filters[field.name] || {}}
-              onChange={(value) => { setFilters((old) => ({ ...old, [field.name]: value })); setOffset(0); }}/>
+              onChange={(value) => { setSelectedPreset(null); setFilters((old) => ({ ...old, [field.name]: value })); setOffset(0); }}/>
           </div>)}</div>
-        <button className="link-btn" onClick={() => setFilters({})}>{t("table.clear_filters", "Clear filters")}</button>
+        <button className="link-btn" onClick={() => { setSelectedPreset(null); setFilters({}); setOffset(0); }}>{t("table.clear_filters", "Clear filters")}</button>
         <div className="ra-filter-presets">
           <div className="ra-filter-preset-select">
             <span className="ra-filter-preset-label">Saved filters</span>
             <Select<string> ariaLabel="Load saved filters" searchable clearable
-              placeholder="Choose preset…" value={null}
+              placeholder="Choose preset…" value={selectedPreset}
               onChange={(value) => {
-                if (typeof value !== "string") return;
+                if (typeof value !== "string") { setSelectedPreset(null); return; }
                 const saved = preferences.presets[value];
-                if (saved) { setFilters(saved as FilterValues); setOffset(0); }
+                if (saved) { setSelectedPreset(value); setFilters(saved as FilterValues); setOffset(0); }
               }}
               options={Object.keys(preferences.presets).map((name) => ({ value: name, label: name }))}/>
           </div>
@@ -436,7 +437,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
           <button type="button" className="btn subtle ra-filter-preset-save"
             disabled={!presetName.trim() || Object.keys(preferences.presets).length >= 10}
             onClick={() => { const name = presetName.trim(); if (!name) return;
-              setPreferences(prev => ({ ...prev, presets: {...prev.presets, [name]: filters} })); setPresetName(""); }}>Save preset</button>
+              setPreferences(prev => ({ ...prev, presets: {...prev.presets, [name]: filters} })); setSelectedPreset(name); setPresetName(""); }}>Save preset</button>
         </div>
       </div>
             </PopoverContent>
