@@ -12,6 +12,8 @@ import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, LoaderCirc
 export { FilterOperatorButton } from "./filter-operator";
 export { Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup } from "./controls";
 export { SortableList } from "./sortable";
+export { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, PopoverClose, usePopover } from "./popover-component";
+export type { PopoverProps, PopoverContentProps } from "./popover-component";
 export type { SortableListProps } from "./sortable";
 export type { CheckboxProps, CheckboxGroupProps, ChoiceOption, RadioGroupProps, SwitchProps, ToggleGroupProps } from "./controls";
 export type { FilterOperator } from "./filter-state";

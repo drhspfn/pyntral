@@ -542,3 +542,13 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .ra-export-panel p{font-size:12px;color:var(--ra-muted);margin:0}
 .ra-export-panel .ra-export-range{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .ra-export-panel .ra-input{width:100%;min-width:0}
+
+/* Shared compound Popover. Position/size are calculated by the viewport placement hook. */
+.ra-popover-trigger{display:inline-flex;align-items:center;vertical-align:middle;min-width:0}
+.ra-popover-content{box-sizing:border-box;overscroll-behavior:contain;overflow:auto;
+  background:var(--ra-surface);color:var(--ra-text);border:1px solid var(--ra-border);
+  border-radius:var(--ra-radius);box-shadow:var(--ra-popup-shadow)}
+.ra-popover-content.ra-popover-padded{padding:16px}
+.ra-popover-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.ra-popover-header h2,.ra-popover-header h3{margin:0}
+.ra-popover-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
