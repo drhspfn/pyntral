@@ -1065,6 +1065,11 @@ function AdminApp() {
       void client.invalidateQueries({ queryKey: ["record"] });
       void client.invalidateQueries({ queryKey: ["stats"] });
     });
+    source.onerror = () => {
+      if (source.readyState === EventSource.CLOSED) {
+        void client.invalidateQueries({ queryKey: ["auth"] });
+      }
+    };
     return () => source.close();
   }, [auth.data?.user?.id, schema.data?.realtime, client]);
   const setNotice = useCallback((message: string) => feedback.toast(message, { kind: "success" }), [feedback]);

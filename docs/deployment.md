@@ -32,9 +32,28 @@ when deploying under a different prefix.
 
 Use Alembic for controlled SQLAlchemy schema migrations; `Resource` registration alone does not migrate tables. Configure explicit deletes/cascades or application-level archive actions. Retain restrictive foreign key constraints unless your data model explicitly calls for cascades.
 
+For network databases, use SQLAlchemy `AsyncSession` with an async driver.
+Install `pyntral[asyncio]` and your database driver, then pass
+`require_async_sessions=True` to check the Admin, ModelAuth and SQL session-store
+factories during startup. Synchronous session factories remain available for
+local integration. Host-provided synchronous hooks and callbacks must avoid
+blocking I/O on the request path.
+
+By default Pyntral reads at most 1 MiB of JSON per request, including logins.
+Override this with `max_json_bytes`. Job requests additionally have an 8 KiB
+limit. Configure the proxy's request size, timeout and login rate limits for
+your deployment, including both login endpoints.
+
 Check resource `RoleAccess`, `AuthBackend.authorize`, row scopes, field policies and custom bridge handlers in every deployment. A hidden sidebar entry is **not** an authorization boundary. Do not expose admin endpoints to unauthenticated public clients.
 
 ## Multiple instances and event transports
+
+For one worker the default revocable memory session store and in-process jobs
+work together. For several workers use a shared `SQLSessionStore`, the same
+signing secret, and `enable_jobs=False` unless a single worker serves the admin.
+Use your application's durable job queue for distributed jobs. Start with
+`realtime_updates=False` for a replicated deployment and enable it after
+verifying that each web worker independently receives invalidations.
 
 The default event bus is process-local. For multiple workers, use RabbitMQ or Kafka with appropriately configured consumer groups/queues; follow [events](events.md) for ACK/retry behavior. Events are emitted after CRUD commit but **without** a transactional outbox; a crash can lose events during the commit-to-publish interval. Add an external reliability layer before relying on events as an audit ledger or financial system source of truth.
 

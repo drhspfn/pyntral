@@ -44,6 +44,17 @@ def main() -> None:
                     asset = client.get("/admin/assets/" + assets[0].name)
                     assert asset.status_code == 200, asset.text
                     assert asset.content == assets[0].read_bytes()
+                proxy = FastAPI()
+                Admin(proxy, path="/ops", session_factory=lambda: None,
+                      auth=LocalAuth("demo", hash_password("local-smoke-password")),
+                      secret_key="smoke-test-only-secret-of-sufficient-length",
+                      secure_cookie=False)
+                with TestClient(proxy, root_path="/product") as client:
+                    nested = client.get("/product/ops/resources/anything")
+                    assert nested.status_code == 200
+                    assert '<base data-pyntral-base href="/product/ops/"' in nested.text
+                    assert client.get(f"/product/ops/assets/{assets[0].name}").status_code == 200
+                    assert client.get("/product/ops/api/schema").status_code == 401
             finally:
                 os.chdir(previous_cwd)
     finally:

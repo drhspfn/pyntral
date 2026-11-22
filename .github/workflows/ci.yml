@@ -2,7 +2,7 @@ name: PR checks
 
 on:
   pull_request:
-    types: [labeled]
+    types: [labeled, synchronize]
 
 permissions:
   contents: read
@@ -14,7 +14,9 @@ concurrency:
 jobs:
   checks:
     name: Python, frontend and distribution
-    if: github.event.label.name == 'Run checks'
+    if: >-
+      (github.event.action == 'labeled' && github.event.label.name == 'Run checks') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'Run checks'))
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -28,9 +30,9 @@ jobs:
         with:
           node-version: '24'
       - name: Install Python dependencies
-        run: uv sync --locked --extra dev
+        run: uv sync --locked --extra dev --extra asyncio
       - name: Python tests
-        run: uv run --locked pytest -q
+        run: uv run --locked --extra asyncio pytest -q
       - name: Frontend logic tests
         run: node --experimental-strip-types --test src/pyntral/ui/tests/*.test.mjs
       - name: Configure isolated demo credentials

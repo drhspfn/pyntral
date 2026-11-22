@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 from copy import deepcopy
+from inspect import iscoroutinefunction
 import csv
 import io
 import asyncio
@@ -26,7 +27,7 @@ from sqlalchemy import delete, inspect as sa_inspect, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 
-from .auth import AuthBackend, Principal, maybe_await
+from .auth import AuthBackend, ModelAuth, Principal, maybe_await
 from .events import (
     AdminEvent, EventTransport, InMemoryEventBus, ResourceCreated, ResourceUpdated, ResourceDeleted,
     ActionExecuted, CollectionActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded, FieldRef, field_refs, event_context,
@@ -37,7 +38,7 @@ from .hooks import OperationContext
 from .realtime import RealtimeNotifier
 from .jobs import JobManager
 from .validation import validate_payload
-from .sessions import MemorySessionStore, SessionIdentity, SessionStore
+from .sessions import MemorySessionStore, SessionIdentity, SessionStore, SQLSessionStore
 from .storage import _PENDING_DELETE_RECORD, StorageBackend, UploadEntry, safe_upload_name, normalize_mime
 from .bridge import Bridge, BridgeContext
 from .logging import (LoggingConfig, configure_logging, emit as emit_log, request_id_var)
@@ -68,6 +69,7 @@ class Admin:
         session_cookie_path: str = "/",
         session_max_age: int = 12 * 60 * 60,
         session_store: SessionStore | None = None,
+        require_async_sessions: bool = False,
         enable_jobs: bool = True,
         dist_dir: str | Path | None = None,
         title: str = "Pyntral",
@@ -143,6 +145,19 @@ class Admin:
         @asynccontextmanager
         async def admin_events_lifespan(host_app: FastAPI):
             async with previous_lifespan(host_app) as host_state:
+                if require_async_sessions:
+                    factories = [self.session_factory]
+                    if isinstance(self.auth, ModelAuth):
+                        factories.append(self.auth.session_factory)
+                    if isinstance(self.session_store, SQLSessionStore):
+                        factories.append(self.session_store.session_factory)
+                    for factory in factories:
+                        session = factory()
+                        try:
+                            if not iscoroutinefunction(session.execute):
+                                raise TypeError("require_async_sessions requires SQLAlchemy AsyncSession factories")
+                        finally:
+                            await maybe_await(session.close())
                 if auto_start_events:
                     await event_transport.start()
                 cleanup = None
@@ -655,7 +670,11 @@ class Admin:
                 response.headers["X-Frame-Options"] = "DENY"
                 response.headers["Referrer-Policy"] = "same-origin"
                 response.headers["X-Request-ID"] = request_id
-                if request.url.path.startswith((self.path + "/api/", self.path + "/auth/")) or request.scope.get("path", "").startswith(("/api/", "/auth/")):
+                path = request.scope.get("path", "")
+                root = request.scope.get("root_path", "").rstrip("/")
+                if root and path.startswith(root + "/"):
+                    path = path[len(root):]
+                if path.startswith(("/api/", "/auth/")):
                     response.headers["Cache-Control"] = "no-store"
                 duration_ms = round((time.perf_counter() - started) * 1000, 2)
                 mode = self.logging_config.http
@@ -1656,7 +1675,7 @@ class Admin:
             content.extend(chunk)
         try:
             body = json.loads(content)
-        except ValueError:
+        except (ValueError, RecursionError):
             raise AdminError(422, "Expected JSON", "validation_error") from None
         if not isinstance(body, dict):
             raise AdminError(422, "Expected JSON object", "validation_error")

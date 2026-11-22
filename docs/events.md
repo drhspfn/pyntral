@@ -107,3 +107,12 @@ permissions. Signals are bounded and coalesced in memory, and not guaranteed
 across processes or restarts. Shared RabbitMQ queues use competing consumers:
 configure independent broadcast delivery for each web worker before relying on
 multi-worker realtime updates.
+
+
+
+`Admin(event_publish_timeout=2.0)` limits how long a request waits for
+publication. A timeout is logged and the committed HTTP operation can still
+succeed. A broker may have accepted the message before the timeout, so consumers
+must be idempotent. Request-path subscribers should be asynchronous and
+cooperate with cancellation. SSE connections are limited to five minutes and
+recheck session validity before emitting an invalidation or heartbeat.
