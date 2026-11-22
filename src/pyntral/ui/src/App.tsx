@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Boxes,
   ChevronLeft, ChevronRight, CircleAlert, Command, Database, ExternalLink, Filter,
   LayoutDashboard, LoaderCircle, LockKeyhole, LogOut, Menu, MoreHorizontal, Pencil,
-  Plus, RefreshCw, Settings2, ShieldCheck, Trash2, Sun, Moon,
+  Plus, RefreshCw, Settings2, ShieldCheck, Trash2, Sun, Moon, X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { fields as customFields, pages as customPages, actions as customActions, dialogs as customDialogs, crud as customCrud, themes as customThemes, profile as customProfile, auth as customAuth } from "virtual:pyntral-extensions";
@@ -535,6 +535,8 @@ function StructuredFields({ resource, mode, fields, values, render }: {
   const visible = (section: typeof sections[number]) =>
     !section.visibleIf || values[section.visibleIf.field] === section.visibleIf.equals;
   const tabs = sections.filter((section) => section.kind === "tab" && visible(section));
+  const tabGroup = useId();
+  const tabButtons = useRef(new Map<string, HTMLButtonElement>());
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
   const [accordionOpen, setAccordionOpen] = useState<Record<string, boolean>>({});
   const current = tabs.find((section) => section.id === selectedTab) ?? tabs[0];
@@ -546,12 +548,31 @@ function StructuredFields({ resource, mode, fields, values, render }: {
   const trailing = fields.filter((field) => !assigned.has(field.name));
   return <div className="ra-layout-sections">
     {tabs.length > 0 && <div className="ra-layout-tabs" role="tablist" aria-label="Record sections">
-      {tabs.map((section) => <button key={section.id} type="button" role="tab"
-        aria-selected={current?.id === section.id} onClick={() => setSelectedTab(section.id)}>
+      {tabs.map((section, index) => <button key={section.id} type="button" role="tab"
+        id={`${tabGroup}-tab-${section.id}`} aria-controls={`${tabGroup}-panel-${section.id}`}
+        aria-selected={current?.id === section.id} tabIndex={current?.id === section.id ? 0 : -1}
+        ref={(button) => {
+          if (button) tabButtons.current.set(section.id, button);
+          else tabButtons.current.delete(section.id);
+        }}
+        onClick={() => setSelectedTab(section.id)}
+        onKeyDown={(event) => {
+          const positions: Record<string, number> = {
+            ArrowLeft: (index + tabs.length - 1) % tabs.length,
+            ArrowRight: (index + 1) % tabs.length, Home: 0, End: tabs.length - 1,
+          };
+          const next = tabs[positions[event.key]];
+          if (!next) return;
+          event.preventDefault();
+          setSelectedTab(next.id);
+          tabButtons.current.get(next.id)?.focus();
+        }}>
         {section.title}</button>)}
     </div>}
-    {current && <section role="tabpanel" className="ra-layout-panel" aria-label={current.title}>
-      {content(current.fields, current.columns)}</section>}
+    {tabs.map((section) => <section key={section.id} id={`${tabGroup}-panel-${section.id}`} role="tabpanel"
+      className="ra-layout-panel" hidden={current?.id !== section.id}
+      aria-labelledby={`${tabGroup}-tab-${section.id}`} tabIndex={mode === "detail" ? 0 : undefined}>
+      {current?.id === section.id && content(section.fields, section.columns)}</section>)}
     {sections.filter((section) => section.kind !== "tab" && visible(section)).map((section) =>
       section.kind === "accordion" ? <details className="ra-layout-group" key={section.id}
         open={accordionOpen[section.id] ?? section.defaultOpen}
@@ -964,16 +985,39 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
   const { t } = useI18n();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const openMenu = useRef<HTMLButtonElement>(null);
+  const closeMenu = useRef<HTMLButtonElement>(null);
+  const drawer = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!drawerOpen) return;
+    const media = window.matchMedia("(max-width: 800px)");
+    const closeOnDesktop = () => { if (!media.matches) setDrawerOpen(false); };
+    media.addEventListener("change", closeOnDesktop);
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = previous; };
+    closeMenu.current?.focus();
+    return () => {
+      media.removeEventListener("change", closeOnDesktop);
+      document.body.style.overflow = previous;
+      if (media.matches) openMenu.current?.focus();
+    };
   }, [drawerOpen]);
   const navigateAndClose = (url: string) => { navigate(url); setDrawerOpen(false); };
   return <div className="app-shell">
     {drawerOpen && <div className="mobile-backdrop" onClick={() => setDrawerOpen(false)}/>}
-    <aside className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="Workspace sidebar">
+    <aside ref={drawer} id="workspace-sidebar" className={`sidebar ${drawerOpen ? "open" : ""}`}
+      role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen || undefined} aria-label="Workspace sidebar"
+      onKeyDown={(event) => {
+        if (!drawerOpen || event.defaultPrevented) return;
+        if (event.key === "Escape") { event.preventDefault(); setDrawerOpen(false); }
+        if (event.key !== "Tab") return;
+        const buttons = drawer.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
+        const first = buttons?.[0], last = buttons?.[buttons.length - 1];
+        if (event.shiftKey && event.target === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && event.target === last) { event.preventDefault(); first?.focus(); }
+      }}>
+      <button ref={closeMenu} type="button" className="topbar-icon sidebar-close"
+        aria-label="Close menu" onClick={() => setDrawerOpen(false)}><X size={18}/></button>
       <button className="brand brand-button" onClick={() => navigateAndClose("")}><div className="brand-mark"><Command size={21}/></div>
         <strong>Pyntral</strong></button>
       <div className="workspace-title" title={schema.title}>{schema.title}</div>
@@ -982,8 +1026,9 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
           <div className="user-name"><strong>{user.display_name || user.username}</strong><span>{user.roles.join(", ") || "Member"}</span></div>
           </div></div>
     </aside>
-    <div className="main-column"><header className="topbar"><div className="topbar-left">
-      <button className="mobile-menu" onClick={() => setDrawerOpen(true)} aria-label="Open menu"><Menu size={21}/></button>
+    <div className="main-column" inert={drawerOpen}><header className="topbar"><div className="topbar-left">
+      <button ref={openMenu} className="mobile-menu" onClick={() => setDrawerOpen(true)} aria-label="Open menu"
+        aria-expanded={drawerOpen} aria-controls="workspace-sidebar"><Menu size={21}/></button>
       <span className="topbar-breadcrumb">Workspace <ChevronRight size={14}/> <strong>{route ? route.split("/")[1] || "Dashboard" : "Overview"}</strong></span></div>
       <div className="topbar-right"><button onClick={toggleTheme} aria-label="Toggle theme" title="Toggle theme"
         className="topbar-icon">{themeMode === "light" ? <Moon size={18}/> : <Sun size={18}/>}</button>

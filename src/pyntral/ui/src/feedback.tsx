@@ -29,6 +29,8 @@ export function AdminFeedbackProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [dialog, setDialog] = useState<DialogItem | null>(null);
   const queue = useRef<DialogItem[]>([]);
+  const modal = useRef<HTMLDialogElement>(null);
+  const initialFocus = useRef<HTMLButtonElement>(null);
   const [active, setActive] = useState(false);
   const dismiss = useCallback((id: number) => setToasts((current) => current.filter((toast) => toast.id !== id)), []);
   const toast = useCallback((message: string, options: ToastOptions = {}) => {
@@ -47,10 +49,15 @@ export function AdminFeedbackProvider({ children }: { children: ReactNode }) {
     setActive((old) => !old);
   };
   useEffect(() => {
-    if (!dialog) return;
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") finish(false); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const element = modal.current;
+    if (!dialog || !element) return;
+    const opener = document.activeElement;
+    element.showModal();
+    initialFocus.current?.focus();
+    return () => {
+      element.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
   }, [dialog]);
   useEffect(() => () => {
     queue.current.forEach((item) => item.resolve(false));
@@ -61,20 +68,40 @@ export function AdminFeedbackProvider({ children }: { children: ReactNode }) {
     <div className="ra-toast-stack" aria-live="polite">
       {toasts.map((item) => <ToastMessage key={item.id} item={item} dismiss={dismiss}/>) }
     </div>
-    {dialog && <div className="ra-dialog-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) finish(false);
-    }}><div className="ra-dialog" role="alertdialog" aria-modal="true" aria-labelledby="ra-dialog-title"
-      aria-describedby={dialog.options.message ? "ra-dialog-description" : undefined}>
+    {dialog && <dialog ref={modal} className="ra-dialog" role="alertdialog" aria-modal="true"
+      aria-labelledby="ra-dialog-title" aria-describedby={dialog.options.message ? "ra-dialog-description" : undefined}
+      onCancel={(event) => { event.preventDefault(); finish(false); }}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab" || event.defaultPrevented) return;
+        const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+          'a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]',
+        )).filter((item) => item.tabIndex >= 0 && !item.matches(":disabled") && item.getClientRects().length > 0
+          && getComputedStyle(item).visibility !== "hidden" && !item.closest("[inert]"));
+        const first = items[0], last = items.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault(); last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); first?.focus();
+        }
+      }}
+      onClick={(event) => {
+        if (event.currentTarget !== event.target) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right ||
+            event.clientY < rect.top || event.clientY > rect.bottom) finish(false);
+      }}>
       <div className="ra-dialog-head"><h2 id="ra-dialog-title">{dialog.options.title}</h2>
         <button onClick={() => finish(false)} aria-label="Close dialog"><X size={18}/></button></div>
       {dialog.options.message && <p id="ra-dialog-description">{dialog.options.message}</p>}
       {dialog.options.content}
       <div className="ra-dialog-actions">
-        <button className="btn subtle" onClick={() => finish(false)}>{dialog.options.cancelLabel ?? "Cancel"}</button>
-        <button autoFocus className={`btn ${dialog.options.destructive ? "danger" : "primary"}`}
+        <button ref={dialog.options.destructive ? initialFocus : undefined} className="btn subtle"
+          onClick={() => finish(false)}>{dialog.options.cancelLabel ?? "Cancel"}</button>
+        <button ref={dialog.options.destructive ? undefined : initialFocus}
+          className={`btn ${dialog.options.destructive ? "danger" : "primary"}`}
           onClick={() => finish(true)}>{dialog.options.confirmLabel ?? "Confirm"}</button>
       </div>
-    </div></div>}
+    </dialog>}
   </FeedbackContext.Provider>;
 }
 function ToastMessage({ item, dismiss }: { item: ToastItem; dismiss: (id: number) => void }) {
