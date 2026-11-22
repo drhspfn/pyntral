@@ -10,7 +10,7 @@ from .features import ResourceFeature, PasswordFeature, SoftDeleteFeature, Times
 from .audit import AuditEntry, AuditBase
 from .storage import StorageBackend, LocalStorage, S3Storage, UploadBase, UploadEntry
 from .auth import CallbackAuth, LocalAuth, ModelAuth, Principal, hash_password, verify_password
-from .resources import Action, Field, FieldDependency, FieldView, Page, Resource, NavigationGroup, Relationship, RoleAccess
+from .resources import Action, Field, FieldDependency, FileUploadConfig, FieldView, Page, Resource, NavigationGroup, Relationship, RoleAccess
 from .bridge import Bridge, BridgeContext
 from .events import (AdminEvent, FieldRef, ResourceEvent, ResourceCreated, ResourceUpdated, ResourceDeleted,
                      ActionExecuted, CollectionActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded, CustomEvent,
@@ -37,7 +37,7 @@ __all__ = [
     "BridgeContext",
     "NavigationGroup",
     "CallbackAuth",
-    "Field", "FieldDependency", "FieldView",
+    "Field", "FieldDependency", "FileUploadConfig", "FieldView",
     "LocalAuth",
     "ModelAuth",
     "Page",

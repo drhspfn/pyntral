@@ -207,3 +207,11 @@ The Filters popover uses the public searchable `Select` for saved presets (never
 ## Mobile navigation and unsaved editor changes
 
 On narrow screens, resource heading actions wrap without overflowing. The mobile drawer uses viewport-height containment and touch scrolling, and locks background document scrolling while open. Built-in editors show View record and Delete actions when authorized, return to record details from edit mode, and protect unsaved changes during in-app navigation. The browser's native `beforeunload` prompt handles tab closing/reloading. Custom CRUD overrides remain responsible for their own dirty state and guards.
+
+## Controlled FileUpload (mock-first)
+
+`FileUpload` is a reusable `@pyntral/ui` atom with `files: File[]` and `onFilesChange`. It supports keyboard file selection, drag-and-drop, clipboard paste scoped to the dropzone, MIME/extension `accept`, single/multiple mode, per-file and aggregate byte limits, max count, deduplication, optional image thumbnails (PNG/JPEG/GIF/WebP only), removal, error callbacks and responsive rows. Object URLs are revoked when previews unmount. Files are **not uploaded** by default.
+
+A host may supply `onUpload(file, {signal, onProgress})` and `onUploaded(receipts)` to explicitly own the future upload transport. This atom does not discover remote URLs, call a Bridge, authorize an S3 bucket or persist a database file record on its own. The application must create a scoped, short-lived upload grant through its authenticated backend, enforce max size/type and authorization server-side, upload with explicit network policy (signed headers/origin, expiry, no credentials leakage), then finalize a file entity only after verifying the uploaded object. `onUpload` is sequential and cancellable; its callback is responsible for request timeouts, checksums, retries and revoking unused grants.
+
+The Shop Demo Insights page contains one multi-file picker with previews and one single-file picker without previews. Both use mock selection only.

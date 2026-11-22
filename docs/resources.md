@@ -429,3 +429,21 @@ pre-authorized ORM instances for bulk actions. A before-hook can validate or
 modify the action payload; throwing an `AdminError` blocks the handler. After
 hooks run only after successful handlers and are logged if they fail, but they
 do not imply an ORM commit. See the Shop Orders Fulfill action.
+
+## Declarative FileUpload mock field
+
+Use `Field(file_upload=FileUploadConfig(...))` on a mapped **JSON column** to expose a mock-only file picker in built-in Create/Edit screens:
+
+```python
+from pyntral import Field, FileUploadConfig, Resource
+
+Resource(MyAssetDraft, fields={
+    "attachments": Field(label="Attachments", file_upload=FileUploadConfig(
+        multiple=True, max_files=4, max_size_bytes=2_000_000,
+        max_total_bytes=6_000_000, accept="image/png,image/jpeg,application/pdf",
+        preview=True, allow_paste=True,
+    )),
+})
+```
+
+This first version is explicitly mock-only: the browser holds native `File` objects, and selecting files cannot result in a CRUD save containing fake file objects. Saving a record with staged mock files raises a user-visible error until the selections are cleared. No file bytes, object URLs, signed upload grants or file receipts travel through the resource schema or generic JSON `POST/PATCH`. Existing `UploadFeature` endpoints remain separate and unchanged. Actual S3/MinIO persistence needs an authenticated initiation/verification/finalization protocol and must not infer a trusted MIME type or checksum solely from the browser.

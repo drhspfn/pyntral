@@ -146,6 +146,8 @@ class MapperAdapter:
         for name, configuration in resource.fields.items():
             if name not in self.columns:
                 raise ValueError(f"Unknown column in {resource.name}: {name}")
+            if configuration.file_upload is not None and column_kind(self.columns[name]) != "json":
+                raise ValueError(f"File upload mock field must use JSON column: {resource.name}.{name}")
             if configuration.dependency is not None:
                 source = configuration.dependency.source
                 if source == name or source not in self.columns or not self.visible(source):
@@ -293,6 +295,15 @@ class MapperAdapter:
                     "sortable": True,
                     "nullable": column.nullable,
                     "widget": options.widget if options else None,
+                    "fileUpload": ({"multiple": options.file_upload.multiple,
+                                    "maxFiles": options.file_upload.max_files,
+                                    "maxSizeBytes": options.file_upload.max_size_bytes,
+                                    "maxTotalBytes": options.file_upload.max_total_bytes,
+                                    "accept": options.file_upload.accept,
+                                    "preview": options.file_upload.preview,
+                                    "allowPaste": options.file_upload.allow_paste,
+                                    "mockOnly": True}
+                                   if options and options.file_upload else None),
                     "help": options.help if options else None,
                     "maxLength": getattr(column.type, "length", None) if kind == "string" else None,
                     "precision": getattr(column.type, "precision", None) if kind == "number" else None,
@@ -327,7 +338,7 @@ class MapperAdapter:
             fields.append({
                 "name": name, "label": virtual.label or name.replace("_", " ").title(),
                 "kind": virtual.kind, "required": virtual.required, "readonly": virtual.setter is None,
-                "primaryKey": False, "sortable": False, "nullable": True, "widget": None, "help": None,
+                "primaryKey": False, "sortable": False, "nullable": True, "widget": None, "fileUpload": None, "help": None,
                 "maxLength": None, "precision": None, "scale": None, "filterWidth": None,
                 "dependency": None,
                 "filterOperators": [], "options": None, "relation": None,

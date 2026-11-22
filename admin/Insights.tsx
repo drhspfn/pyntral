@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowRight, Bell, Image as ImageIcon } from "lucide-react";
 import type { CustomPageProps } from "@pyntral/types";
 import { useAdminFeedback } from "@pyntral/feedback";
-import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, RadioGroup, SearchInput, Select, SortableList, Switch, TextInput, ToggleGroup,
+import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, FileUpload, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, RadioGroup, SearchInput, Select, SortableList, Switch, TextInput, ToggleGroup,
   type SelectOption } from "@pyntral/ui";
 import { api } from "@pyntral/api";
 
@@ -12,6 +12,8 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
   const [date, setDate] = useState<string | null>(null);
+  const [demoFiles, setDemoFiles] = useState<File[]>([]);
+  const [singleDemoFiles, setSingleDemoFiles] = useState<File[]>([]);
   const [roles, setRoles] = useState<(string | number)[]>(["reviewer", "author"]);
   const [agentId, setAgentId] = useState<string | number | null>(null);
   const [dialog, setDialog] = useState(false);
@@ -96,6 +98,21 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
               <p style={{ fontSize: 12, marginTop: 8 }}>Pointer may move between the trigger and portal.</p>
             </PopoverContent>
           </Popover>
+        </div>
+      </Card>
+      <Card title="File upload (mock)" description="No requests are made; file bytes stay in this browser">
+        <div style={{ display: "grid", gap: 16 }}>
+          <FileUpload files={demoFiles} onFilesChange={setDemoFiles}
+            multiple maxFiles={4} maxSizeBytes={2 * 1024 * 1024}
+            maxTotalBytes={6 * 1024 * 1024} accept="image/png,image/jpeg,image/webp,application/pdf"
+            preview allowPaste onRejected={(errors) => feedback.toast(
+              errors.map(error => error.reason).join(", "), { kind: "error" })}/>
+          <FileUpload files={singleDemoFiles} onFilesChange={setSingleDemoFiles}
+            multiple={false} maxFiles={1} accept="image/png,image/jpeg"
+            preview={false} allowPaste={false} label="Choose one image (without preview)"/>
+          <div style={{ fontSize: 12, color: "var(--ra-muted)" }}>
+            Selected: {demoFiles.length + singleDemoFiles.length} · No backend upload or file entity created
+          </div>
         </div>
       </Card>
       <Card title="Registered resources" description={`${schema.resources.length} resources available`}>

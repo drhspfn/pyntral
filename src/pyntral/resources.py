@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, Callable, Generic, TypeVar
 from uuid import UUID
 from pydantic import BaseModel
@@ -51,12 +52,46 @@ class FieldDependency:
 
 
 @dataclass(slots=True)
+class FileUploadConfig:
+    """Declarative client-side selection; no binary body or signed URL is sent.
+
+    This first version is mock-only. Real uploads must be implemented explicitly
+    by the host using an authenticated, scoped upload session and finalization.
+    """
+    multiple: bool = True
+    max_files: int = 10
+    max_size_bytes: int = 10 * 1024 * 1024
+    max_total_bytes: int = 50 * 1024 * 1024
+    accept: str = "image/png,image/jpeg,image/webp,application/pdf"
+    preview: bool = True
+    allow_paste: bool = True
+    mock_only: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.mock_only:
+            raise ValueError("FileUploadConfig only supports mock_only=True until backend upload finalization exists")
+        if type(self.max_files) is not int or not 1 <= self.max_files <= 50:
+            raise ValueError("max_files must be between 1 and 50")
+        if type(self.max_size_bytes) is not int or not 1 <= self.max_size_bytes <= 100 * 1024 * 1024:
+            raise ValueError("max_size_bytes must be between 1 and 104857600")
+        if type(self.max_total_bytes) is not int or not 1 <= self.max_total_bytes <= 200 * 1024 * 1024:
+            raise ValueError("max_total_bytes must be between 1 and 209715200")
+        if self.max_total_bytes < self.max_size_bytes:
+            raise ValueError("max_total_bytes must not be smaller than max_size_bytes")
+        if not isinstance(self.accept, str) or len(self.accept) > 512 or any(
+            not item.strip() or not re.fullmatch(r"(?:\.[A-Za-z0-9+_-]{1,20}|[A-Za-z0-9.+_-]+/(?:\*|[A-Za-z0-9.+_-]+))", item.strip())
+            for item in self.accept.split(",")
+        ):
+            raise ValueError("accept must be a comma-delimited list of MIME types or extensions")
+
+@dataclass(slots=True)
 class Field:
     label: str | None = None
     visible: bool = True
     readonly: bool = False
     required: bool | None = None
     widget: str | None = None
+    file_upload: FileUploadConfig | None = None
     help: str | None = None
     options: list[dict[str, Any]] | list[str] | None = None
     components: dict[str, str] = field(default_factory=dict)  # {list: id, edit: id, show: id}
@@ -75,6 +110,8 @@ class Field:
     filter: FieldView | None = None
 
     def __post_init__(self) -> None:
+        if self.file_upload is not None and not isinstance(self.file_upload, FileUploadConfig):
+            raise TypeError("file_upload must be FileUploadConfig")
         if self.span not in (1, 2):
             raise ValueError("Field.span must be 1 or 2")
         if self.filter_width is not None and (

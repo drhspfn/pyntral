@@ -11,7 +11,7 @@ import { fields as customFields, pages as customPages, actions as customActions,
 import { SidebarNavigation } from "./navigation";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
-import { AsyncSelect, Checkbox, DatePicker, FormField, SearchInput, Select, TextInput, Textarea,
+import { AsyncSelect, Checkbox, DatePicker, FileUpload, FormField, SearchInput, Select, TextInput, Textarea,
   type SelectOption } from "./ui";
 import { RelationInput } from "./relation";
 import { AdvancedFilterField, serializeFilters, filterOperators, type FilterValues } from "./filters";
@@ -486,6 +486,13 @@ function InputField({ field, resource, record, value, onChange, mode = "edit" }:
   });
   let input: ReactNode;
   if (Comp) input = <Comp {...props} />;
+  else if (field.fileUpload) input = <div className="ra-file-field">
+    <FileUpload id={id} files={Array.isArray(value) ? value.filter((item): item is File => item instanceof File) : []}
+      onFilesChange={onChange} multiple={field.fileUpload.multiple} maxFiles={field.fileUpload.maxFiles}
+      maxSizeBytes={field.fileUpload.maxSizeBytes} maxTotalBytes={field.fileUpload.maxTotalBytes}
+      accept={field.fileUpload.accept} preview={field.fileUpload.preview} allowPaste={field.fileUpload.allowPaste}/>
+    <small className="muted">Mock selection only. No bytes are uploaded or saved with this record.</small>
+  </div>;
   else if (field.dependency) input = <div>
     <Select id={id} options={dynamicOptions.data?.result.options ?? []} searchable
       value={value == null || value === "" ? null : String(value)}
@@ -599,6 +606,12 @@ function RecordEditor({ resource, id, navigate, notify }: {
       const payload: RecordData = {};
       for (const field of viewFields(resource.fields, isNew ? "create" : "edit").filter((f) => !f.readonly)) {
         let value = values[field.name];
+        if (field.fileUpload) {
+          // Never serialize File objects or placeholder metadata into real CRUD writes.
+          if (Array.isArray(value) && value.some((item) => item instanceof File))
+            throw new Error(`${field.label}: mock selections cannot be saved. Clear the files before saving.`);
+          continue;
+        }
         if (value === undefined || value === "") {
           if (isNew) continue;
           if (field.nullable && value === "") value = null;

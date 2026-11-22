@@ -17,6 +17,8 @@ export interface FieldDef {
   primaryKey: boolean;
   sortable?: boolean;
   widget?: string;
+  fileUpload?: { multiple: boolean; maxFiles: number; maxSizeBytes: number;
+    maxTotalBytes: number; accept: string; preview: boolean; allowPaste: boolean; mockOnly: true } | null;
   help?: string;
   /** SQLAlchemy String.length, Numeric.precision/scale, or an explicit UI width. */
   maxLength?: number | null;
