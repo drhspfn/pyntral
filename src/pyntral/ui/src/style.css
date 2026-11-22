@@ -590,3 +590,30 @@ h2 {font-size:15px;letter-spacing:-.2px}
 @media(max-width:380px){
   .page-heading .heading-actions .btn{flex:1 1 auto;justify-content:center}
 }
+
+/* Controlled file upload atom: all palette values come from theme tokens. */
+.ra-file-upload{display:grid;gap:12px;min-width:0}
+.ra-file-dropzone{display:grid;justify-items:center;text-align:center;gap:7px;padding:25px 15px;
+  border:1px dashed var(--ra-scrollbar-thumb);border-radius:var(--ra-radius);
+  background:var(--ra-surface-alt);color:var(--ra-text-secondary);cursor:pointer;
+  transition:border-color var(--ra-motion-duration),background var(--ra-motion-duration)}
+.ra-file-dropzone:hover,.ra-file-dropzone.is-over{background:var(--ra-primary-soft);border-color:var(--ra-primary)}
+.ra-file-dropzone:focus-visible{outline:2px solid var(--ra-primary);outline-offset:2px}
+.ra-file-dropzone.is-disabled{opacity:.5;cursor:not-allowed}
+.ra-file-dropzone>svg{color:var(--ra-primary)}
+.ra-file-dropzone strong{font-size:13px;color:var(--ra-text)}
+.ra-file-dropzone span,.ra-file-dropzone small{font-size:11px}
+.ra-file-dropzone small{color:var(--ra-muted)}
+.ra-file-list{display:grid;gap:6px;min-width:0}
+.ra-file-row{display:flex;align-items:center;gap:11px;padding:9px;
+  border:1px solid var(--ra-border);border-radius:8px;min-width:0}
+.ra-file-row>svg{color:var(--ra-muted);flex-shrink:0}
+.ra-file-thumbnail{width:43px;height:43px;object-fit:cover;border-radius:6px;flex-shrink:0}
+.ra-file-info{flex:1;min-width:0;display:grid;gap:3px}
+.ra-file-info strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.ra-file-info small{font-size:11px;color:var(--ra-muted)}
+.ra-file-remove{border:0;background:transparent;color:var(--ra-muted);display:grid;place-items:center;padding:6px}
+.ra-file-remove:hover{color:var(--ra-danger)}
+.ra-file-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ra-file-actions>span{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ra-muted);margin-right:auto}
+.ra-file-error{margin:0;font-size:12px;color:var(--ra-danger);overflow-wrap:anywhere}
