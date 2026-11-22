@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Boxes,
@@ -23,6 +23,7 @@ import { defaultTablePreferences, parseTablePreferences, orderedColumns, type Ta
 import { TableSettings } from "./table-settings";
 import { Popover, PopoverTrigger, PopoverContent } from "./popover-component";
 import { ExportControls } from "./export-controls";
+import { mayLeavePage, registerNavigationBlocker } from "./navigation-guard";
 import { api, base, buildQuery, getAuth, setCsrf } from "./api";
 import type {
   ActionDef, AuthState, CustomFieldProps, CustomCrudProps, CustomCollectionActionProps, FieldDef, JobDef, RecordData, ResourceDef, Schema, ThemeMode,
@@ -39,16 +40,39 @@ const icons: Record<string, LucideIcon> = {
 
 function useNavigation() {
   const [url, setUrl] = useState(() => window.location.pathname);
+  const locationRef = useRef(window.location.pathname);
+  const navigatingRef = useRef(false);
   useEffect(() => {
-    const update = () => setUrl(window.location.pathname);
-    window.addEventListener("popstate", update);
-    return () => window.removeEventListener("popstate", update);
+    const onPopState = () => {
+      const destination = window.location.pathname;
+      const previous = locationRef.current;
+      if (destination === previous) return;
+      // Restore the displayed URL until the discard confirmation resolves.
+      history.pushState(null, "", previous);
+      if (navigatingRef.current) return;
+      navigatingRef.current = true;
+      void mayLeavePage().then((allowed) => {
+        if (!allowed) return;
+        history.replaceState(null, "", destination);
+        locationRef.current = destination;
+        setUrl(destination);
+        window.scrollTo(0, 0);
+      }).finally(() => { navigatingRef.current = false; });
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
   }, []);
   const navigate = useCallback((route: string) => {
     const full = `${base}/${route.replace(/^\//, "")}`.replace(/\/$/, "/");
-    if (full !== window.location.pathname) history.pushState(null, "", full);
-    setUrl(full);
-    window.scrollTo(0, 0);
+    if (full === locationRef.current || navigatingRef.current) return;
+    navigatingRef.current = true;
+    void mayLeavePage().then((allowed) => {
+      if (!allowed) return;
+      history.pushState(null, "", full);
+      locationRef.current = full;
+      setUrl(full);
+      window.scrollTo(0, 0);
+    }).finally(() => { navigatingRef.current = false; });
   }, []);
   return { route: url.startsWith(base) ? url.slice(base.length).replace(/^\//, "") : "", navigate };
 }
@@ -538,7 +562,26 @@ function RecordEditor({ resource, id, navigate, notify }: {
   const feedback = useAdminFeedback();
   const [values, setValues] = useState<RecordData>({});
   const [dirty, setDirty] = useState(false);
+  const skipGuard = useRef(false);
+  const { requestDelete, isPending: deleting } = useDeleteRecord(resource,
+    () => { skipGuard.current = true; navigate(`resources/${resource.id}`); });
   useEffect(() => { if (record.data?.record) { setValues(record.data.record); setDirty(false); } }, [record.data]);
+  useEffect(() => {
+    if (!dirty || skipGuard.current) return;
+    const unregister = registerNavigationBlocker(() => feedback.confirm({
+      title: "Unsaved changes",
+      message: "You have unsaved changes. Leave this page and discard them?",
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      destructive: true,
+    }));
+    const warnUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnUnload);
+    return () => { unregister(); window.removeEventListener("beforeunload", warnUnload); };
+  }, [dirty, feedback]);
   const mutation = useMutation({
     mutationFn: async () => {
       const payload: RecordData = {};
@@ -568,6 +611,8 @@ function RecordEditor({ resource, id, navigate, notify }: {
     onSuccess: async (result) => {
       await client.invalidateQueries({ queryKey: ["list", resource.id] });
       await client.invalidateQueries({ queryKey: ["stats"] });
+      skipGuard.current = true;
+      setDirty(false);
       notify(isNew ? "Record created successfully" : "Changes saved successfully");
       navigate(`resources/${resource.id}/${encodeURIComponent(String(result.record[resource.primaryKey]))}`);
     },
@@ -575,9 +620,19 @@ function RecordEditor({ resource, id, navigate, notify }: {
   });
   const visibleFields = viewFields(resource.fields, isNew ? "create" : "edit").filter((f) => !f.readonly);
   return <>
-    <button className="back-link" onClick={() => navigate(`resources/${resource.id}`)}><ArrowLeft size={16}/> Back to {resource.label}</button>
+    <button className="back-link" onClick={() => navigate(isNew ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(id)}`)}><ArrowLeft size={16}/> {isNew ? `Back to ${resource.label}` : "Back to record"}</button>
     <div className="page-heading"><div><div className="eyebrow">{resource.label.toUpperCase()} / {isNew ? "CREATE" : "EDIT"}</div>
-      <h1>{isNew ? `New ${resource.label.replace(/s$/, "")}` : "Edit record"}</h1><p>Provide the details below and save your changes.</p></div></div>
+      <h1>{isNew ? `New ${resource.label.replace(/s$/, "")}` : "Edit record"}</h1><p>Provide the details below and save your changes.</p></div>
+      {!isNew && <div className="heading-actions">
+        {resource.capabilities.show && <button type="button" className="btn subtle"
+          onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id)}`)}>
+          <ExternalLink size={16}/> View record</button>}
+        {resource.capabilities.delete && <button type="button" className="btn danger"
+          disabled={deleting || mutation.isPending || !record.data?.record}
+          onClick={() => { void requestDelete(id, resource.versionField
+            ? record.data?.record?.[resource.versionField] : undefined); }}>
+          <Trash2 size={16}/> Delete</button>}
+      </div>}</div>
     {!isNew && record.isLoading ? <Loading/> : record.error ? <Alert error={record.error}/> :
       <form className="editor-grid" onSubmit={(e: FormEvent) => { e.preventDefault(); mutation.mutate(); }}>
         <div className="surface editor-card"><div className="editor-card-title"><h2>Record details</h2><p>Fields marked with * are required.</p></div>
@@ -594,7 +649,7 @@ function RecordEditor({ resource, id, navigate, notify }: {
               }); setDirty(true); }} />}/>
             : <p className="muted">No editable fields</p>}
           {mutation.error != null && <Alert error={mutation.error} />}
-          <div className="form-actions"><button type="button" className="btn subtle" onClick={() => navigate(`resources/${resource.id}`)}>Cancel</button>
+          <div className="form-actions"><button type="button" className="btn subtle" onClick={() => navigate(isNew ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(id)}`)}>Cancel</button>
             <button className="btn primary" type="submit" disabled={mutation.isPending || (!isNew && !dirty)}>
               {mutation.isPending && <LoaderCircle className="spin" size={16}/>} {isNew ? t("actions.create", "Create record") : t("actions.save", "Save changes")}<ArrowRight size={16}/></button></div>
         </div>
@@ -863,10 +918,16 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
   const { t } = useI18n();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [drawerOpen]);
   const navigateAndClose = (url: string) => { navigate(url); setDrawerOpen(false); };
   return <div className="app-shell">
     {drawerOpen && <div className="mobile-backdrop" onClick={() => setDrawerOpen(false)}/>}
-    <aside className={`sidebar ${drawerOpen ? "open" : ""}`}>
+    <aside className={`sidebar ${drawerOpen ? "open" : ""}`} aria-label="Workspace sidebar">
       <button className="brand brand-button" onClick={() => navigateAndClose("")}><div className="brand-mark"><Command size={21}/></div>
         <strong>Pyntral</strong></button>
       <div className="workspace-title" title={schema.title}>{schema.title}</div>

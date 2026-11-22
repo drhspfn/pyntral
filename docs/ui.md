@@ -203,3 +203,7 @@ Import `Popover`, `PopoverTrigger`, `PopoverContent`, `PopoverHeader`, `PopoverF
 ### Saved filter presets
 
 The Filters popover uses the public searchable `Select` for saved presets (never a native `<select>`). Selecting a preset applies it immediately and resets the pagination offset. The Select remains unselected to make repeated selection possible. The responsive preset toolbar gives the name input more width than the preset dropdown, with a content-width Save button; container queries wrap the button and then stack all controls when the popover is narrow.
+
+## Mobile navigation and unsaved editor changes
+
+On narrow screens, resource heading actions wrap without overflowing. The mobile drawer uses viewport-height containment and touch scrolling, and locks background document scrolling while open. Built-in editors show View record and Delete actions when authorized, return to record details from edit mode, and protect unsaved changes during in-app navigation. The browser's native `beforeunload` prompt handles tab closing/reloading. Custom CRUD overrides remain responsible for their own dirty state and guards.

@@ -571,3 +571,22 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .ra-filters-popover .filters-panel{border:0;min-width:0;background:var(--ra-surface);padding:16px}
 .ra-profile-menu.ra-popover-content{padding:6px}
 .ra-export-panel .ra-popover-footer .btn{width:100%}
+
+/* Resource headers stay inside the mobile viewport; actions wrap beneath titles. */
+.page-heading > :first-child{min-width:0;max-width:100%}
+.page-heading .heading-actions{min-width:0;max-width:100%;flex-wrap:wrap;justify-content:flex-end}
+.page-heading .heading-actions > *{max-width:100%}
+@media(max-width:800px){
+  .sidebar{height:100dvh;max-height:100dvh;overflow-y:auto;overflow-x:hidden;
+    overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch}
+  .sidebar nav{min-height:0;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y}
+  .main-column,.main-content{min-width:0}
+  .page-heading{align-items:flex-start;flex-direction:column;min-width:0}
+  .page-heading .heading-actions{width:100%;justify-content:flex-start;gap:8px}
+  .page-heading .heading-actions .btn{flex:0 1 auto;min-width:0;white-space:normal}
+  .toolbar-buttons{min-width:0;max-width:100%;flex-wrap:wrap}
+  .table-toolbar{min-width:0}
+}
+@media(max-width:380px){
+  .page-heading .heading-actions .btn{flex:1 1 auto;justify-content:center}
+}
