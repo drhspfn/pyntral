@@ -481,7 +481,8 @@ class Admin:
             members.append(record)
         await adapter._flush_create(session, record, ctx.payload, principal)
         await maybe_await(session.refresh(record))
-        identifier = str(getattr(record, adapter.pk_name))
+        record_id = getattr(record, adapter.pk_name)
+        identifier = str(record_id)
         if adapter.resource.scope is not None:
             await adapter.get(session, identifier, principal)
         if members is not None:
@@ -498,7 +499,7 @@ class Admin:
                 self.log_event("resource", "resource.after_hook_refresh_failed", level="ERROR", resource=name)
             else:
                 await self._run_hooks(adapter, "after_create", ctx)
-        self.log_event("resource", "resource.created", principal=principal, resource=name, record_id=identifier)
+        self.log_event("resource", "resource.created", principal=principal, resource=name, record_id=record_id)
         await self._publish(ResourceCreated(
             resource=name, record_id=identifier, actor_id=str(principal.id),
             fields=field_refs(adapter, payload), **event_context(),
