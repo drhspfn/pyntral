@@ -199,3 +199,7 @@ Core CSS palette, overlay colors, component elevation shadows, and primary-butto
 ## Compound Popover
 
 Import `Popover`, `PopoverTrigger`, `PopoverContent`, `PopoverHeader`, `PopoverFooter`, and `PopoverClose` from `@pyntral/ui`. Example: `<Popover interaction="click"><PopoverTrigger asChild><button>Options</button></PopoverTrigger><PopoverContent width={360} minHeight={180} maxHeight={520} align="end"><PopoverHeader>Options</PopoverHeader>Content<PopoverFooter>Actions</PopoverFooter></PopoverContent></Popover>`. Supports `open`/`onOpenChange`, `defaultOpen`, `interaction="click"|"hover"|"both"`, delays in milliseconds, outside/Escape dismissal flags, responsive positioning with automatic upward flip, clipped-height scrolling, and nested portalled Select/DatePicker/operator menus. Export, Columns, Filters and the profile menu use this atom.
+
+### Saved filter presets
+
+The Filters popover uses the public searchable `Select` for saved presets (never a native `<select>`). Selecting a preset applies it immediately and resets the pagination offset. The Select remains unselected to make repeated selection possible. The responsive preset toolbar gives the name input more width than the preset dropdown, with a content-width Save button; container queries wrap the button and then stack all controls when the popover is narrow.
