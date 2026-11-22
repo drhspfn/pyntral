@@ -22,6 +22,7 @@ class VirtualField:
     write_role: str | None = None
     required: bool = False
     component: str | None = None
+    widget: str | None = None
 
     def __post_init__(self) -> None:
         if self.getter is None and self.setter is None:

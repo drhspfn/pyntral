@@ -272,12 +272,13 @@ class MapperAdapter:
                 and not column.primary_key
                 and not column.identity
             )
+            writable = self.writable(name)
             view_configs = {}
             for view in ("list", "create", "edit", "show", "filter"):
                 cfg = self.view_config(name, view)
                 view_configs[view] = {
                     "visible": self.view_visible(name, view),
-                    "readonly": (cfg.readonly if cfg and cfg.readonly is not None else not self.writable(name)),
+                    "readonly": not writable or (cfg is not None and cfg.readonly is True),
                     "required": (cfg.required if cfg and cfg.required is not None else
                                  options.required if options and options.required is not None else is_required),
                     "component": (cfg.component if cfg and cfg.component is not None else
@@ -290,7 +291,7 @@ class MapperAdapter:
                     "label": options.label if options and options.label else name.replace("_", " ").title(),
                     "kind": kind,
                     "required": options.required if options and options.required is not None else is_required,
-                    "readonly": not self.writable(name),
+                    "readonly": not writable,
                     "primaryKey": name == self.pk_name,
                     "sortable": True,
                     "nullable": column.nullable,
@@ -338,7 +339,7 @@ class MapperAdapter:
             fields.append({
                 "name": name, "label": virtual.label or name.replace("_", " ").title(),
                 "kind": virtual.kind, "required": virtual.required, "readonly": virtual.setter is None,
-                "primaryKey": False, "sortable": False, "nullable": True, "widget": None, "fileUpload": None, "help": None,
+                "primaryKey": False, "sortable": False, "nullable": True, "widget": virtual.widget, "fileUpload": None, "help": None,
                 "maxLength": None, "precision": None, "scale": None, "filterWidth": None,
                 "dependency": None,
                 "filterOperators": [], "options": None, "relation": None,

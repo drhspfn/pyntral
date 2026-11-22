@@ -23,6 +23,10 @@ def test_features_compose_securely_and_actions_remain_available():
     with TestClient(app) as client:
         token=client.post('/admin/auth/login',json={'username':'u','password':'p'}).json()['csrf']
         h={'X-CSRF-Token':token}
+        resource = client.get("/admin/api/schema").json()["resources"][0]
+        password = next(field for field in resource["fields"] if field["name"] == "new_password")
+        assert password["widget"] == "password"
+        assert password["views"]["create"]["visible"] and not password["views"]["show"]["visible"]
         bad=client.post('/admin/api/resources/accounts',json={'username':'a','new_password':'123'},headers=h)
         assert bad.status_code==422
         good=client.post('/admin/api/resources/accounts',json={'username':'a','new_password':'long-password-123'},headers=h)

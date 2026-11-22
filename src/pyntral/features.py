@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy import inspect
@@ -51,7 +51,7 @@ class PasswordFeature:
             setattr(record, storage, hash_password(raw))
 
         resource.virtual_fields[self.input_field] = VirtualField(
-            kind="string", label="Set password", setter=set_password, required=True,
+            kind="string", label="Set password", setter=set_password, required=True, widget="password",
         )
 
 
@@ -102,9 +102,7 @@ class TimestampFeature:
         for column in (self.created_field, self.updated_field):
             _require_column(resource, column)
             existing = resource.fields.get(column)
-            if existing is not None and existing.visible is False:
-                raise ValueError("TimestampFeature requires visible timestamp metadata")
-            resource.fields[column] = Field(readonly=True)
+            resource.fields[column] = replace(existing, readonly=True) if existing is not None else Field(readonly=True)
         now = lambda: dt.datetime.now(dt.timezone.utc)
         if self.created_field in resource._server_defaults or self.updated_field in resource._server_onupdate:
             raise ValueError("TimestampFeature conflicts with a timestamp writer")

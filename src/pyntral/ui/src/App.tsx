@@ -515,7 +515,9 @@ function InputField({ field, resource, record, value, onChange, mode = "edit" }:
   else if (["json", "array"].includes(field.kind)) input = <Textarea id={id} rows={5} spellCheck={false}
     value={typeof value === "string" ? value : value == null ? "" : JSON.stringify(value, null, 2)}
     onChange={(e) => onChange(e.target.value)} placeholder="Valid JSON" />;
-  else input = <TextInput id={id} type={["integer", "number"].includes(field.kind) ? "number" : field.widget === "email" ? "email" : "text"}
+  else input = <TextInput id={id} type={["integer", "number"].includes(field.kind) ? "number"
+    : field.widget === "email" || field.widget === "password" ? field.widget : "text"}
+    autoComplete={field.widget === "password" ? "new-password" : undefined}
     step={field.kind === "integer" ? "1" : "any"} required={field.required}
     value={value == null ? "" : String(value)} placeholder={`Enter ${field.label.toLowerCase()}`}
     onChange={(e) => onChange(e.target.value)} />;
