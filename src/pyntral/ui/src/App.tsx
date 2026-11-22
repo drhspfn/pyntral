@@ -571,7 +571,10 @@ function RecordEditor({ resource, id, navigate, notify }: {
   const skipGuard = useRef(false);
   const { requestDelete, isPending: deleting } = useDeleteRecord(resource,
     () => { skipGuard.current = true; navigate(`resources/${resource.id}`); });
-  useEffect(() => { if (record.data?.record) { setValues(record.data.record); setDirty(false); } }, [record.data]);
+  // Realtime invalidation must not overwrite an administrator's unsaved edits.
+  useEffect(() => {
+    if (record.data?.record && !dirty) setValues(record.data.record);
+  }, [record.data, dirty]);
   useEffect(() => {
     if (!dirty || skipGuard.current) return;
     const unregister = registerNavigationBlocker(() =>
