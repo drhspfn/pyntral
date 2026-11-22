@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowRight, Bell, Image as ImageIcon } from "lucide-react";
 import type { CustomPageProps } from "@pyntral/types";
 import { useAdminFeedback } from "@pyntral/feedback";
-import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, RadioGroup, SearchInput, Select, SortableList, Switch, TextInput, ToggleGroup,
+import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, RadioGroup, SearchInput, Select, SortableList, Switch, TextInput, ToggleGroup,
   type SelectOption } from "@pyntral/ui";
 import { api } from "@pyntral/api";
 
@@ -72,6 +72,30 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
             renderItem={(step, index) => <span style={{ flex: 1, padding: "9px 4px", fontSize: 12 }}>
               <strong>{index + 1}.</strong> {step.label}
             </span>}/>
+        </div>
+      </Card>
+      <Card title="Popover playground" description="Shared portal with viewport flip, sizing and hover/click modes">
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14 }}>
+          <Popover interaction="click">
+            <PopoverTrigger asChild><Button variant="secondary">Open click popover</Button></PopoverTrigger>
+            <PopoverContent width={340} minHeight={180} maxHeight={400}>
+              <PopoverHeader><strong>Popover settings</strong></PopoverHeader>
+              <p style={{ fontSize: 12 }}>The panel stays inside the viewport and flips above its trigger when necessary.</p>
+              <Select<string> value={priority} onChange={(value) => {
+                if (typeof value === "string") setPriority(value);
+              }} searchable={false} clearable={false} options={[
+                { value: "standard", label: "Standard" }, { value: "urgent", label: "Urgent" },
+              ]}/>
+              <PopoverFooter><span style={{ color: "var(--ra-muted)", fontSize: 11 }}>Click outside or press Escape to close</span></PopoverFooter>
+            </PopoverContent>
+          </Popover>
+          <Popover interaction="hover" openDelay={250} closeDelay={250}>
+            <PopoverTrigger asChild><Button variant="ghost">Hover for details</Button></PopoverTrigger>
+            <PopoverContent width={260} minHeight={80} maxHeight={240}>
+              <strong>Hover card</strong>
+              <p style={{ fontSize: 12, marginTop: 8 }}>Pointer may move between the trigger and portal.</p>
+            </PopoverContent>
+          </Popover>
         </div>
       </Card>
       <Card title="Registered resources" description={`${schema.resources.length} resources available`}>
