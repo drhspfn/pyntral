@@ -23,7 +23,7 @@ import { defaultTablePreferences, parseTablePreferences, orderedColumns, type Ta
 import { TableSettings } from "./table-settings";
 import { Popover, PopoverTrigger, PopoverContent } from "./popover-component";
 import { ExportControls } from "./export-controls";
-import { mayLeavePage, registerNavigationBlocker } from "./navigation-guard";
+import { hasNavigationBlocker, mayLeavePage, registerNavigationBlocker } from "./navigation-guard";
 import { api, base, buildQuery, getAuth, setCsrf } from "./api";
 import type {
   ActionDef, AuthState, CustomFieldProps, CustomCrudProps, CustomCollectionActionProps, FieldDef, JobDef, RecordData, ResourceDef, Schema, ThemeMode,
@@ -47,6 +47,12 @@ function useNavigation() {
       const destination = window.location.pathname;
       const previous = locationRef.current;
       if (destination === previous) return;
+      if (!hasNavigationBlocker()) {
+        locationRef.current = destination;
+        setUrl(destination);
+        window.scrollTo(0, 0);
+        return;
+      }
       // Restore the displayed URL until the discard confirmation resolves.
       history.pushState(null, "", previous);
       if (navigatingRef.current) return;
