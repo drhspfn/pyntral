@@ -5,6 +5,7 @@ export function registerNavigationBlocker(callback: NavigationBlocker): () => vo
   blocker = callback;
   return () => { if (blocker === callback) blocker = null; };
 }
+export function hasNavigationBlocker(): boolean { return blocker !== null; }
 export async function mayLeavePage(): Promise<boolean> {
   return blocker ? blocker() : true;
 }
