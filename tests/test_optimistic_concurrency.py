@@ -32,6 +32,8 @@ def test_stale_updates_and_deletes_are_rejected():
         assert first["version"]==1
         assert c.patch(url,headers=headers,json={"title":"Missing version"}).status_code==428
         valid={**headers,"If-Match":str(first["version"])}
+        assert c.patch(url,headers=valid,json={"version": 20}).status_code==422
+        assert c.post("/admin/api/resources/drafts",headers=headers,json={"title":"Invalid","version":20}).status_code==422
         assert c.patch(url,headers=valid,json={"title":"New"}).status_code==200
         assert c.patch(url,headers=valid,json={"title":"Stale"}).status_code==412
         assert c.delete(url,headers=valid).status_code==412

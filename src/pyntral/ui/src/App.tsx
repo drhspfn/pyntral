@@ -575,13 +575,17 @@ function RecordEditor({ resource, id, navigate, notify }: {
     queryFn: () => api<{ record: RecordData }>(`/api/resources/${resource.id}/${encodeURIComponent(id!)}`) });
   const feedback = useAdminFeedback();
   const [values, setValues] = useState<RecordData>({});
+  const [baseline, setBaseline] = useState<RecordData>();
   const [dirty, setDirty] = useState(false);
   const skipGuard = useRef(false);
   const { requestDelete, isPending: deleting } = useDeleteRecord(resource,
     () => { skipGuard.current = true; navigate(`resources/${resource.id}`); });
-  // Realtime invalidation must not overwrite an administrator's unsaved edits.
+  // Keep the values and version the draft was based on together during a refetch.
   useEffect(() => {
-    if (record.data?.record && !dirty) setValues(record.data.record);
+    if (record.data?.record && !dirty) {
+      setBaseline(record.data.record);
+      setValues(record.data.record);
+    }
   }, [record.data, dirty]);
   useEffect(() => {
     if (!dirty || skipGuard.current) return;
@@ -627,13 +631,14 @@ function RecordEditor({ resource, id, navigate, notify }: {
         }
         if (field.kind === "integer" && typeof value === "number" && !Number.isInteger(value))
           throw new Error(`${field.label}: an integer is required`);
-        if (isNew || JSON.stringify(value) !== JSON.stringify(record.data?.record?.[field.name])) payload[field.name] = value;
+        if (isNew || JSON.stringify(value) !== JSON.stringify(baseline?.[field.name])) payload[field.name] = value;
       }
       return api<{ record: RecordData }>(`/api/resources/${resource.id}${isNew ? "" : `/${encodeURIComponent(id!)}`}`,
         { method: isNew ? "POST" : "PATCH", body: JSON.stringify(payload),
-          headers: !isNew && resource.versionField ? { "If-Match": String(record.data?.record?.[resource.versionField]) } : undefined });
+          headers: !isNew && resource.versionField ? { "If-Match": String(baseline?.[resource.versionField]) } : undefined });
     },
     onSuccess: async (result) => {
+      if (!isNew) await client.invalidateQueries({ queryKey: ["record", resource.id, id] });
       await client.invalidateQueries({ queryKey: ["list", resource.id] });
       await client.invalidateQueries({ queryKey: ["stats"] });
       skipGuard.current = true;
@@ -653,12 +658,12 @@ function RecordEditor({ resource, id, navigate, notify }: {
           onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id!)}`)}>
           <ExternalLink size={16}/> View record</button>}
         {resource.capabilities.delete && <button type="button" className="btn danger"
-          disabled={deleting || mutation.isPending || !record.data?.record}
+          disabled={deleting || mutation.isPending || !baseline}
           onClick={() => { void requestDelete(id, resource.versionField
-            ? record.data?.record?.[resource.versionField] : undefined); }}>
+            ? baseline?.[resource.versionField] : undefined); }}>
           <Trash2 size={16}/> Delete</button>}
       </div>}</div>
-    {!isNew && record.isLoading ? <Loading/> : record.error ? <Alert error={record.error}/> :
+    {!isNew && record.isLoading ? <Loading/> : record.error && !baseline ? <Alert error={record.error}/> :
       <form className="editor-grid" onSubmit={(e: FormEvent) => { e.preventDefault(); mutation.mutate(); }}>
         <div className="surface editor-card"><div className="editor-card-title"><h2>Record details</h2><p>Fields marked with * are required.</p></div>
           {visibleFields.length ? <StructuredFields resource={resource} mode="form" fields={visibleFields}
@@ -675,7 +680,7 @@ function RecordEditor({ resource, id, navigate, notify }: {
             : <p className="muted">No editable fields</p>}
           {mutation.error != null && <Alert error={mutation.error} />}
           <div className="form-actions"><button type="button" className="btn subtle" onClick={() => navigate(isNew ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(id!)}`)}>Cancel</button>
-            <button className="btn primary" type="submit" disabled={mutation.isPending || (!isNew && !dirty)}>
+            <button className="btn primary" type="submit" disabled={mutation.isPending || (!isNew && (!dirty || !baseline))}>
               {mutation.isPending && <LoaderCircle className="spin" size={16}/>} {isNew ? t("actions.create", "Create record") : t("actions.save", "Save changes")}<ArrowRight size={16}/></button></div>
         </div>
       </form>}
@@ -900,6 +905,13 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
     enabled: !!Custom && !!id,
     queryFn: () => api<{ record: RecordData }>(`/api/resources/${resource.id}/${encodeURIComponent(id!)}`),
   });
+  const versionedEdit = !!Custom && mode === "edit" && !!resource.versionField;
+  const [editRecord, setEditRecord] = useState<RecordData>();
+  useEffect(() => {
+    const fresh = record.data?.record;
+    if (versionedEdit && fresh) setEditRecord((current) => current ?? fresh);
+  }, [versionedEdit, record.data]);
+  const displayedRecord = versionedEdit ? editRecord : record.data?.record;
   if (!Custom) {
     if (mode === "list") return <ResourceList resource={resource} schema={schema} navigate={navigate}/>;
     if (mode === "show") return <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate}/>;
@@ -913,8 +925,9 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
     const result = await api<{ record: RecordData }>(
       `/api/resources/${resource.id}${mode === "edit" ? `/${encodeURIComponent(id!)}` : ""}`,
       { method: mode === "edit" ? "PATCH" : "POST", body: JSON.stringify(payload),
-        headers: mode === "edit" && resource.versionField && record.data?.record
-          ? { "If-Match": String(record.data.record[resource.versionField]) } : undefined });
+        headers: mode === "edit" && resource.versionField && displayedRecord
+          ? { "If-Match": String(displayedRecord[resource.versionField]) } : undefined });
+    if (versionedEdit) setEditRecord(result.record);
     await invalidateResource(client, resource.id);
     feedback.toast("Record saved", { kind: "success" });
     return result.record;
@@ -923,16 +936,22 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
     if (!id || !resource.capabilities.delete) throw new Error("Delete is not available");
     if (!await feedback.confirm({ title: "Delete record?", message: "This action cannot be undone.", destructive: true })) return;
     await api(`/api/resources/${resource.id}/${encodeURIComponent(id)}`,
-      { method: "DELETE", headers: resource.versionField && record.data?.record
-        ? { "If-Match": String(record.data.record[resource.versionField]) } : undefined });
+      { method: "DELETE", headers: resource.versionField && displayedRecord
+        ? { "If-Match": String(displayedRecord[resource.versionField]) } : undefined });
     await invalidateResource(client, resource.id);
     navigate(`resources/${resource.id}`);
   };
-  if (record.isPending && id) return <Loading/>;
-  if (record.error) return <Alert error={record.error}/>;
-  return <Custom schema={schema} resource={resource} mode={mode} record={record.data?.record}
+  if (record.error && !displayedRecord) return <Alert error={record.error}/>;
+  if (id && !displayedRecord) return <Loading/>;
+  return <Custom schema={schema} resource={resource} mode={mode} record={displayedRecord}
     navigate={navigate} loadList={loadList} save={save} remove={remove}
-    reload={async () => { await invalidateResource(client, resource.id); }}/>
+    reload={async () => {
+      await invalidateResource(client, resource.id);
+      if (versionedEdit) {
+        const fresh = await record.refetch({ throwOnError: true });
+        setEditRecord(fresh.data?.record);
+      }
+    }}/>
 }
 
 function MainLayout({ schema, user, onLogout, navigate, route, children, themeMode, toggleTheme }: {
@@ -1036,13 +1055,13 @@ function AdminApp() {
         <p>This resource is not available to your account.</p></div>;
       if (segments.length === 2) return <ResourceRoute key={resource.id + ":list"} schema={data} resource={resource} mode="list" navigate={navigate}/>;
       if (segments[2] === "new" && segments.length === 3 && resource.capabilities.create) return <ResourceRoute schema={data} resource={resource} mode="create" navigate={navigate} notify={setNotice}/>;
-      if (segments.length === 4 && segments[3] === "edit" && resource.capabilities.edit) return <ResourceRoute key={segments[2] + ":edit"} schema={data} resource={resource} mode="edit" id={segments[2]} navigate={navigate} notify={setNotice}/>;
+      if (segments.length === 4 && segments[3] === "edit" && resource.capabilities.edit) return <ResourceRoute key={resource.id + ":" + segments[2] + ":edit"} schema={data} resource={resource} mode="edit" id={segments[2]} navigate={navigate} notify={setNotice}/>;
       if (segments.length === 5 && segments[3] === "actions") {
         const action = resource.actions.find((a) => a.name === segments[4] && a.component);
         if (action) return <ActionView key={`${segments[2]}-${action.name}`} resource={resource} schema={data}
           id={segments[2]} action={action} navigate={navigate}/>;
       }
-      if (segments.length === 3 && resource.capabilities.show) return <ResourceRoute key={segments[2] + ":show"} schema={data} resource={resource} mode="show" id={segments[2]} navigate={navigate}/>;
+      if (segments.length === 3 && resource.capabilities.show) return <ResourceRoute key={resource.id + ":" + segments[2] + ":show"} schema={data} resource={resource} mode="show" id={segments[2]} navigate={navigate}/>;
     }
     if (segments[0] === "pages") {
       const page = data.pages.find((p) => p.name === segments[1]);

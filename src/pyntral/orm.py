@@ -227,7 +227,7 @@ class MapperAdapter:
     def writable(self, name: str) -> bool:
         col = self.columns[name]
         opt = self._field(name)
-        return self.visible(name) and name != self.pk_name and not (opt and opt.readonly) and (
+        return self.visible(name) and name not in (self.pk_name, self.resource.version_field) and not (opt and opt.readonly) and (
             not col.computed and not col.identity and column_kind(col) != "binary"
         )
 

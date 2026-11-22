@@ -290,10 +290,12 @@ remain a database uniqueness violation (HTTP 409). The email field also uses
 
 Opt in with `Resource(..., version_field="version")` and a SQLAlchemy integer
 column mapped as `__mapper_args__ = {"version_id_col": version}`. Pyntral
-validates this configuration at registration. PATCH and DELETE require an
-`If-Match: <version>` header; missing headers get 428, stale versions get 412.
-SQLAlchemy's versioned UPDATE/DELETE rejects a concurrent commit with 409.
-The bundled React editor automatically sends the version it originally loaded.
+validates this configuration at registration and manages the version column.
+Keep the version readable in list and detail views if the bundled UI needs to
+update or delete records. PATCH and DELETE require `If-Match: <version>`.
+Missing headers get 428, stale versions and concurrent ORM writes get 412.
+The editor keeps the version that the draft was based on across background
+refreshes and preserves unsaved input when a save conflicts.
 Do not implement version checks using an unguarded integer read/compare alone.
 
 ## Layout sections
