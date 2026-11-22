@@ -40,3 +40,13 @@ See [release readiness](docs/deployment.md#release-readiness) for verification r
 - Add reusable accessible Checkbox, CheckboxGroup, Switch, RadioGroup and ToggleGroup controls, a compact table Columns panel and unified bulk-selection checkboxes.
 
 - Add public accessible `SortableList` drag handles; use in table Columns and the Shop component playground.
+
+
+
+### Beta fixes
+
+- Preserve the original edit version across realtime refreshes and manage version columns on the server.
+- Apply contextual read and select policies to searches, exports, and relation pickers.
+- Apply one create transaction to standard and related records, including scope, hooks, validation, and auditing.
+- Retry storage cleanup after attachment or owner deletion.
+- Preserve timestamp field policies, mask password inputs, and release slots when queued jobs are cancelled.

@@ -555,11 +555,14 @@ class MapperAdapter:
             serialized.append(self.serialize(row, fields))
         return {"items": serialized, "total": total, "offset": offset, "limit": limit}
 
-    async def get(self, session: Any, identifier: str, principal: Principal) -> Any:
+    async def get(self, session: Any, identifier: str, principal: Principal, *,
+                  lock: bool | None = None) -> Any:
         stmt = await self._scope(
             select(self.resource.model).where(getattr(self.resource.model, self.pk_name) == self.pk_value(identifier)),
             principal,
         )
+        if lock is not None:
+            stmt = stmt.with_for_update(read=not lock, of=self.resource.model)
         result = await maybe_await(session.execute(stmt))
         record = result.scalar_one_or_none()
         if record is None:

@@ -132,7 +132,7 @@ an "Other details" fallback, so adding a model column does not hide it.
 ### Composable features
 
 **Security → Demo staff:** Create a demo staff record with a username and a
-password. `PasswordFeature` hashes the password into the hidden column; the
+password in the masked field. `PasswordFeature` hashes it into the hidden column; the
 write-only input and resulting hash never appear in list/show responses.
 On the record page use Archive, then Restore to exercise `SoftDeleteFeature`.
 Hard deletion is disabled. These are demonstration accounts, not identities
@@ -151,13 +151,16 @@ Existing local SQLite databases are migrated without dropping user records.
 Audit entries** to see an audit row containing the resource name, record ID,
 administrator ID, operation and changed field names. No previous/new values
 are stored. Audit rows are inserted in the same database transaction as the
-normal mapped CRUD operation. Actions and M:N mutations have separate
-semantics and are not automatically audited by this feature.
+normal mapped CRUD operation, including a target created through a relation.
+Custom Actions and changes to links between existing records are outside CRUD
+auditing.
 
 ### Authenticated attachments (Local/S3/MinIO)
 
 **Commerce → Editorial Drafts → a draft → Attachments:** Select a file and
-upload it; download via the protected API link or delete it. Users without
+upload it; download via the protected API link or delete it. To verify owner
+cleanup, attach a file to a disposable draft and hard-delete that draft. Its
+attachment link stops working after the record is deleted. Users without
 write permission cannot upload/delete. The Shop uses `LocalStorage` under
 `.pyntral/uploads/` by default and enforces a 2 MB request limit. This is a
 private demonstration directory: do not put it under a public static server.

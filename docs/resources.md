@@ -362,7 +362,8 @@ Create the table with `AuditBase.metadata.create_all(engine)` during local
 demo setup; production projects should use an Alembic migration instead.
 Register `Resource(AuditEntry, allow_create=False, allow_edit=False,
 allow_delete=False)` to inspect the audit trail from a secured admin view.
-Arbitrary custom Actions and M:N operations are not part of this CRUD hook.
+Creating a new record through M:N is audited as a create. Custom Actions and
+changes to links between existing records are outside CRUD auditing.
 
 ## Secure resource uploads
 
@@ -390,9 +391,17 @@ admin.add_resource(Resource(Article, features=[UploadFeature(max_bytes=5_000_000
 ```
 
 S3 credentials come from boto3's standard environment/credentials chain;
-never embed them in frontend JSON schemas. A file deletion is not a transaction
-across the object store and SQL database; applications requiring coordinated
-cleanup should use a durable outbox.
+never embed them in frontend JSON schemas. Deleting an attachment or hard
+deleting its owner through Pyntral makes the attachment inaccessible in the SQL
+transaction. The admin lifespan deletes the detached storage objects and retries
+failures. Custom storage adapters must make deletion idempotent. Run the ASGI
+lifespan on at least one instance with the appropriate storage configuration.
+
+The cleanup mechanism uses the existing table. On upgrade, reconcile
+attachments orphaned by earlier releases and any legacy rows whose owner IDs
+differ from the canonical primary keys. Only restore verified owner links.
+Host application code that deletes records outside Pyntral must handle its own
+attachment cleanup.
 
 ## Offline schema reference generation
 

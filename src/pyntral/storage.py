@@ -17,6 +17,11 @@ from sqlalchemy import Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
+# An empty owner ID cannot be addressed by an upload route. Pending entries retain
+# their resource so an admin only cleans up objects belonging to its own resources.
+_PENDING_DELETE_RECORD = ""
+
+
 class UploadBase(DeclarativeBase):
     pass
 
@@ -35,7 +40,9 @@ class UploadEntry(UploadBase):
 class StorageBackend(Protocol):
     async def put(self, key: str, content: bytes, mime_type: str) -> None: ...
     async def get(self, key: str) -> bytes: ...
-    async def delete(self, key: str) -> None: ...
+    async def delete(self, key: str) -> None:
+        """Delete an object idempotently, including when it is already absent."""
+        ...
 
 
 @dataclass(slots=True)
@@ -99,12 +106,19 @@ class S3Storage:
         return self.prefix + key
 
     async def put(self, key: str, content: bytes, mime_type: str) -> None:
-        await asyncio.to_thread(self._client().put_object, Bucket=self.bucket,
-                                Key=self._key(key), Body=content, ContentType=mime_type)
+        def store():
+            self._client().put_object(Bucket=self.bucket, Key=self._key(key), Body=content, ContentType=mime_type)
+        await asyncio.to_thread(store)
 
     async def get(self, key: str) -> bytes:
         def fetch():
-            obj = self._client().get_object(Bucket=self.bucket, Key=self._key(key))
+            from botocore.exceptions import ClientError
+            try:
+                obj = self._client().get_object(Bucket=self.bucket, Key=self._key(key))
+            except ClientError as exc:
+                if exc.response.get("Error", {}).get("Code") in ("NoSuchKey", "NotFound", "404"):
+                    raise FileNotFoundError from exc
+                raise
             try:
                 return obj["Body"].read()
             finally:
@@ -112,7 +126,9 @@ class S3Storage:
         return await asyncio.to_thread(fetch)
 
     async def delete(self, key: str) -> None:
-        await asyncio.to_thread(self._client().delete_object, Bucket=self.bucket, Key=self._key(key))
+        def remove():
+            self._client().delete_object(Bucket=self.bucket, Key=self._key(key))
+        await asyncio.to_thread(remove)
 
 
 def safe_upload_name(value: str) -> str:

@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
-from sqlalchemy import inspect as sa_inspect, select
+from sqlalchemy import delete, inspect as sa_inspect, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -35,7 +35,7 @@ from .hooks import OperationContext
 from .realtime import RealtimeNotifier
 from .jobs import JobManager
 from .validation import validate_payload
-from .storage import StorageBackend, UploadEntry, safe_upload_name, normalize_mime
+from .storage import _PENDING_DELETE_RECORD, StorageBackend, UploadEntry, safe_upload_name, normalize_mime
 from .bridge import Bridge, BridgeContext
 from .logging import (LoggingConfig, configure_logging, emit as emit_log, request_id_var)
 from pydantic import ValidationError
@@ -86,6 +86,7 @@ class Admin:
             raise ValueError("An authentication backend is required")
         self.session_factory = session_factory
         self.storage = storage
+        self._upload_cleanup_wakeup: asyncio.Event | None = None
         if re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", default_locale) is None:
             raise ValueError("default_locale must be a BCP47-like language tag")
         self.default_locale = default_locale
@@ -118,9 +119,17 @@ class Admin:
             async with previous_lifespan(host_app):
                 if auto_start_events:
                     await event_transport.start()
+                cleanup = None
+                if self.storage is not None and any(adapter.resource._uploads_enabled for adapter in self.resources.values()):
+                    self._upload_cleanup_wakeup = asyncio.Event()
+                    cleanup = asyncio.create_task(self._upload_cleanup_loop(self._upload_cleanup_wakeup))
                 try:
                     yield
                 finally:
+                    if cleanup is not None:
+                        self._upload_cleanup_wakeup = None
+                        cleanup.cancel()
+                        await asyncio.gather(cleanup, return_exceptions=True)
                     await self.jobs.close()
                     if auto_start_events:
                         await event_transport.close()
@@ -189,6 +198,69 @@ class Admin:
             # Even a custom bus must not corrupt the result of an already committed write.
             self.log_event("events", "events.dispatch_failed", level="ERROR",
                            event_type=event.type)
+
+    @staticmethod
+    async def _begin_upload_transaction(session: Any, *, write: bool) -> None:
+        # SQLite ignores FOR UPDATE. Start a write transaction before reading the
+        # owner for attachment mutations, or pin a consistent snapshot for reads.
+        if session.get_bind().dialect.name == "sqlite":
+            connection = await maybe_await(session.connection())
+            sync_connection = getattr(connection, "sync_connection", connection)
+            if not sync_connection.connection.driver_connection.in_transaction:
+                await maybe_await(connection.exec_driver_sql("BEGIN IMMEDIATE" if write else "BEGIN"))
+
+    async def _upload_cleanup_loop(self, wakeup: asyncio.Event) -> None:
+        while True:
+            wakeup.clear()
+            try:
+                await self._cleanup_uploads()
+            except SQLAlchemyError:
+                self.log_event("resource", "upload.cleanup_database_failed", level="ERROR")
+            try:
+                await asyncio.wait_for(wakeup.wait(), timeout=60)
+            except TimeoutError:
+                pass
+
+    async def _cleanup_uploads(self) -> None:
+        storage = self.storage
+        if storage is None:
+            return
+        resources = [name for name, adapter in self.resources.items() if adapter.resource._uploads_enabled]
+        pending = (UploadEntry.record_id == _PENDING_DELETE_RECORD) & UploadEntry.resource.in_(resources)
+        cursor = ""
+        while True:
+            session = self.session_factory()
+            try:
+                entries = (await maybe_await(session.execute(
+                    select(UploadEntry.id, UploadEntry.object_key).where(pending, UploadEntry.id > cursor)
+                    .order_by(UploadEntry.id).limit(100)
+                ))).all()
+            finally:
+                await maybe_await(session.close())
+            if not entries:
+                return
+            cursor = entries[-1].id
+            completed = []
+            for upload_id, key in entries:
+                try:
+                    await storage.delete(key)
+                except FileNotFoundError:
+                    pass
+                except Exception:
+                    self.log_event("resource", "upload.cleanup_failed", level="ERROR", upload_id=upload_id)
+                    continue
+                completed.append(upload_id)
+            if completed:
+                session = self.session_factory()
+                try:
+                    await maybe_await(session.execute(delete(UploadEntry).where(pending, UploadEntry.id.in_(completed))))
+                    await maybe_await(session.commit())
+                finally:
+                    await maybe_await(session.close())
+
+    def _request_upload_cleanup(self) -> None:
+        if self._upload_cleanup_wakeup is not None:
+            self._upload_cleanup_wakeup.set()
 
     async def _run_hooks(self, adapter: MapperAdapter, phase: str, ctx: OperationContext) -> None:
         for hook in adapter.resource.hooks:
@@ -834,12 +906,13 @@ class Admin:
                 await maybe_await(session.close())
 
         async def _upload_owner(name: str, identifier: str, principal: Principal,
-                                session: Any, *, edit: bool = False) -> tuple[MapperAdapter, Any]:
+                                session: Any, *, edit: bool = False,
+                                lock: bool | None = None) -> tuple[MapperAdapter, Any]:
             adapter = self._adapter(name)
             if not adapter.resource._uploads_enabled or self.storage is None:
                 raise AdminError(404, "Uploads not enabled for this resource", "not_found")
             await self._authorize(principal, name, "edit" if edit else "show")
-            record = await adapter.get(session, identifier, principal)
+            record = await adapter.get(session, identifier, principal, lock=lock)
             await self._authorize(principal, name, "edit" if edit else "show", record)
             return adapter, record
 
@@ -848,9 +921,11 @@ class Admin:
                                principal: Principal = Depends(self._principal)) -> dict:
             session = self.session_factory()
             try:
-                await _upload_owner(name, identifier, principal, session)
+                await self._begin_upload_transaction(session, write=False)
+                adapter, record = await _upload_owner(name, identifier, principal, session, lock=False)
+                record_id = str(getattr(record, adapter.pk_name))
                 rows = (await maybe_await(session.execute(select(UploadEntry).where(
-                    UploadEntry.resource == name, UploadEntry.record_id == identifier
+                    UploadEntry.resource == name, UploadEntry.record_id == record_id
                 ).order_by(UploadEntry.id).limit(100)))).scalars().all()
                 return {"items": [{"id": row.id, "filename": row.filename,
                                    "content_type": row.content_type, "size_bytes": row.size_bytes}
@@ -864,7 +939,8 @@ class Admin:
             self._csrf(request)
             session = self.session_factory()
             try:
-                adapter, _record = await _upload_owner(name, identifier, principal, session, edit=True)
+                adapter, _ = await _upload_owner(name, identifier, principal, session, edit=True)
+                await maybe_await(session.rollback())
                 from urllib.parse import unquote
                 filename = safe_upload_name(unquote(request.headers.get("X-Filename", "attachment")))
                 try:
@@ -879,26 +955,45 @@ class Admin:
                 if not content:
                     raise AdminError(422, "Upload must not be empty", "validation_error")
                 key = uuid.uuid4().hex
-                await self.storage.put(key, bytes(content), mime)
-                entry = UploadEntry(resource=name, record_id=identifier, object_key=key,
-                                    filename=filename, content_type=mime, size_bytes=len(content))
+                upload_id = str(uuid.uuid4())
                 try:
-                    session.add(entry)
+                    await self.storage.put(key, bytes(content), mime)
+                    await self._begin_upload_transaction(session, write=True)
+                    _, record = await _upload_owner(name, identifier, principal, session, edit=True, lock=True)
+                    record_id = str(getattr(record, adapter.pk_name))
+                    session.add(UploadEntry(
+                        id=upload_id, resource=name, record_id=record_id, object_key=key,
+                        filename=filename, content_type=mime, size_bytes=len(content),
+                    ))
                     await adapter._commit(session)
                 except Exception:
-                    await self.storage.delete(key)
+                    await maybe_await(session.rollback())
+                    try:
+                        await self.storage.delete(key)
+                    except Exception:
+                        self.log_event("resource", "upload.compensation_failed", level="ERROR", upload_id=upload_id)
                     raise
-                return {"id": entry.id, "filename": filename, "size_bytes": len(content)}
+                return {"id": upload_id, "filename": filename, "size_bytes": len(content)}
             finally:
                 await maybe_await(session.close())
 
         async def _get_upload(upload_id: str, principal: Principal, session: Any,
                               *, edit: bool = False) -> UploadEntry:
+            await self._begin_upload_transaction(session, write=edit)
             entry = await maybe_await(session.get(UploadEntry, upload_id))
-            if entry is None:
+            if entry is None or entry.record_id == _PENDING_DELETE_RECORD:
                 raise AdminError(404, "Upload not found", "not_found")
-            await _upload_owner(entry.resource, entry.record_id, principal, session, edit=edit)
-            return entry
+            adapter, owner = await _upload_owner(entry.resource, entry.record_id, principal, session,
+                                                  edit=edit, lock=edit)
+            # A resource could have been deleted while waiting on its row lock.
+            # Reload the entry while holding the lock and reject legacy noncanonical links.
+            live = (await maybe_await(session.execute(select(UploadEntry).where(
+                UploadEntry.id == upload_id, UploadEntry.resource == adapter.resource.name,
+                UploadEntry.record_id == str(getattr(owner, adapter.pk_name)),
+            )))).scalar_one_or_none()
+            if live is None:
+                raise AdminError(404, "Upload not found", "not_found")
+            return live
 
         @api.get("/api/uploads/{upload_id}")
         async def download_resource_file(upload_id: str,
@@ -906,18 +1001,18 @@ class Admin:
             session = self.session_factory()
             try:
                 entry = await _get_upload(upload_id, principal, session)
-                try:
-                    content = await self.storage.get(entry.object_key)
-                except FileNotFoundError:
-                    raise AdminError(404, "Stored object missing", "not_found") from None
-                from urllib.parse import quote
-                encoded_name = quote(entry.filename, safe="")
-                return Response(content, media_type="application/octet-stream", headers={
-                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_name}",
-                    "Content-Security-Policy": "default-src 'none'",
-                })
+                key, filename = entry.object_key, entry.filename
             finally:
                 await maybe_await(session.close())
+            try:
+                content = await self.storage.get(key)
+            except FileNotFoundError:
+                raise AdminError(404, "Stored object missing", "not_found") from None
+            from urllib.parse import quote
+            return Response(content, media_type="application/octet-stream", headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename, safe='')}",
+                "Content-Security-Policy": "default-src 'none'",
+            })
 
         @api.delete("/api/uploads/{upload_id}")
         async def delete_resource_file(upload_id: str, request: Request,
@@ -926,9 +1021,10 @@ class Admin:
             session = self.session_factory()
             try:
                 entry = await _get_upload(upload_id, principal, session, edit=True)
-                await self.storage.delete(entry.object_key)
-                await maybe_await(session.delete(entry))
-                await maybe_await(session.commit())
+                adapter = self._adapter(entry.resource)
+                entry.record_id = _PENDING_DELETE_RECORD
+                await adapter._commit(session)
+                self._request_upload_cleanup()
                 return {"ok": True}
             finally:
                 await maybe_await(session.close())
@@ -1270,12 +1366,23 @@ class Admin:
             session = self.session_factory()
             try:
                 adapter = self._adapter(name)
-                record = await adapter.get(session, identifier, principal)
+                has_uploads = adapter.resource._uploads_enabled
+                if has_uploads:
+                    await self._begin_upload_transaction(session, write=True)
+                record = await adapter.get(session, identifier, principal, lock=True if has_uploads else None)
                 await self._authorize(principal, name, "delete", record)
                 self._require_version(adapter, record, request)
                 ctx = OperationContext("delete", name, principal, session, record=record)
                 await self._run_hooks(adapter, "before_delete", ctx)
+                if has_uploads:
+                    async with adapter._transaction_errors(session):
+                        await maybe_await(session.execute(update(UploadEntry).where(
+                            UploadEntry.resource == name,
+                            UploadEntry.record_id == str(getattr(record, adapter.pk_name)),
+                        ).values(record_id=_PENDING_DELETE_RECORD)))
                 await adapter.delete(session, record, principal)
+                if has_uploads:
+                    self._request_upload_cleanup()
                 await self._run_hooks(adapter, "after_delete", ctx)
                 self.log_event("resource", "resource.deleted", principal=principal, resource=name,
                                record_id=identifier)
