@@ -45,3 +45,31 @@ def test_virtual_fields_are_guarded_and_not_returned_when_write_only():
         with sf() as session: assert session.get(Article,id).secret=="changed"
         assert c.patch(f"/admin/api/resources/articles/{id}",headers=h,json={"summary":"write"}).status_code in (403,422)
     engine.dispose()
+
+
+def test_failed_update_representation_rolls_back():
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(engine)
+    app = FastAPI()
+    admin = Admin(app, session_factory=sessions,
+                  auth=CallbackAuth(lambda *_: Principal(id="u", username="u")),
+                  secret_key="s" * 64, secure_cookie=False)
+
+    def display_title(row):
+        if row.title == "Invalid for display":
+            raise RuntimeError("Fixture formatting error")
+        return row.title
+
+    admin.add_resource(Resource(Article, virtual_fields={"display": VirtualField(getter=display_title)}))
+    with sessions() as db:
+        db.add(Article(title="Original"))
+        db.commit()
+    with TestClient(app, raise_server_exceptions=False) as client:
+        login = client.post("/admin/auth/login", json={"username":"u","password":"fixture"})
+        result = client.patch("/admin/api/resources/articles/1", json={"title":"Invalid for display"},
+                              headers={"X-CSRF-Token": login.json()["csrf"]})
+        assert result.status_code == 500
+        with sessions() as db:
+            assert db.get(Article, 1).title == "Original"
+    engine.dispose()

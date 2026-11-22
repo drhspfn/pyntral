@@ -71,6 +71,8 @@ class Admin:
         logging_config: LoggingConfig | None = None,
         event_bus: EventTransport | None = None,
         auto_start_events: bool = True,
+        event_publish_timeout: float = 2.0,
+        max_json_bytes: int = 1024 * 1024,
         storage: StorageBackend | None = None,
         default_locale: str = "en",
         translations: dict[str, dict[str, str]] | None = None,
@@ -84,6 +86,12 @@ class Admin:
             raise ValueError("path must look like /admin (no trailing slash)")
         if auth is None:
             raise ValueError("An authentication backend is required")
+        if not 0 < event_publish_timeout <= 60:
+            raise ValueError("event_publish_timeout must be greater than zero and at most 60 seconds")
+        if type(max_json_bytes) is not int or max_json_bytes < 1:
+            raise ValueError("max_json_bytes must be a positive integer")
+        self.event_publish_timeout = event_publish_timeout
+        self.max_json_bytes = max_json_bytes
         self.session_factory = session_factory
         self.storage = storage
         self._upload_cleanup_wakeup: asyncio.Event | None = None
@@ -116,7 +124,7 @@ class Admin:
 
         @asynccontextmanager
         async def admin_events_lifespan(host_app: FastAPI):
-            async with previous_lifespan(host_app):
+            async with previous_lifespan(host_app) as host_state:
                 if auto_start_events:
                     await event_transport.start()
                 cleanup = None
@@ -124,7 +132,7 @@ class Admin:
                     self._upload_cleanup_wakeup = asyncio.Event()
                     cleanup = asyncio.create_task(self._upload_cleanup_loop(self._upload_cleanup_wakeup))
                 try:
-                    yield
+                    yield host_state
                 finally:
                     if cleanup is not None:
                         self._upload_cleanup_wakeup = None
@@ -186,7 +194,8 @@ class Admin:
     async def _publish(self, event: AdminEvent) -> None:
         """Dispatch after success without turning a committed write into a 500."""
         try:
-            report = await self.events.publish(event)
+            async with asyncio.timeout(self.event_publish_timeout):
+                report = await self.events.publish(event)
             self.log_event("events", "events.published", level="DEBUG",
                            event_type=event.type, event_id=event.event_id,
                            resource=event.resource, correlation_id=event.correlation_id,
@@ -194,6 +203,8 @@ class Admin:
             if report.failed:
                 self.log_event("events", "events.subscriber_failed", level="ERROR",
                                event_type=event.type, failed=report.failed)
+        except TimeoutError:
+            self.log_event("events", "events.publish_timed_out", level="ERROR", event_type=event.type)
         except Exception:
             # Even a custom bus must not corrupt the result of an already committed write.
             self.log_event("events", "events.dispatch_failed", level="ERROR",
@@ -490,21 +501,25 @@ class Admin:
         fields = await self._allowed_fields(principal, name, view="show", record=record)
         result = adapter.serialize(record, fields)
         await adapter._commit(session)
-        if any(hook.after_create is not None for hook in adapter.resource.hooks):
-            ctx.record = record
-            try:
-                if sa_inspect(record).expired:
-                    await maybe_await(session.refresh(record))
-            except SQLAlchemyError:
-                self.log_event("resource", "resource.after_hook_refresh_failed", level="ERROR", resource=name)
-            else:
-                await self._run_hooks(adapter, "after_create", ctx)
+        ctx.record = record
+        await self._after_write(adapter, "after_create", ctx)
         self.log_event("resource", "resource.created", principal=principal, resource=name, record_id=record_id)
         await self._publish(ResourceCreated(
             resource=name, record_id=identifier, actor_id=str(principal.id),
             fields=field_refs(adapter, payload), **event_context(),
         ))
         return result
+
+    async def _after_write(self, adapter: MapperAdapter, phase: str, ctx: OperationContext) -> None:
+        if not any(getattr(hook, phase) is not None for hook in adapter.resource.hooks):
+            return
+        try:
+            if sa_inspect(ctx.record).expired:
+                await maybe_await(ctx.session.refresh(ctx.record))
+        except SQLAlchemyError:
+            self.log_event("resource", "resource.after_hook_refresh_failed", level="ERROR", resource=ctx.resource)
+        else:
+            await self._run_hooks(adapter, phase, ctx)
 
     async def _visible_actions(self, principal: Principal, name: str, record: Any) -> list[str]:
         adapter = self._adapter(name)
@@ -650,12 +665,7 @@ class Admin:
                 parsed = urlparse(origin)
                 if parsed.netloc != request.url.netloc or parsed.scheme != request.url.scheme:
                     raise AdminError(403, "Cross-origin login rejected", "forbidden")
-            try:
-                payload = await request.json()
-            except ValueError:
-                raise AdminError(422, "Expected JSON", "validation_error") from None
-            if not isinstance(payload, dict):
-                raise AdminError(422, "Expected JSON object", "validation_error")
+            payload = await self._body(request)
             username, password = payload.get("username"), payload.get("password")
             if not isinstance(username, str) or not isinstance(password, str) or len(username) > 320 or len(password) > 4096:
                 raise AdminError(422, "Invalid credentials format", "validation_error")
@@ -950,9 +960,9 @@ class Admin:
                     raise AdminError(422, "Invalid content type", "validation_error") from None
                 content = bytearray()
                 async for chunk in request.stream():
-                    content.extend(chunk)
-                    if len(content) > adapter.resource._upload_max_bytes:
+                    if len(content) + len(chunk) > adapter.resource._upload_max_bytes:
                         raise AdminError(413, "Upload exceeds configured size limit", "upload_too_large")
+                    content.extend(chunk)
                 if not content:
                     raise AdminError(422, "Upload must not be empty", "validation_error")
                 key = uuid.uuid4().hex
@@ -1205,9 +1215,7 @@ class Admin:
             if job is None:
                 raise AdminError(404, "Job action not found", "not_found")
             await self._authorize(principal, name, "action:" + job_name)
-            payload = await self._body(request)
-            if len(json.dumps(payload)) > 8192:
-                raise AdminError(413, "Job input too large", "request_too_large")
+            payload = await self._body(request, max_bytes=8192)
             try:
                 record = self.jobs.submit(job, resource=name, principal=principal,
                                           payload=payload, session_factory=self.session_factory)
@@ -1339,21 +1347,22 @@ class Admin:
                 if set(ctx.payload) - write_fields:
                     raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
                 await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
-                before = {field_name: getattr(record, field_name) for field_name in ctx.payload
-                          if field_name in adapter.columns}
-                result = await adapter.update(session, record, ctx.payload, principal)
-                await self._run_hooks(adapter, "after_update", ctx)
-                changed = [field_name for field_name, old in before.items()
-                           if old != getattr(record, field_name)]
+                changed = await adapter._stage_update(session, record, ctx.payload, principal)
+                async with adapter._transaction_errors(session):
+                    await maybe_await(session.flush())
+                await maybe_await(session.refresh(record))
                 read_fields = await self._allowed_fields(principal, name, view="show", record=record)
+                result = adapter.serialize(record, read_fields)
+                await adapter._commit(session)
+                await self._after_write(adapter, "after_update", ctx)
                 self.log_event("resource", "resource.updated", principal=principal, resource=name,
                                record_id=identifier)
                 if changed:
                     await self._publish(ResourceUpdated(
                         resource=name, record_id=identifier, actor_id=str(principal.id),
-                        fields=field_refs(adapter, changed), **event_context(),
+                        fields=field_refs(adapter, sorted(changed)), **event_context(),
                     ))
-                return {"record": {k: v for k, v in result.items() if k in read_fields}}
+                return {"record": result}
             finally:
                 await maybe_await(session.close())
 
@@ -1588,10 +1597,15 @@ class Admin:
         async def spa_root() -> Any:
             return await spa("")
 
-    @staticmethod
-    async def _body(request: Request) -> dict:
+    async def _body(self, request: Request, *, max_bytes: int | None = None) -> dict:
+        limit = self.max_json_bytes if max_bytes is None else min(self.max_json_bytes, max_bytes)
+        content = bytearray()
+        async for chunk in request.stream():
+            if len(content) + len(chunk) > limit:
+                raise AdminError(413, "JSON input too large", "request_too_large")
+            content.extend(chunk)
         try:
-            body = await request.json()
+            body = json.loads(content)
         except ValueError:
             raise AdminError(422, "Expected JSON", "validation_error") from None
         if not isinstance(body, dict):

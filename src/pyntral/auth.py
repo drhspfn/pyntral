@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
 from sqlalchemy import inspect as sa_inspect, select
+from starlette.concurrency import run_in_threadpool
 
 
 @dataclass(slots=True)
@@ -147,7 +148,9 @@ class LocalAuth(AuthBackend):
         return cls(username, password_hash)
 
     async def login(self, username: str, password: str) -> Principal | None:
-        if hmac.compare_digest(self.username, username) and verify_password(password, self.password_hash):
+        if hmac.compare_digest(self.username.encode("utf-8"), username.encode("utf-8")) and await run_in_threadpool(
+            verify_password, password, self.password_hash,
+        ):
             return Principal(id=username, username=username, roles=list(self.roles))
         return None
 
@@ -211,7 +214,7 @@ class ModelAuth(AuthBackend):
 
     async def login(self, username: str, password: str) -> Principal | None:
         account = await self._fetch(getattr(self.model, self.username_field) == username)
-        if account and verify_password(password, getattr(account, self.password_field)):
+        if account and await run_in_threadpool(verify_password, password, getattr(account, self.password_field)):
             return self._principal(account)
         return None
 

@@ -8,7 +8,7 @@ import types
 from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from pyntral import LoggingConfig, ResourceUpdated
@@ -242,7 +242,7 @@ def test_parent_custom_lifespan_is_preserved():
     async def host_lifespan(app):
         timeline.append('host.start')
         try:
-            yield
+            yield {"host_ready": True}
         finally:
             timeline.append('host.close')
 
@@ -251,10 +251,15 @@ def test_parent_custom_lifespan_is_preserved():
         async def close(self): timeline.append('bus.close')
 
     app = FastAPI(lifespan=host_lifespan)
+    @app.get("/host")
+    async def host(request: Request):
+        return {"ready": request.state.host_ready}
+
     Admin(app, session_factory=lambda: None,
           auth=LocalAuth('admin', hash_password('password123')),
           secret_key='x' * 64, event_bus=Bus(), secure_cookie=False)
-    with TestClient(app):
+    with TestClient(app) as client:
+        assert client.get("/host").json() == {"ready": True}
         assert timeline == ['host.start', 'bus.start']
     assert timeline == ['host.start', 'bus.start', 'bus.close', 'host.close']
 
@@ -313,3 +318,21 @@ def test_event_transport_start_failure_still_closes_host_lifespan():
         with TestClient(app):
             pass
     assert timeline == ['host.start', 'bus.start', 'host.close']
+
+
+def test_kafka_close_releases_clients_after_task_failure():
+    from unittest.mock import AsyncMock
+
+    async def check():
+        bus = KafkaEventBus("fixture")
+        consumer = bus._consumer = SimpleNamespace(stop=AsyncMock())
+        producer = bus._producer = SimpleNamespace(stop=AsyncMock())
+        async def failed():
+            raise RuntimeError("simulated consumer failure")
+        bus._task = asyncio.create_task(failed())
+        await asyncio.sleep(0)
+        await bus.close()
+        consumer.stop.assert_awaited_once()
+        producer.stop.assert_awaited_once()
+
+    asyncio.run(check())

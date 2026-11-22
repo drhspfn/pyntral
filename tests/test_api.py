@@ -241,3 +241,14 @@ def test_served_spa_and_unknown_assets(db, tmp_path):
     assert client.get("/admin/assets/app.js").status_code == 200
     assert client.get("/admin/assets/not-found.js").status_code == 404
     assert client.get("/admin/favicon.svg").status_code == 404
+
+
+def test_unicode_local_auth_and_streaming_json_limit():
+    app = FastAPI()
+    Admin(app, session_factory=lambda: None, auth=LocalAuth("André", hash_password("sample")),
+          secret_key="x" * 64, secure_cookie=False, max_json_bytes=96)
+    with TestClient(app) as client:
+        assert client.post("/admin/auth/login", json={"username": "André", "password": "sample"}).status_code == 200
+        chunks = iter((b'{"username":"demo","password":"', b'x' * 128, b'"}'))
+        rejected = client.post("/admin/auth/login", content=chunks)
+        assert rejected.status_code == 413

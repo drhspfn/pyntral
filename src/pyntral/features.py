@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy import inspect
+from starlette.concurrency import run_in_threadpool
 
 from .auth import hash_password, maybe_await
 from .resources import Action, Field
@@ -44,11 +45,11 @@ class PasswordFeature:
         minimum = self.minimum_length
         storage = self.storage_field
 
-        def set_password(record: Any, raw: Any) -> None:
+        async def set_password(record: Any, raw: Any) -> None:
             if not isinstance(raw, str) or len(raw) < minimum:
                 from .orm import AdminError
                 raise AdminError(422, "Password does not meet minimum length", "validation_error")
-            setattr(record, storage, hash_password(raw))
+            setattr(record, storage, await run_in_threadpool(hash_password, raw))
 
         resource.virtual_fields[self.input_field] = VirtualField(
             kind="string", label="Set password", setter=set_password, required=True, widget="password",

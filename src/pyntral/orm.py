@@ -607,8 +607,8 @@ class MapperAdapter:
         await maybe_await(session.refresh(record))
         return self.serialize(record)
 
-    async def update(self, session: Any, record: Any, payload: dict[str, Any],
-                     principal: Principal | None = None) -> dict[str, Any]:
+    async def _stage_update(self, session: Any, record: Any, payload: dict[str, Any],
+                            principal: Principal | None) -> set[str]:
         for name, value in self.parsed_payload(payload, create=False).items():
             if name in self.resource.virtual_fields:
                 await maybe_await(self.resource.virtual_fields[name].setter(record, value))
@@ -617,9 +617,18 @@ class MapperAdapter:
         for key, factory in self.resource._server_onupdate.items():
             setattr(record, key, factory())
         await self._audit(session, record, "update", principal, list(payload))
-        await self._commit(session)
+        state = inspect(record)
+        return {name for name in self.columns if state.attrs[name].history.has_changes()}
+
+    async def update(self, session: Any, record: Any, payload: dict[str, Any],
+                     principal: Principal | None = None) -> dict[str, Any]:
+        await self._stage_update(session, record, payload, principal)
+        async with self._transaction_errors(session):
+            await maybe_await(session.flush())
         await maybe_await(session.refresh(record))
-        return self.serialize(record)
+        result = self.serialize(record)
+        await self._commit(session)
+        return result
 
     async def delete(self, session: Any, record: Any,
                      principal: Principal | None = None) -> None:
