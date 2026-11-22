@@ -388,15 +388,23 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
           </div>)}</div>
         <button className="link-btn" onClick={() => setFilters({})}>{t("table.clear_filters", "Clear filters")}</button>
         <div className="ra-filter-presets">
-          <label>Saved filters <select aria-label="Load saved filters" value="" onChange={event => {
-            const saved = preferences.presets[event.target.value];
-            if (saved) { setFilters(saved as FilterValues); setOffset(0); }
-          }}><option value="">Choose preset…</option>
-            {Object.keys(preferences.presets).map(name => <option key={name} value={name}>{name}</option>)}
-          </select></label>
-          <input aria-label="Preset name" placeholder="Preset name" value={presetName}
-            onChange={event => setPresetName(event.target.value)} maxLength={30}/>
-          <button type="button" className="btn subtle" disabled={!presetName.trim() || Object.keys(preferences.presets).length >= 10}
+          <div className="ra-filter-preset-select">
+            <span className="ra-filter-preset-label">Saved filters</span>
+            <Select<string> ariaLabel="Load saved filters" searchable clearable
+              placeholder="Choose preset…" value={null}
+              onChange={(value) => {
+                if (typeof value !== "string") return;
+                const saved = preferences.presets[value];
+                if (saved) { setFilters(saved as FilterValues); setOffset(0); }
+              }}
+              options={Object.keys(preferences.presets).map((name) => ({ value: name, label: name }))}/>
+          </div>
+          <div className="ra-filter-preset-name">
+            <TextInput aria-label="Preset name" placeholder="Preset name" value={presetName}
+              onChange={event => setPresetName(event.target.value)} maxLength={30}/>
+          </div>
+          <button type="button" className="btn subtle ra-filter-preset-save"
+            disabled={!presetName.trim() || Object.keys(preferences.presets).length >= 10}
             onClick={() => { const name = presetName.trim(); if (!name) return;
               setPreferences(prev => ({ ...prev, presets: {...prev.presets, [name]: filters} })); setPresetName(""); }}>Save preset</button>
         </div>
