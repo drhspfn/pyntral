@@ -20,7 +20,8 @@ from urllib.parse import urlparse
 from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import inspect as sa_inspect, select
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import AuthBackend, Principal, maybe_await
@@ -384,6 +385,53 @@ class Admin:
                         if exc.status == 404:
                             raise AdminError(409, "Related record is not selectable", "integrity_error") from None
                         raise
+
+    async def _create_record(
+        self, session: Any, adapter: MapperAdapter, principal: Principal, payload: dict,
+        *, members: list | None = None,
+    ) -> dict:
+        name = adapter.resource.name
+        write_fields = await self._allowed_fields(principal, name, edit=True, view="create")
+        rejected = set(payload) - write_fields
+        if rejected:
+            if all(field in adapter.columns and not adapter.writable(field) for field in rejected):
+                raise AdminError(422, "Unknown or read-only fields", "validation_error",
+                                 {"fields": sorted(rejected)})
+            raise AdminError(403, "Cannot write one or more fields", "forbidden")
+        ctx = OperationContext("create", name, principal, session, payload=payload.copy())
+        await self._run_hooks(adapter, "before_create", ctx)
+        ctx.payload = validate_payload(adapter.resource.create_schema, ctx.payload)
+        if set(ctx.payload) - write_fields:
+            raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
+        await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
+        record = await adapter._stage_create(session, ctx.payload)
+        if members is not None:
+            members.append(record)
+        await adapter._flush_create(session, record, ctx.payload, principal)
+        await maybe_await(session.refresh(record))
+        identifier = str(getattr(record, adapter.pk_name))
+        if adapter.resource.scope is not None:
+            await adapter.get(session, identifier, principal)
+        if members is not None:
+            await self._authorize(principal, name, "select", record)
+        fields = await self._allowed_fields(principal, name, view="show", record=record)
+        result = adapter.serialize(record, fields)
+        await adapter._commit(session)
+        if any(hook.after_create is not None for hook in adapter.resource.hooks):
+            ctx.record = record
+            try:
+                if sa_inspect(record).expired:
+                    await maybe_await(session.refresh(record))
+            except SQLAlchemyError:
+                self.log_event("resource", "resource.after_hook_refresh_failed", level="ERROR", resource=name)
+            else:
+                await self._run_hooks(adapter, "after_create", ctx)
+        self.log_event("resource", "resource.created", principal=principal, resource=name, record_id=identifier)
+        await self._publish(ResourceCreated(
+            resource=name, record_id=identifier, actor_id=str(principal.id),
+            fields=field_refs(adapter, payload), **event_context(),
+        ))
+        return result
 
     async def _visible_actions(self, principal: Principal, name: str, record: Any) -> list[str]:
         adapter = self._adapter(name)
@@ -1042,34 +1090,10 @@ class Admin:
             await self._authorize(principal, name, "create")
             payload = await self._body(request)
             adapter = self._adapter(name)
-            write_fields = await self._allowed_fields(principal, name, edit=True, view="create")
-            rejected = set(payload) - write_fields
-            if rejected:
-                if all(not adapter.writable(name) for name in rejected if name in adapter.columns) and all(
-                    name in adapter.columns for name in rejected
-                ):
-                    raise AdminError(422, "Unknown or read-only fields", "validation_error",
-                                     {"fields": sorted(rejected)})
-                raise AdminError(403, "Cannot write one or more fields", "forbidden")
             session = self.session_factory()
             try:
-                ctx = OperationContext("create", name, principal, session, payload=payload.copy())
-                await self._run_hooks(adapter, "before_create", ctx)
-                ctx.payload = validate_payload(adapter.resource.create_schema, ctx.payload)
-                if set(ctx.payload) - write_fields:
-                    raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
-                await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
-                result = await adapter.create(session, ctx.payload, principal)
-                ctx.record = await adapter.get(session, str(result[adapter.pk_name]), principal)
-                await self._run_hooks(adapter, "after_create", ctx)
-                read_fields = await self._allowed_fields(principal, name, view="show", record=ctx.record)
-                self.log_event("resource", "resource.created", principal=principal, resource=name,
-                               record_id=result.get(adapter.pk_name))
-                await self._publish(ResourceCreated(
-                    resource=name, record_id=str(result[adapter.pk_name]), actor_id=str(principal.id),
-                    fields=field_refs(adapter, payload), **event_context(),
-                ))
-                return {"record": {k: v for k, v in result.items() if k in read_fields}}
+                result = await self._create_record(session, adapter, principal, payload)
+                return {"record": result}
             finally:
                 await maybe_await(session.close())
 
@@ -1387,31 +1411,18 @@ class Admin:
             payload = await self._body(request)
             session = self.session_factory()
             try:
-                parent_adapter, prop, parent, target = await _editable_relation(
+                _, _, parent, target = await _editable_relation(
                     name, identifier, relation_name, principal, session)
                 await self._authorize(principal, target.resource.name, "create")
                 await self._authorize(principal, target.resource.name, "select")
-                allowed = await self._allowed_fields(principal, target.resource.name,
-                                                    edit=True, view="create")
-                if set(payload) - allowed:
-                    raise AdminError(403, "Cannot write one or more related fields", "forbidden")
-                await self._verify_foreign_keys(session, principal, target, payload)
-                child = target.resource.model(**target.parsed_payload(payload, create=True))
-                session.add(child)
-                getattr(parent, relation_name).append(child)
-                await parent_adapter._commit(session)
-                await maybe_await(session.refresh(child))
-                await self._publish(ResourceCreated(
-                    resource=target.resource.name, record_id=str(getattr(child, target.pk_name)),
-                    actor_id=str(principal.id), fields=field_refs(target, payload), **event_context(),
-                ))
+                child = await self._create_record(
+                    session, target, principal, payload, members=getattr(parent, relation_name))
                 await self._publish(ResourceUpdated(
                     resource=name, record_id=identifier, actor_id=str(principal.id),
                     fields=(FieldRef(
                         name=relation_name, kind="relationship"),), **event_context(),
                 ))
-                return {"record": target.serialize(
-                    child, await self._allowed_fields(principal, target.resource.name, view="show", record=child))}
+                return {"record": child}
             finally:
                 await maybe_await(session.close())
 

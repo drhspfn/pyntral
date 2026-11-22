@@ -8,6 +8,7 @@ import enum
 import math
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import asynccontextmanager
 from inspect import isawaitable
 import re
 from typing import Any
@@ -576,8 +577,7 @@ class MapperAdapter:
             operation=operation, field_names=sorted(set(field_names)),
         ))
 
-    async def create(self, session: Any, payload: dict[str, Any],
-                     principal: Principal | None = None) -> dict[str, Any]:
+    async def _stage_create(self, session: Any, payload: dict[str, Any]) -> Any:
         parsed = self.parsed_payload(payload, create=True)
         mapped = {key: value for key, value in parsed.items() if key in self.columns}
         for key, factory in self.resource._server_defaults.items():
@@ -587,9 +587,19 @@ class MapperAdapter:
             if key in self.resource.virtual_fields:
                 await maybe_await(self.resource.virtual_fields[key].setter(record, value))
         session.add(record)
-        if self.resource._audit_enabled:
+        return record
+
+    async def _flush_create(self, session: Any, record: Any, payload: dict[str, Any],
+                            principal: Principal | None) -> None:
+        async with self._transaction_errors(session):
             await maybe_await(session.flush())
-            await self._audit(session, record, "create", principal, list(payload))
+        await self._audit(session, record, "create", principal, list(payload))
+
+    async def create(self, session: Any, payload: dict[str, Any],
+                     principal: Principal | None = None) -> dict[str, Any]:
+        record = await self._stage_create(session, payload)
+        if self.resource._audit_enabled:
+            await self._flush_create(session, record, payload, principal)
         await self._commit(session)
         await maybe_await(session.refresh(record))
         return self.serialize(record)
@@ -615,8 +625,13 @@ class MapperAdapter:
         await self._commit(session)
 
     async def _commit(self, session: Any) -> None:
-        try:
+        async with self._transaction_errors(session):
             await maybe_await(session.commit())
+
+    @asynccontextmanager
+    async def _transaction_errors(self, session: Any):
+        try:
+            yield
         except StaleDataError as exc:
             await maybe_await(session.rollback())
             raise AdminError(412, "Record changed since it was loaded", "precondition_failed") from exc

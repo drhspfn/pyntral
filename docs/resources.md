@@ -75,6 +75,11 @@ Relationship presentation is configured **on each side independently**. This hid
 
 For a to-one foreign key, the editor and filter use the same server-backed select endpoint. Set `visible_name=Target.name` and `search_fields=["name"]` to control labels and search. When using `label_factory`, configure `search_fields` separately.
 
+Creating a linked record applies the target's create schema, hooks, virtual
+setters, server defaults, audit, and selection policy. Pyntral commits the new
+record and its link together. If a new record falls outside the target's row
+scope, the create request returns 404 and rolls the transaction back.
+
 Deleting records with referenced rows can fail with HTTP 409. Pyntral deliberately does **not** invent cascade behavior: configure your ORM / FK schema, or implement application-level archival or soft deletion. See [troubleshooting](troubleshooting.md).
 
 ## Nested navigation and pages
