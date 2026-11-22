@@ -1,7 +1,7 @@
 /** Compound, viewport-aware popover atom for built-in panels and app extensions. */
 import {
   cloneElement, createContext, isValidElement, useCallback, useContext, useEffect,
-  useId, useRef, useState, type CSSProperties, type HTMLAttributes,
+  useId, useRef, useState, type HTMLAttributes,
   type MouseEvent, type ReactElement, type ReactNode, type RefObject,
 } from "react";
 import { createPortal } from "react-dom";
