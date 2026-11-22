@@ -568,14 +568,16 @@ function RecordEditor({ resource, id, navigate, notify }: {
   useEffect(() => { if (record.data?.record) { setValues(record.data.record); setDirty(false); } }, [record.data]);
   useEffect(() => {
     if (!dirty || skipGuard.current) return;
-    const unregister = registerNavigationBlocker(() => feedback.confirm({
-      title: "Unsaved changes",
-      message: "You have unsaved changes. Leave this page and discard them?",
-      confirmLabel: "Discard changes",
-      cancelLabel: "Keep editing",
-      destructive: true,
-    }));
+    const unregister = registerNavigationBlocker(() =>
+      skipGuard.current ? Promise.resolve(true) : feedback.confirm({
+        title: "Unsaved changes",
+        message: "You have unsaved changes. Leave this page and discard them?",
+        confirmLabel: "Discard changes",
+        cancelLabel: "Keep editing",
+        destructive: true,
+      }));
     const warnUnload = (event: BeforeUnloadEvent) => {
+      if (skipGuard.current) return;
       event.preventDefault();
       event.returnValue = "";
     };
