@@ -441,6 +441,9 @@ class MapperAdapter:
             })
         out = {}
         for name, value in payload.items():
+            # A mock picker must not become a writable metadata injection path.
+            if name in self.columns and (config := self._field(name)) is not None and config.file_upload is not None:
+                raise AdminError(422, "Mock file fields are not writable; use an explicit verified upload workflow", "validation_error")
             if name in self.resource.virtual_fields:
                 virtual = self.resource.virtual_fields[name]
                 if virtual.setter is None:
