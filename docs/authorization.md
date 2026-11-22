@@ -89,5 +89,11 @@ predicates receive `(principal, record)` and may be sync or async. The
 field is redacted from each unauthorized record in list/show responses and
 write attempts return HTTP 403. A field with conditional read permission
 cannot be used in sorting, text search or advanced filters (even by probing
-query parameters) because those operations could reveal hidden data. Use
-`Resource.scope` to enforce database-level row isolation.
+query parameters) because those operations could reveal hidden data. This
+also applies to exports, searches of related records, and option searches.
+Option lookups and foreign-key writes enforce the target row's `select`
+policy. Options fall back to a readable primary key when their title field
+is unavailable. Custom label callbacks run only when the row's declared
+role-protected and conditional fields are readable. Keep callback output
+limited to data intended for the selector. Use `Resource.scope` to enforce
+database-level row isolation.

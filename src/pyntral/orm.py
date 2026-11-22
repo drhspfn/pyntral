@@ -7,7 +7,7 @@ import decimal
 import enum
 import math
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from inspect import isawaitable
 import re
 from typing import Any
@@ -417,13 +417,19 @@ class MapperAdapter:
             return self.resource.visible_name.key
         return self.resource.title_field or self._guess_title()
 
-    def _label(self, row: Any) -> str:
-        if self.resource.label_factory is not None:
+    def _label(self, row: Any, fields: set[str]) -> str:
+        if self.resource.label_factory is not None and all(
+            name in fields for name, field in self.resource.fields.items()
+            if field.read_role is not None or field.read_when is not None
+        ) and all(
+            name in fields for name, field in self.resource.virtual_fields.items() if field.read_role is not None
+        ):
             label = self.resource.label_factory(row)
             if not isinstance(label, str):
                 raise AdminError(500, "label_factory must return a string", "invalid_label")
             return label
-        return str(getattr(row, self._title_field()))
+        title = self._title_field()
+        return str(getattr(row, title if title in fields else self.pk_name))
 
     def _guess_title(self) -> str:
         for name in ("name", "title", "email", "username", self.pk_name):
@@ -486,6 +492,27 @@ class MapperAdapter:
             return await maybe_await(self.resource.scope(principal, statement))
         return statement
 
+    def _search(self, stmt: Any, query: str, fields: set[str] | None, *, use_title: bool = False) -> Any:
+        title = self._title_field()
+        candidates = self.resource.search_fields or ([title] if use_title else [])
+
+        def searchable(name: str) -> bool:
+            field = self._field(name)
+            return (fields is None or name in fields) and (field is None or field.read_when is None)
+
+        columns = [name for name in candidates if searchable(name)
+                   and column_kind(self.columns[name]) in ("string", "enum")]
+        if columns:
+            escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            return stmt.where(or_(*(func.lower(getattr(self.resource.model, name)).like(
+                f"%{escaped}%", escape="\\") for name in columns)))
+        if use_title and title == self.pk_name and searchable(title):
+            try:
+                return stmt.where(getattr(self.resource.model, self.pk_name) == self.pk_value(query))
+            except AdminError:
+                pass
+        return stmt.where(False) if candidates else stmt
+
     async def list(
         self, session: Any, principal: Principal, *, offset: int = 0,
         limit: int | None = None, q: str = "", sort: str | None = None,
@@ -498,12 +525,8 @@ class MapperAdapter:
             raise AdminError(422, "offset must be nonnegative")
         limit = min(max(limit or self.resource.page_size, 1), 200)
         stmt = select(self.resource.model)
-        searchable = [n for n in self.resource.search_fields if allowed_fields is None or n in allowed_fields]
-        if q and searchable:
-            stmt = stmt.where(or_(*(
-                func.lower(getattr(self.resource.model, n)).like(f"%{q.lower().replace('%', r'\%').replace('_', r'\_')}%", escape="\\")
-                for n in searchable
-            )))
+        if q:
+            stmt = self._search(stmt, q, allowed_fields)
         exposed = {name for name in self.columns if self.view_visible(name, "filter") and
                    (filter_fields is None or name in filter_fields)}
         overrides = {name: self.filter_operators(name) for name in self.columns}
@@ -606,38 +629,40 @@ class MapperAdapter:
 
     async def options(
         self, session: Any, principal: Principal, query: str = "", limit: int = 30,
-        ids: list[str] | None = None,
+        ids: list[str] | None = None, *, allowed_fields: set[str],
+        per_record_fields: Callable[[Any], Awaitable[set[str] | None]],
     ) -> list[dict[str, Any]]:
         if len(query) > 200:
             raise AdminError(422, "Search text too long", "validation_error")
-        title = self._title_field()
+        if self.pk_name not in allowed_fields:
+            return []
+        key = getattr(self.resource.model, self.pk_name)
         stmt = select(self.resource.model)
         if ids:
             if len(ids) > 100:
                 raise AdminError(422, "Too many selected IDs", "validation_error")
-            keys = [self.pk_value(v) for v in ids]
-            stmt = stmt.where(getattr(self.resource.model, self.pk_name).in_(keys))
+            stmt = stmt.where(key.in_([self.pk_value(value) for value in ids]))
         elif query:
-            columns = [n for n in (self.resource.search_fields or [title])
-                       if n in self.columns and column_kind(self.columns[n]) in ("string", "enum")]
-            if columns:
-                # Escape LIKE wildcards: search is literal and cannot broaden a scope.
-                escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                stmt = stmt.where(or_(*(func.lower(getattr(self.resource.model, n)).like(
-                    f"%{escaped}%", escape="\\") for n in columns)))
-            elif title == self.pk_name:
-                try:
-                    stmt = stmt.where(getattr(self.resource.model, self.pk_name) == self.pk_value(query))
-                except AdminError:
-                    return []
-        stmt = (await self._scope(stmt, principal)).order_by(
-            getattr(self.resource.model, self.pk_name)
-        ).limit(min(limit, 100))
-        result = await maybe_await(session.execute(stmt))
-        return [
-            {"value": jsonable_encoder(getattr(row, self.pk_name)), "label": self._label(row)}
-            for row in result.scalars()
-        ]
+            stmt = self._search(stmt, query, allowed_fields, use_title=True)
+        stmt = (await self._scope(stmt, principal)).order_by(key)
+        options: list[dict[str, Any]] = []
+        limit = min(limit, 100)
+        offset = 0
+        batch_size = 100
+        while len(options) < limit:
+            rows = (await maybe_await(session.execute(stmt.limit(batch_size).offset(offset)))).scalars().all()
+            for row in rows:
+                fields = await per_record_fields(row)
+                if fields is None or self.pk_name not in fields:
+                    continue
+                options.append({"value": jsonable_encoder(getattr(row, self.pk_name)),
+                                "label": self._label(row, fields)})
+                if len(options) == limit:
+                    break
+            if len(rows) < batch_size:
+                break
+            offset += batch_size
+        return options
 
     async def relation(
         self, session: Any, principal: Principal, record: Any, name: str,
@@ -659,18 +684,7 @@ class MapperAdapter:
         if len(query) > 200:
             raise AdminError(422, "Search text too long", "validation_error")
         if query:
-            searchable = [n for n in (target.resource.search_fields or [target._title_field()])
-                          if n in target.columns and column_kind(target.columns[n]) in ("string", "enum")
-                          and (allowed_fields is None or n in allowed_fields)]
-            if searchable:
-                escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                stmt = stmt.where(or_(*(func.lower(getattr(target.resource.model, n)).like(
-                    f"%{escaped}%", escape="\\") for n in searchable)))
-            elif target._title_field() == target.pk_name:
-                try:
-                    stmt = stmt.where(getattr(target.resource.model, target.pk_name) == target.pk_value(query))
-                except AdminError:
-                    return {"items": [], "total": 0, "offset": offset, "limit": limit}
+            stmt = target._search(stmt, query, allowed_fields, use_title=True)
         count = (await maybe_await(session.execute(
             select(func.count()).select_from(stmt.order_by(None).subquery())
         ))).scalar_one()

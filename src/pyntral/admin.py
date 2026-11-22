@@ -377,7 +377,9 @@ class Admin:
                     raise AdminError(403, "Related resource cannot be selected", "forbidden")
                 if payload[field_name] is not None:
                     try:
-                        await self._adapter(target).get(session, str(payload[field_name]), principal)
+                        row = await self._adapter(target).get(session, str(payload[field_name]), principal)
+                        if not await self._can(principal, target, "select", row):
+                            raise AdminError(404, "Related record not found", "not_found")
                     except AdminError as exc:
                         if exc.status == 404:
                             raise AdminError(409, "Related record is not selectable", "integrity_error") from None
@@ -888,7 +890,16 @@ class Admin:
             await self._authorize(principal, name, "select")
             session = self.session_factory()
             try:
-                return {"items": await self._adapter(name).options(session, principal, q, ids=ids.split(",") if ids else None)}
+                async def fields_for_option(row: Any) -> set[str] | None:
+                    if not await self._can(principal, name, "select", row):
+                        return None
+                    return await self._allowed_fields(principal, name, record=row)
+
+                return {"items": await self._adapter(name).options(
+                    session, principal, q, ids=ids.split(",") if ids else None,
+                    allowed_fields=await self._allowed_fields(principal, name),
+                    per_record_fields=fields_for_option,
+                )}
             finally:
                 await maybe_await(session.close())
 
