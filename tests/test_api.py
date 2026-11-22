@@ -216,8 +216,9 @@ def test_model_auth_reloads_account(db):
     assert client.get("/admin/api/schema").status_code == 401
 
 
-def test_hashes_and_static_safety(harness, tmp_path):
-    client, _db, _admin = harness
+def test_hashes_and_static_safety(harness, tmp_path, monkeypatch):
+    client, _db, admin = harness
+    monkeypatch.setattr(admin, "dist_dir", tmp_path)
     assert verify_password("abc", hash_password("abc"))
     assert not verify_password("wrong", hash_password("abc"))
     assert not verify_password("abc", "not-a-hash")

@@ -350,7 +350,7 @@ def init_ui(project: Path) -> None:
 export default function StatusBadge({ value }: CustomFieldProps) {
   return <span className="pill">{String(value ?? "—")}</span>;
 }
-''')
+''', encoding="utf-8")
     config.write_text(json.dumps({"fields": {"status-badge": "admin/StatusBadge.tsx"},
                                   "pages": {}}, indent=2) + "\n")
     print("[pyntral] Created pyntral.components.json and admin/StatusBadge.tsx")

@@ -219,4 +219,4 @@ def test_cli_event_filters_and_channel_file(tmp_path, monkeypatch):
                    channel_files=("auth=.pyntral/logs/auth.jsonl",)) == 0
     assert captures[0]["PYNTRAL_LOG_EVENTS"] == "bridge.invoked=OFF"
     paths = json.loads(captures[0]["PYNTRAL_LOG_CHANNEL_FILES"])
-    assert paths["auth"].endswith(".pyntral/logs/auth.jsonl")
+    assert Path(paths["auth"]) == tmp_path / ".pyntral" / "logs" / "auth.jsonl"
