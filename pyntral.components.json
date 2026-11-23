@@ -21,7 +21,7 @@
     "shop-header": "admin/SidebarRegion.tsx"
   },
   "sidebarFooters": {
-    "shop-footer": "admin/SidebarRegion.tsx"
+    "shop-footer": "admin/SidebarFooter.tsx"
   },
   "sidebarItems": {
     "shop-item": "admin/SidebarItem.tsx"

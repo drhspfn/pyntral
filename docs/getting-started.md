@@ -33,7 +33,7 @@ import os
 from fastapi import FastAPI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from pyntral import Admin, LocalAuth, Resource, Field
+from pyntral import Admin, LocalAuth, Resource, Field, SidebarConfig, SidebarHeader
 
 from app.models import Customer  # your SQLAlchemy mapped model
 
@@ -49,9 +49,13 @@ admin = Admin(
     path="/admin",
     secure_cookie=True,
     title="Operations",
+    sidebar=SidebarConfig(
+        header=SidebarHeader(icon="building-2", subtitle="Customer workspace"),
+    ),
 )
 admin.add_resource(Resource(
     Customer,
+    icon="users-round",
     search_fields=["name", "email"],
     list_fields=["id", "name", "email"],
     fields={"secret_note": Field(visible=False)},

@@ -29,6 +29,15 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
 
             schema = client.get("/admin/api/schema").json()
             resources = {resource["id"]: resource for resource in schema["resources"]}
+            sidebar = schema["navigation"]["sidebar"]
+            assert sidebar["width"] == 260 and sidebar["resizable"]
+            assert sidebar["header"]["title"] == "Shop demo"
+            assert sidebar["header"]["subtitle"] == "Commerce workspace"
+            assert sidebar["header"]["icon"]["kind"] == "svg"
+            assert (sidebar["headerComponent"], sidebar["footerComponent"], sidebar["itemComponent"]) == (
+                "shop-header", "shop-footer", "shop-item")
+            assert resources["file-assets"]["icon"]["kind"] == "image"
+            assert resources["editorial-drafts"]["uploadMaxBytes"] == 2_000_000
             products = resources["products"]
             assert any(job["name"] == "inventory-report" for job in products["jobs"])
             job_url = "/admin/api/resources/products/jobs/inventory-report"

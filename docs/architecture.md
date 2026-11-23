@@ -10,6 +10,7 @@ Pyntral is a FastAPI sub-application mounted at `Admin.path` (default `/admin`).
 | --- | --- | --- |
 | `Admin` | Registries, security, route mounting, event lifecycle | `src/pyntral/admin.py` |
 | `Resource`, `Field`, `Action`, `Page` | Declarative resource configuration | `src/pyntral/resources.py` |
+| Sidebar and icons | Python presentation config, shared schema icon resolver, optional React slots | `src/pyntral/sidebar.py`, `src/pyntral/ui/src/sidebar.tsx`, `src/pyntral/ui/src/icon.tsx` |
 | `MapperAdapter` | Introspection, serialization, validation, filtering, CRUD | `src/pyntral/orm.py` |
 | Auth backends | Session identities and permission callbacks | `src/pyntral/auth.py` |
 | Event buses | Metadata-only events and broker delivery | `src/pyntral/events.py`, `transports/` |
@@ -26,7 +27,7 @@ Pyntral is a FastAPI sub-application mounted at `Admin.path` (default `/admin`).
 
 ## Build/runtime separation
 
-The Python resource registry is dynamic. Registering a new model or changing its fields changes the JSON schema returned by the backend and does not require a JavaScript rebuild. By contrast, changing a TSX extension or theme component changes the client bundle; `pyntral dev` uses HMR, and `pyntral build` creates the production bundle.
+The Python resource registry is dynamic. Registering a new model, changing its fields, or changing declarative sidebar branding and icon metadata changes the JSON schema returned by the backend and does not require a JavaScript rebuild. Lucide glyphs are loaded from the bundled dynamic catalogue; custom SVG is displayed in an isolated image context. By contrast, changing a TSX extension or theme component changes the client bundle; `pyntral dev` uses HMR, and `pyntral build` creates the production bundle.
 
 The generic SPA is bundled as static package data inside published Python wheels and is available without npm. Only an application with custom TSX components needs an application-local Vite build; that bundle takes precedence over the generic one.
 

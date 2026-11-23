@@ -21,6 +21,7 @@ Pyntral attaches a React single-page administration UI to an existing FastAPI ap
 - **Model-driven CRUD** — register SQLAlchemy models, configure fields and relations, and manage records through one API.
 - **Practical filtering** — type-aware operators, numeric/date ranges, enum include/exclude, and searchable foreign keys.
 - **Built to extend** — nested navigation groups, custom pages, record actions, dialogs, field renderers, and a shared React component kit.
+- **Python-configured branding** — sidebar layouts, SVG and theme-specific image logos, dynamic Lucide icons, configurable navigation sizing, and optional TSX header/footer/item slots.
 - **Authentication and access controls** — local credentials, SQLAlchemy-backed users, external identity callbacks, role thresholds, field visibility, and server-side authorization.
 - **Typed Python ↔ React operations** — authenticated Pydantic bridges with generated TypeScript clients.
 - **Event-oriented** — metadata-only events with in-process, optional RabbitMQ, or optional Kafka transports.
@@ -63,7 +64,7 @@ uv add pyntral
 pip install pyntral
 ```
 
-The default admin SPA is **already compiled into the Python wheel**. No npm install or `pyntral build` is necessary for normal SQLAlchemy resources, filters, auth or actions. See the [minimal Python-only example](examples/basic/README.md).
+The default admin SPA is **already compiled into the Python wheel**. No npm install or `pyntral build` is necessary for normal SQLAlchemy resources, filters, auth, actions or declarative sidebar branding. See the [minimal Python-only example](examples/basic/README.md).
 
 For applications with custom TSX fields, pages, dialogs or themes, use the *same Python dependency*, plus Node.js **at development/build time**:
 
@@ -110,6 +111,30 @@ admin.add_resource(Resource(Order))
 ```
 
 For deployable applications, supply secrets from environment variables and set `secure_cookie=True` under HTTPS. The complete runnable integration is in [`examples/shop/app.py`](examples/shop/app.py).
+
+## Customize the sidebar
+
+```python
+from pyntral import SidebarConfig, SidebarHeader, SvgIcon
+
+sidebar = SidebarConfig(
+    width=260,
+    header=SidebarHeader(
+        title="My workspace",
+        subtitle="Operations",
+        icon=SvgIcon.from_file("assets/logo.svg"),
+        icon_background=False,
+    ),
+    dashboard_icon="house",
+)
+# Pass sidebar=sidebar to Admin(...)
+# Resource(Order, icon="shopping-cart") also accepts SvgIcon or ImageIcon.
+```
+
+The packaged generic SPA reads this configuration from the API at runtime.
+See [sidebar and icon API](docs/api-reference.md#sidebar-and-icon-configuration),
+[UI customization](docs/ui.md#sidebar-branding-and-navigation-icons), and
+[sidebar TSX slots](docs/extensions.md#sidebar-extensions).
 
 ## How it fits together
 

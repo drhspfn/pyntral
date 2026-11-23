@@ -9,6 +9,7 @@ This page summarizes the public interfaces available in the current beta. For pr
 ```python
 from pyntral import (
     Admin, Resource, Field, Relationship, Action, Page, NavigationGroup,
+    SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec,
     RoleAccess, Bridge, BridgeContext, ResourceHook, VirtualField, FieldDependency,
     FieldView, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature,
     TimestampFeature, AuditFeature, UploadFeature, LocalStorage, S3Storage,
@@ -32,7 +33,7 @@ Admin(
     session_cookie_path="/", session_max_age=43200, session_store=None,
     require_async_sessions=False, enable_jobs=True, dist_dir=None,
     title="Pyntral", theme=None, default_theme="system",
-    animations=True, show_dashboard=True, role_weights=None,
+    animations=True, show_dashboard=True, sidebar=None, role_weights=None,
     logging_config=None, event_bus=None, auto_start_events=True,
     event_publish_timeout=2.0, max_json_bytes=1048576, storage=None,
     default_locale="en", translations=None, locale_resolver=None,
@@ -66,6 +67,54 @@ Key methods:
 - `LoggingConfig`: level, channels, events, http, slow_request_ms and optional principal/record identifiers.
 - Event classes: immutable metadata-only Pydantic envelopes; buses implement `EventTransport` lifecycle and publication.
 
+### Sidebar and icon configuration
+
+`Admin(sidebar=SidebarConfig(...))` is optional. Omission uses the defaults
+below. The generic wheel reads this metadata without a custom SPA build.
+
+| `SidebarConfig` parameter | Default | Meaning |
+| --- | --- | --- |
+| `width`, `min_width`, `max_width` | 238, 238, 420 | Desktop width in pixels; 160 ≤ min ≤ width ≤ max ≤ 640. Further clamped to available viewport width. |
+| `mobile_width` | 238 | Independent drawer width (160–480 px), constrained to the viewport. |
+| `resizable` | True | Enable desktop resize separator. |
+| `show_icons` | True | Show navigation glyphs, independent of header and lock/disclosure indicators. |
+| `icon_size` | 16 | Navigation glyph size, 12–32 px. |
+| `indent` | 9 | Indentation per level, 0–24 px. |
+| `max_indent_depth` | 5 | Maximum visual indentation level, 0–8; does not restrict tree depth. |
+| `dashboard_icon` | "layout-dashboard" | IconSpec for Overview. |
+| `header`, `footer` | SidebarHeader(), SidebarFooter() | Region configuration; None hides the built-in region. |
+| `header_component`, `footer_component`, `item_component` | None | Optional registered TSX extension IDs. |
+
+| `SidebarHeader` parameter | Default | Meaning |
+| --- | --- | --- |
+| `title` | None | Inherit Admin.title. |
+| `subtitle` | None | Secondary text. |
+| `icon` | "command" | IconSpec for the logo. |
+| `show_icon`, `show_title`, `show_subtitle` | True | Independent visibility switches. |
+| `align` | "left" | left, center, right. |
+| `direction` | "horizontal" | horizontal or vertical. |
+| `divider` | True | Border below header. |
+| `icon_size` | 24 | Logo height / glyph size (12–120 px). |
+| `logo_width` | None | Optional image width (12–420 px). |
+| `icon_background` | True | Themed icon background. |
+| `link_to_dashboard` | True | Header navigates to Overview when Dashboard is enabled. |
+
+`SidebarFooter(show_user=True, show_avatar=True, show_roles=True, divider=True)`
+controls the built-in account region. A TSX extension may still render its
+own content when the default region is hidden.
+
+`IconSpec = str | SvgIcon | ImageIcon | None` is accepted by
+`Resource.icon`, `Page.icon`, `NavigationGroup.icon`, `Action.icon`,
+`SidebarHeader.icon` and `SidebarConfig.dashboard_icon`.
+
+- String: lowercase kebab-case Lucide name; unknown names fall back in the UI.
+- `SvgIcon(svg: str)` / `SvgIcon.from_file(path)`: SVG XML up to 128 KiB, without DOCTYPE/entity declarations, displayed as an image rather than inline markup.
+- `ImageIcon(src=None, light=None, dark=None)`: at least one HTTP(S) or relative image URL; theme-specific sources override the generic source.
+- `None`: no icon.
+
+See [UI configuration](ui.md#sidebar-branding-and-navigation-icons) and
+[TSX extension contracts](extensions.md#sidebar-extensions) for complete examples.
+
 ## HTTP endpoints
 
 All paths below are relative to `Admin.path` (default `/admin`). Except for
@@ -79,7 +128,7 @@ require CSRF protection.
 | POST | `/auth/login` | Username/password authentication. |
 | POST | `/auth/external` | Exchange a token verified by the configured auth callback. |
 | POST | `/auth/logout` | End session (CSRF protected). |
-| GET | `/api/schema` | Access-filtered resource, page, bridge, navigation, theme metadata. |
+| GET | `/api/schema` | Access-filtered resource, page, bridge, navigation/sidebar, theme metadata. |
 | GET | `/api/resources/{name}` | List, sort, search and filter records. |
 | POST | `/api/resources/{name}` | Create a record (CSRF protected). |
 | GET | `/api/resources/{name}/options` | Searchable `{value,label}` options, including `ids` lookup. |
@@ -98,6 +147,40 @@ require CSRF protection.
 | GET | `/api/realtime` | SSE invalidations when enabled. |
 | POST | `/api/bridge/{name}` | Pydantic-validated RPC (CSRF protected). |
 | GET | `/`, `/{asset_path:path}` | Production SPA assets and history fallback. |
+
+### Sidebar metadata in GET /api/schema
+
+`navigation.sidebar` uses camelCase keys:
+`width`, `minWidth`, `maxWidth`, `mobileWidth`, `resizable`, `showIcons`,
+`iconSize`, `indent`, `maxIndentDepth`, `dashboardIcon`, `header`, `footer`,
+`headerComponent`, `footerComponent`, `itemComponent`.
+The header includes `title`, `subtitle`, `icon`, `showIcon`, `showTitle`,
+`showSubtitle`, `align`, `direction`, `divider`, `iconSize`, `logoWidth`,
+`iconBackground`, `linkToDashboard`. The footer contains `showUser`,
+`showAvatar`, `showRoles`, `divider`. Hidden regions are null.
+
+All icon fields use the same wire representation:
+
+```json
+"shopping-cart"
+```
+
+```json
+{"kind":"svg","svg":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M0 0L24 24\"/></svg>"}
+```
+
+```json
+{"kind":"image","src":"/static/logo.png","light":null,"dark":null}
+```
+
+A null icon has no glyph. Metadata is presentation only; server authorization
+remains independent of the sidebar.
+
+Resources with attachments expose `uploads: true` and `uploadMaxBytes` in
+their schema. GET on a record's uploads endpoint returns
+`{"items":[{"id":"...","filename":"...","content_type":"image/png","size_bytes":123}]}`.
+A successful POST returns HTTP 201 with `id`, `filename` and `size_bytes`.
+Downloads remain authenticated and are served as attachments.
 
 ### List endpoint
 

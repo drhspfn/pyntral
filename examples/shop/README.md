@@ -65,6 +65,7 @@ product-tag associations are added independently when upgrading an existing
 | Resource action | **Customers → Reactivate all** | After confirmation, all inactive customers become active again. |
 | Custom CRUD screen | **Commerce → Tags** | A custom `admin/TagCatalog.tsx` React list renders colored tag cards. Click a tag for the normal Show page or **New tag** for the generated Create form. |
 | Editable many-to-many | **Commerce → Products → a product → Product tags** | Search/link existing tags, unlink without deleting them, or create-and-link a new tag. The linked tags remain available as regular records. |
+| Sidebar branding and icons | **Any page** | Shop SVG logo, title/subtitle, Lucide icons, resizable navigation, custom footer and Insights item label. |
 | Other extensions | **Agents / Insights / Orders** | Existing custom Image field, custom page, badge, record actions and bridge continue to work. |
 
 The matching registration lives in `examples/shop/app.py`, the custom CRUD
@@ -79,6 +80,29 @@ uv run pytest -v tests/test_view_actions_relations.py
 Do not copy this demo's unscoped resource-wide Reactivate action directly into
 a multi-tenant application: production handlers should explicitly enforce
 tenant and row scopes as well as Pyntral authorization.
+
+### Sidebar branding, icons and extension slots
+
+Shop configures its sidebar in `examples/shop/app.py` with `SidebarConfig`,
+`SidebarHeader` and `SidebarFooter`. The logo is loaded from the adjacent
+`logo.svg` via `SvgIcon.from_file`; it needs no static route. Commerce/Orders
+and Shipping use Lucide icons (`shopping-basket` and `truck`), Insights uses
+`chart-column`, and File assets demonstrates `ImageIcon(src="favicon.svg")`
+using the generic bundled asset.
+
+Drag the desktop sidebar's right edge to resize it, or focus the separator and
+use the arrow keys. Hover a clipped resource label to see its full text.
+Try the mobile drawer at a narrow viewport. The header, footer, and navigation
+item extensions are registered in `pyntral.components.json`; the footer adds
+"Demo environment" and Insights adds a small UI marker. Remove the three
+`*_component` settings to use only the built-in Python-configured UI.
+See [sidebar API](../../docs/api-reference.md#sidebar-and-icon-configuration)
+and [extension slots](../../docs/extensions.md#sidebar-extensions).
+
+**Agents → Insights → Disclosure and icon primitives:** Try the controlled
+`Collapsible`, its independent header action, clipped-text tooltip,
+dynamic `Icon` and removable mock `FileRow`. The row is local demo state,
+not a persisted attachment.
 
 ### CRUD lifecycle hooks
 
@@ -159,8 +183,8 @@ auditing.
 
 ### Authenticated attachments (Local/S3/MinIO)
 
-**Commerce → Editorial Drafts → a draft → Attachments:** Select a file and
-upload it; download via the protected API link or delete it. To verify owner
+**Commerce → Editorial Drafts → a draft → Attachments:** Select, drop or paste a file and
+upload it; preview eligible raster images, inspect file name/type/size, download via the protected API link or delete it. Removing an unsubmitted selection only changes local form state. To verify owner
 cleanup, attach a file to a disposable draft and hard-delete that draft. Its
 attachment link stops working after the record is deleted. Users without
 write permission cannot upload/delete. The Shop uses `LocalStorage` under

@@ -10,6 +10,8 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Composable password, soft-delete, timestamp, audit and upload features. Authenticated attachments support local storage and an optional S3/MinIO backend.
 - Conditional field and operation policies, CSV/JSON export, configurable form layouts, table preferences and filter presets.
 - Localization, per-admin theme settings and reusable choice, popover, sortable and mock file-picker controls.
+- Declarative sidebar configuration with configurable dimensions, resizing, header/footer branding, dynamic Lucide icons, SVG/image icons and custom React region/item slots.
+- Public FileRow, Collapsible and OverflowText primitives, reused by built-in attachments, layouts and navigation.
 - Optional SSE invalidation, in-process jobs with progress and cancellation, and CLI resource schema documentation.
 
 ### Fixed
@@ -19,11 +21,13 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Run authorization, validation, setters, hooks and audit through the same transaction for standard and related creation. Encode mutation responses before committing.
 - Detach attachments transactionally and retry storage cleanup. Release job slots on early cancellation and close both Kafka clients after a consumer failure.
 - Preserve FastAPI lifespan state, serve production bundles under custom mounts and proxy prefixes, and bound JSON input and event publication.
+- Improve responsive record layouts, attachment picker/list presentation and nested navigation indentation.
 - Support server-side session revocation with an in-memory default and an optional shared store. Fix Unicode usernames and improve keyboard interaction in dialogs, tabs and mobile navigation.
 
 ### Upgrade notes
 
 - Sign in again after upgrading. Pyntral stores new sessions in memory by default and requires no session table or migration. Replicated deployments can supply a shared `SessionStore`.
+- The sidebar header now inherits Admin.title by default; configure SidebarHeader to retain a different brand name or logo. Existing kebab-case icon names remain supported.
 - Rebuild a custom SPA to pick up the runtime mount path, UI changes and new API contracts. The generic SPA ships in the wheel.
 - Deploy and validate the broker, S3/MinIO, PostgreSQL and multi-worker options in your own environment. The [release readiness guide](docs/deployment.md#release-readiness) lists the beta verification scope.
 

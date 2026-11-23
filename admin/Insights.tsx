@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowRight, Bell, Image as ImageIcon } from "lucide-react";
 import type { CustomPageProps } from "@pyntral/types";
 import { useAdminFeedback } from "@pyntral/feedback";
-import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, DatePicker, Dialog, FileUpload, formatFileRejection, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, RadioGroup, SearchInput, Select, SortableList, Switch, TextInput, ToggleGroup,
+import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, Collapsible, DatePicker, Dialog, FileUpload, FileRow, Icon, OverflowText, formatFileRejection, Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, RadioGroup, SearchInput, Select, SortableList, Switch, TextInput, ToggleGroup,
   type SelectOption } from "@pyntral/ui";
 
 import { api } from "@pyntral/api";
@@ -18,6 +18,8 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
   const [roles, setRoles] = useState<(string | number)[]>(["reviewer", "author"]);
   const [agentId, setAgentId] = useState<string | number | null>(null);
   const [dialog, setDialog] = useState(false);
+  const [disclosureOpen, setDisclosureOpen] = useState(false);
+  const [showExampleFile, setShowExampleFile] = useState(true);
   const [alerts, setAlerts] = useState(true);
   const [pinned, setPinned] = useState(false);
   const [channels, setChannels] = useState<string[]>(["email", "in-app"]);
@@ -120,10 +122,26 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
           </div>
         </div>
       </Card>
+      <Card title="Disclosure and icon primitives" description="Controlled disclosure, overflow tooltip and dynamic icons">
+        <div style={{ display: "grid", gap: 12, minWidth: 0 }}>
+          <Collapsible header={<span style={{ display: "flex", alignItems: "center", gap: 6 }}><Icon icon="settings-2"/> Advanced settings</span>}
+            open={disclosureOpen} onOpenChange={setDisclosureOpen}
+            actions={<Button type="button" variant="ghost" onClick={() => feedback.toast("Header action")}>Action</Button>}>
+            <p style={{ margin: 0, fontSize: 12 }}>Header actions work independently of the disclosure.</p>
+          </Collapsible>
+          <div style={{ width: "min(100%, 150px)" }}>
+            <OverflowText>A long label that needs a tooltip</OverflowText>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}><Icon icon="shopping-cart" size={20}/><Icon icon="truck" size={20}/><Icon icon="chart-column" size={20}/></div>
+          {showExampleFile ? <FileRow name="example-attachment.pdf" size={152400} mimeType="application/pdf"
+            onRemove={() => setShowExampleFile(false)}/> :
+            <Button type="button" onClick={() => setShowExampleFile(true)}>Restore example row</Button>}
+        </div>
+      </Card>
       <Card title="Registered resources" description={`${schema.resources.length} resources available`}>
         <div style={{ display: "grid", gap: 6 }}>
           {schema.resources.map((resource) => <Button key={resource.id} variant="ghost"
-            endIcon={<ArrowRight size={15}/>} onClick={() => navigate(`resources/${resource.id}`)}>
+            startIcon={<Icon icon={resource.icon}/>} endIcon={<ArrowRight size={15}/>} onClick={() => navigate(`resources/${resource.id}`)}>
             {resource.label}
           </Button>)}
         </div>

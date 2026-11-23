@@ -21,6 +21,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FileUploadConfig, FieldDependency, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
+    SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon,
     ResourceUpdated, ResourceHook, VirtualField, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase, UploadFeature, LocalStorage, UploadBase,
 )
 
@@ -313,6 +314,20 @@ admin = Admin(
     path="/admin",
     secure_cookie=os.environ.get("ADMIN_SECURE_COOKIE", "true").lower() == "true",
     title="Shop demo",
+    sidebar=SidebarConfig(
+        width=260, min_width=238, max_width=440, mobile_width=260,
+        resizable=True, icon_size=18, indent=9, max_indent_depth=5,
+        dashboard_icon="house",
+        header=SidebarHeader(
+            title="Shop demo", subtitle="Commerce workspace",
+            icon=SvgIcon.from_file(Path(__file__).with_name("logo.svg")),
+            icon_size=36, logo_width=36, icon_background=False,
+            align="left", direction="horizontal",
+        ),
+        footer=SidebarFooter(show_roles=True),
+        header_component="shop-header", footer_component="shop-footer",
+        item_component="shop-item",
+    ),
     default_theme="system",
     theme_resolver=lambda principal: {
         "default": "dark" if "admin" in principal.roles else "light",
@@ -373,8 +388,8 @@ def reactivate_all_customers(session, _principal, _payload):
 
 
 admin.add_group(NavigationGroup("Commerce", icon="boxes", order=10))
-admin.add_group(NavigationGroup("Commerce/Orders", icon="folder", order=20))
-admin.add_group(NavigationGroup("Commerce/Shipping", icon="folder", order=25))
+admin.add_group(NavigationGroup("Commerce/Orders", icon="shopping-basket", order=20))
+admin.add_group(NavigationGroup("Commerce/Shipping", icon="truck", order=25))
 admin.add_group(NavigationGroup("Security", icon="shield-check", order=40))
 admin.add_group(NavigationGroup("Agents", icon="bot", order=30))
 admin.add_group(NavigationGroup("Agents/Operations", icon="cpu", order=10))
@@ -422,14 +437,14 @@ admin.add_resource(Resource(
     },
     actions=[
         Action("archive", archive_customer, label="Archive", position="row",
-               appearance="badge", dialog="archive-notice",
+               appearance="badge", dialog="archive-notice", icon="archive",
                visible=lambda _principal, record: record.active),
         Action("preview", preview_customer, label="Profile", position="both",
-               component="customer-profile", appearance="button"),
+               component="customer-profile", appearance="button", icon="contact"),
         Action("archive_selected", archive_selected_customers, kind="bulk",
-               label="Archive selected", confirmation="Archive selected customers?"),
+               label="Archive selected", icon="archive", confirmation="Archive selected customers?"),
         Action("reactivate_all", reactivate_all_customers, kind="resource",
-               label="Reactivate all", confirmation="Reactivate all customers?"),
+               label="Reactivate all", icon="refresh-cw", confirmation="Reactivate all customers?"),
     ],
     create_schema=CustomerCreateRules, edit_schema=CustomerEditRules,
 ))
@@ -506,7 +521,7 @@ async def prepare_inventory_report(ctx):
 
 
 admin.add_resource(Resource(
-    Product, icon="boxes", navigation="Commerce",
+    Product, icon="package", navigation="Commerce",
     jobs=[JobAction("inventory-report", prepare_inventory_report,
                     label="Rebuild inventory report", confirmation="Rebuild demo report?")],
     list_fields=["id", "name", "sku", "price", "stock", "active", "display_label"],
@@ -528,7 +543,7 @@ admin.add_resource(Resource(
 # This resource deliberately uses a custom CRUD list while retaining the
 # standard create, edit and detail screens and all server-side permissions.
 admin.add_resource(Resource(
-    Tag, icon="folder", navigation="Commerce", name="tags", title_field="name",
+    Tag, icon="tags", navigation="Commerce", name="tags", title_field="name",
     list_fields=["id", "name", "color"], search_fields=["name"],
     crud_views={"list": "tags-list"},
     relationships={"products": Relationship(label="Tagged products")},
@@ -595,13 +610,13 @@ admin.add_resource(Resource(Agent, navigation="Agents", icon="bot", visible_name
                                 label="Avatar", components={"list": "asset-image", "show": "asset-image"})}))
 admin.add_resource(Resource(AgentRun, name="agent-runs", navigation="Agents/Operations",
                             icon="activity", list_fields=["id", "agent_id", "outcome"], search_fields=["outcome"]))
-admin.add_resource(Resource(FileAsset, name="file-assets", navigation="Agents/Operations", icon="folder",
+admin.add_resource(Resource(FileAsset, name="file-assets", navigation="Agents/Operations", icon=ImageIcon(src="favicon.svg"),
                             visible_name=FileAsset.name, relationships={"agents": Relationship(visible=False)},
                             list_fields=["id", "name"], allow_create=False, allow_edit=False,
                             fields={"svg": Field(visible=False)}))
 admin.add_bridge(Bridge("resolve-asset", AssetInput, AssetOutput, resolve_asset,
                         description="Resolve an asset to its display URL"))
-admin.add_page(Page("insights", label="Insights", component="insights", icon="layout-dashboard",
+admin.add_page(Page("insights", label="Insights", component="insights", icon="chart-column",
                     navigation="Agents"))
 
 

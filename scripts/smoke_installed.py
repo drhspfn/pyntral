@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from pyntral import Admin, LocalAuth, hash_password
+from pyntral import Admin, LocalAuth, SidebarConfig, SidebarHeader, SvgIcon, hash_password
 import pyntral
 
 
@@ -30,7 +30,10 @@ def main() -> None:
                 Admin(app, session_factory=lambda: None,
                       auth=LocalAuth("demo", hash_password("local-smoke-password")),
                       secret_key="smoke-test-only-secret-of-sufficient-length",
-                      secure_cookie=False)
+                      secure_cookie=False, title="Wheel workspace",
+                      sidebar=SidebarConfig(header=SidebarHeader(icon=SvgIcon(
+                          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"/>'),
+                          subtitle="No frontend build")))
                 with TestClient(app) as client:
                     root = client.get("/admin/")
                     assert root.status_code == 200, root.text
@@ -44,6 +47,13 @@ def main() -> None:
                     asset = client.get("/admin/assets/" + assets[0].name)
                     assert asset.status_code == 200, asset.text
                     assert asset.content == assets[0].read_bytes()
+                    login = client.post("/admin/auth/login", json={"username": "demo", "password": "local-smoke-password"})
+                    assert login.status_code == 200, login.text
+                    schema = client.get("/admin/api/schema").json()
+                    header = schema["navigation"]["sidebar"]["header"]
+                    assert header["title"] == "Wheel workspace"
+                    assert header["subtitle"] == "No frontend build"
+                    assert header["icon"]["kind"] == "svg"
                 proxy = FastAPI()
                 Admin(proxy, path="/ops", session_factory=lambda: None,
                       auth=LocalAuth("demo", hash_password("local-smoke-password")),
