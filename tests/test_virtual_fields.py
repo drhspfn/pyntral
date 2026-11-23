@@ -59,6 +59,8 @@ def test_failed_update_representation_rolls_back():
     def display_title(row):
         if row.title == "Invalid for display":
             raise RuntimeError("Fixture formatting error")
+        if row.title == "Invalid for JSON":
+            return float("nan")
         return row.title
 
     admin.add_resource(Resource(Article, virtual_fields={"display": VirtualField(getter=display_title)}))
@@ -67,9 +69,10 @@ def test_failed_update_representation_rolls_back():
         db.commit()
     with TestClient(app, raise_server_exceptions=False) as client:
         login = client.post("/admin/auth/login", json={"username":"u","password":"fixture"})
-        result = client.patch("/admin/api/resources/articles/1", json={"title":"Invalid for display"},
-                              headers={"X-CSRF-Token": login.json()["csrf"]})
-        assert result.status_code == 500
-        with sessions() as db:
-            assert db.get(Article, 1).title == "Original"
+        for title in ("Invalid for display", "Invalid for JSON"):
+            result = client.patch("/admin/api/resources/articles/1", json={"title": title},
+                                  headers={"X-CSRF-Token": login.json()["csrf"]})
+            assert result.status_code == 500
+            with sessions() as db:
+                assert db.get(Article, 1).title == "Original"
     engine.dispose()

@@ -175,4 +175,4 @@ The image build runs ESLint, strict TypeScript checking, and Vite. See the
 
 ## CI and publishing
 
-CI for pull requests runs **only** when the `Run checks` label is added. Releases are published as **Python wheels and source distributions on PyPI** using GitHub OIDC Trusted Publishing. The compiled generic React SPA is packaged inside the Python distribution; no npm package is published. See [release setup](docs/publishing.md).
+Add the `Run checks` label to start PR CI. It reruns on pushes while the label is present. Releases are published as **Python wheels and source distributions on PyPI** using GitHub OIDC Trusted Publishing. The compiled generic React SPA is packaged inside the Python distribution; no npm package is published. See [release setup](docs/publishing.md).

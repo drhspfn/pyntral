@@ -27,4 +27,4 @@ Describe the user-visible change, Python API and compatibility implications.
 
 Describe ACL, scope, migration and API compatibility considerations.
 
-> PR CI starts when the `Run checks` label is added (remove and re-add to rerun).
+> PR CI runs when the `Run checks` label is added and on pushes while the label is present.

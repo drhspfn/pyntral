@@ -506,7 +506,7 @@ class Admin:
     async def _create_record(
         self, session: Any, adapter: MapperAdapter, principal: Principal, payload: dict,
         *, members: list | None = None,
-    ) -> dict:
+    ) -> JSONResponse:
         name = adapter.resource.name
         write_fields = await self._allowed_fields(principal, name, edit=True, view="create")
         rejected = set(payload) - write_fields
@@ -533,7 +533,7 @@ class Admin:
         if members is not None:
             await self._authorize(principal, name, "select", record)
         fields = await self._allowed_fields(principal, name, view="show", record=record)
-        result = adapter.serialize(record, fields)
+        response = JSONResponse({"record": adapter.serialize(record, fields)}, status_code=201)
         await adapter._commit(session)
         ctx.record = record
         await self._after_write(adapter, "after_create", ctx)
@@ -542,7 +542,7 @@ class Admin:
             resource=name, record_id=identifier, actor_id=str(principal.id),
             fields=field_refs(adapter, payload), **event_context(),
         ))
-        return result
+        return response
 
     async def _after_write(self, adapter: MapperAdapter, phase: str, ctx: OperationContext) -> None:
         if not any(getattr(hook, phase) is not None for hook in adapter.resource.hooks):
@@ -1258,15 +1258,14 @@ class Admin:
             )
 
         @api.post("/api/resources/{name}", status_code=201)
-        async def create(name: str, request: Request, principal: Principal = Depends(self._principal)) -> dict:
+        async def create(name: str, request: Request, principal: Principal = Depends(self._principal)) -> Response:
             self._csrf(request)
             await self._authorize(principal, name, "create")
             payload = await self._body(request)
             adapter = self._adapter(name)
             session = self.session_factory()
             try:
-                result = await self._create_record(session, adapter, principal, payload)
-                return {"record": result}
+                return await self._create_record(session, adapter, principal, payload)
             finally:
                 await maybe_await(session.close())
 
@@ -1387,7 +1386,7 @@ class Admin:
         async def update_one(
             name: str, identifier: str, request: Request,
             principal: Principal = Depends(self._principal),
-        ) -> dict:
+        ) -> Response:
             self._csrf(request)
             await self._authorize(principal, name, "edit")
             payload = await self._body(request)
@@ -1418,7 +1417,7 @@ class Admin:
                     await maybe_await(session.flush())
                 await maybe_await(session.refresh(record))
                 read_fields = await self._allowed_fields(principal, name, view="show", record=record)
-                result = adapter.serialize(record, read_fields)
+                response = JSONResponse({"record": adapter.serialize(record, read_fields)})
                 await adapter._commit(session)
                 await self._after_write(adapter, "after_update", ctx)
                 self.log_event("resource", "resource.updated", principal=principal, resource=name,
@@ -1428,7 +1427,7 @@ class Admin:
                         resource=name, record_id=identifier, actor_id=str(principal.id),
                         fields=field_refs(adapter, sorted(changed)), **event_context(),
                     ))
-                return {"record": result}
+                return response
             finally:
                 await maybe_await(session.close())
 
@@ -1589,7 +1588,7 @@ class Admin:
 
         @api.post("/api/resources/{name}/{identifier}/relationships/{relation_name}/create", status_code=201)
         async def create_related(name: str, identifier: str, relation_name: str,
-                                 request: Request, principal: Principal = Depends(self._principal)) -> dict:
+                                 request: Request, principal: Principal = Depends(self._principal)) -> Response:
             self._csrf(request)
             payload = await self._body(request)
             session = self.session_factory()
@@ -1598,14 +1597,14 @@ class Admin:
                     name, identifier, relation_name, principal, session)
                 await self._authorize(principal, target.resource.name, "create")
                 await self._authorize(principal, target.resource.name, "select")
-                child = await self._create_record(
+                response = await self._create_record(
                     session, target, principal, payload, members=getattr(parent, relation_name))
                 await self._publish(ResourceUpdated(
                     resource=name, record_id=identifier, actor_id=str(principal.id),
                     fields=(FieldRef(
                         name=relation_name, kind="relationship"),), **event_context(),
                 ))
-                return {"record": child}
+                return response
             finally:
                 await maybe_await(session.close())
 
