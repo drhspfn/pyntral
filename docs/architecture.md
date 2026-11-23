@@ -30,7 +30,8 @@ The Python resource registry is dynamic. Registering a new model or changing its
 
 The generic SPA is bundled as static package data inside published Python wheels and is available without npm. Only an application with custom TSX components needs an application-local Vite build; that bundle takes precedence over the generic one.
 
-The `.pyntral/` directory stores generated UI sources, npm installation data, generated bridge types, fingerprints, and compiled assets. It is ignored by Git and can be removed and reconstructed.
+The `.pyntral/` directory stores generated UI sources, npm installation data, generated bridge types, fingerprints, and compiled assets. Git ignores it. The build files can be reconstructed, but any application data
+stored there, such as local attachments, must be preserved.
 
 ## Extension and security boundaries
 

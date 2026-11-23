@@ -52,4 +52,6 @@ Bridge inputs and outputs are validated according to their Pydantic models. Upda
 
 ## Cache resets
 
-You can remove `.pyntral/` and rebuild. Do not remove `.env` or your real application database; those are not build artifacts. Keep the committed `uv.lock` when rebuilding from a release checkout.
+Remove the generated UI files under `.pyntral/` and rebuild. Preserve
+`.env`, your database and any attachment directory such as the Shop example's
+`.pyntral/uploads/`. Keep the committed `uv.lock` when rebuilding from a release checkout.

@@ -45,7 +45,9 @@ Additional flags: `--access-log`, `--log-format compact|json`, `--log-channel NA
 
 `pyntral dev` copies packaged UI sources only when their hash changes; npm dependencies are reinstalled when the manifest changes. The build fingerprint includes UI sources, extension configuration/files, generated types and public base path. Running `pyntral build` again may be a cache hit; `--force` always rebuilds.
 
-`.pyntral/` is **generated state**; do not commit it. It may be deleted to force a clean rebuild. `.env` and your application database are **not** part of this directory and should be kept separately.
+Do not commit `.pyntral/`. Remove its generated UI files to force a clean
+rebuild. If the application also uses a subdirectory for file storage, preserve
+that directory. Keep `.env` and the application database separate.
 
 ## External TSX components
 
