@@ -135,7 +135,7 @@ def test_cli_quiet_default_and_selective_http(tmp_path, monkeypatch):
         commands.append((cmd, kwargs.get("env")))
         return FakeProcess()
     monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(cli, "_npm_executable", lambda: "npm")
+    monkeypatch.setattr(cli, "_vite_dev_command", lambda *_: ["node", "vite.js"])
     assert cli.dev(tmp_path, "examples.shop.app:app", backend_port=8000,
                    frontend_port=5173, base="/admin/") == 0
     assert "--no-access-log" in commands[0][0]
@@ -202,7 +202,7 @@ def test_cli_event_filters_and_channel_file(tmp_path, monkeypatch):
     cli.sync_ui(tmp_path)
     monkeypatch.setattr(cli, "install_frontend", lambda *_: None)
     monkeypatch.setattr(cli, "generate_types", lambda *_: None)
-    monkeypatch.setattr(cli, "_npm_executable", lambda: "npm")
+    monkeypatch.setattr(cli, "_vite_dev_command", lambda *_: ["node", "vite.js"])
     class Process:
         returncode = 0
         def poll(self):
