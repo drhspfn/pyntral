@@ -18,6 +18,8 @@ export type { ButtonProps, ButtonVariant } from "./button";
 export { FileUpload } from "./file-upload";
 export { FileRow } from "./file-row";
 export { Icon } from "./icon";
+export { Brand } from "./brand";
+export type { BrandProps } from "./brand";
 export type { IconProps } from "./icon";
 export type { FileRowProps } from "./file-row";
 export { Collapsible } from "./collapsible";

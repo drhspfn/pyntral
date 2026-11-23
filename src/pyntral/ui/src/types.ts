@@ -109,6 +109,16 @@ export interface ThemeConfig {
   tokens: { light?: Record<string, string>; dark?: Record<string, string> };
 }
 export interface LocalizationConfig { code: string; messages: Record<string, string>; }
+export interface LoginConfig {
+  layout: "centered" | "split"; sidePosition: "left" | "right";
+  brandPosition: "form" | "side" | "hidden"; brand: SidebarHeaderConfig | null;
+  formAlign: "left" | "center" | "right"; card: boolean; maxWidth: number;
+  title: string; subtitle?: string | null; eyebrow?: string | null; formIcon: IconSpec;
+  usernameLabel: string; passwordLabel: string; submitLabel: string; footer?: string | null;
+  sideTitle?: string | null; sideDescription?: string | null; sideFooter?: string | null;
+  showThemeToggle: boolean; showPasswordToggle: boolean;
+}
+export interface PublicLoginConfig { login: LoginConfig; theme: ThemeConfig; localization?: LocalizationConfig }
 export interface Schema {
   realtime?: boolean;
   localization?: LocalizationConfig;
@@ -178,7 +188,12 @@ export interface AuthState { user: Principal | null; csrf: string | null }
 export interface AccessDeniedProps { resource: ResourceDef; currentAdmin: Principal }
 export type AccessDeniedComponent = ComponentType<AccessDeniedProps>;
 
-export interface LoginScreenProps { onAuthenticated: (auth: AuthState) => void }
+export interface LoginScreenProps {
+  onAuthenticated: (auth: AuthState) => void;
+  config: PublicLoginConfig;
+  themeMode: ThemeMode;
+  toggleTheme: () => void;
+}
 export type LoginScreenComponent = ComponentType<LoginScreenProps>;
 
 export interface CustomCrudProps {

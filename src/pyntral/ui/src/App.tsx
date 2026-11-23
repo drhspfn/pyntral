@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { version as uiVersion } from "../package.json";
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Boxes,
-  ChevronLeft, ChevronRight, CircleAlert, Command, ExternalLink, Filter,
+  ChevronLeft, ChevronRight, CircleAlert, ExternalLink, Filter,
   LoaderCircle, LockKeyhole, LogOut, Menu, MoreHorizontal, Pencil,
-  Plus, RefreshCw, ShieldCheck, Trash2, Sun, Moon, X,
+  Plus, RefreshCw, Trash2, Sun, Moon, X,
 } from "lucide-react";
 import { fields as customFields, pages as customPages, actions as customActions, dialogs as customDialogs, crud as customCrud, themes as customThemes, profile as customProfile, auth as customAuth } from "virtual:pyntral-extensions";
 import { SidebarNavigation } from "./navigation";
 import { sidebarConfig, SidebarHeaderRegion, SidebarFooterRegion } from "./sidebar";
 import { Icon } from "./icon";
+import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
 import { AsyncSelect, Button, Card, Checkbox, Collapsible, DatePicker, FileRow, FileUpload, FormField, SearchInput, Select, TextInput, Textarea,
@@ -28,7 +28,7 @@ import { ExportControls } from "./export-controls";
 import { hasNavigationBlocker, mayLeavePage, registerNavigationBlocker } from "./navigation-guard";
 import { api, base, buildQuery, getAuth, setCsrf } from "./api";
 import type {
-  ActionDef, AuthState, CustomFieldProps, CustomCrudProps, CustomCollectionActionProps, FieldDef, JobDef, RecordData, ResourceDef, Schema, ThemeMode,
+  ActionDef, AuthState, CustomFieldProps, CustomCrudProps, CustomCollectionActionProps, FieldDef, JobDef, RecordData, ResourceDef, Schema, ThemeMode, PublicLoginConfig,
 } from "./types";
 import { viewFields } from "./types";
 
@@ -111,42 +111,6 @@ function FieldValue({ resource, field, value, record, mode }: {
   const Comp = custom ? customFields[custom] : undefined;
   if (Comp) return <Comp field={field} value={value} record={record} resource={resource} mode={mode} />;
   return <>{pretty(value, field.kind)}</>;
-}
-
-function Login({ onSignedIn }: { onSignedIn: (state: AuthState) => void }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const login = useMutation({
-    mutationFn: () => api<AuthState>("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
-    onSuccess: (state) => { setCsrf(state.csrf); onSignedIn(state); },
-  });
-  return <div className="login-page">
-    <div className="login-side">
-      <div className="brand"><div className="brand-mark"><Command size={23} /></div><strong>Pyntral</strong></div>
-      <div className="login-side-content"><div className="eyebrow">BUILT FOR BUILDERS</div>
-        <h1>Everything under<br /><em>your control.</em></h1>
-        <p>Manage your data, shape your workflows, and move faster with an admin interface built around your models.</p>
-        <div className="login-mini"><ShieldCheck size={17} /> Secure workspace · Powered by Python + React</div>
-      </div><div className="login-side-footer">Pyntral / {uiVersion}</div>
-    </div>
-    <div className="login-panel"><form className="login-form" onSubmit={(e) => { e.preventDefault(); login.mutate(); }}>
-      <div className="login-icon"><LockKeyhole size={24} /></div>
-      <div className="eyebrow">WELCOME BACK</div>
-      <h2>Sign in to your workspace</h2>
-      <p className="login-subtitle">Use your administrator account to continue.</p>
-      {login.error && <Alert error={login.error} />}
-      <label htmlFor="username">Username</label>
-      <input id="username" autoComplete="username" autoFocus required value={username}
-        onChange={(e) => setUsername(e.target.value)} placeholder="Your username" />
-      <label htmlFor="password">Password</label>
-      <input id="password" type="password" autoComplete="current-password" required
-        value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-      <button className="btn primary login-submit" type="submit" disabled={login.isPending}>
-        {login.isPending ? <LoaderCircle className="spin" size={17} /> : <>Continue <ArrowRight size={17} /></>}
-      </button>
-      <div className="login-note"><ShieldCheck size={15} /> Protected by signed sessions and CSRF validation</div>
-    </form></div>
-  </div>;
 }
 
 function Overview({ schema, navigate }: { schema: Schema; navigate: (route: string) => void }) {
@@ -1090,6 +1054,7 @@ function AdminApp() {
   const client = useQueryClient();
   const { route, navigate } = useNavigation();
   const auth = useQuery({ queryKey: ["auth"], queryFn: getAuth, retry: false, staleTime: 15_000 });
+  const publicLogin = useQuery({ queryKey: ["login-config"], queryFn: () => api<PublicLoginConfig>("/auth/config"), retry: false });
   const schema = useQuery({ queryKey: ["schema", auth.data?.user?.id], enabled: !!auth.data?.user,
     queryFn: () => api<Schema>("/api/schema") });
   const feedback = useAdminFeedback();
@@ -1110,20 +1075,25 @@ function AdminApp() {
     return () => source.close();
   }, [auth.data?.user?.id, schema.data?.realtime, client]);
   const setNotice = useCallback((message: string) => feedback.toast(message, { kind: "success" }), [feedback]);
-  const [preferredTheme, setPreferredTheme] = useState(() => localStorage.getItem("pyntral-theme") || "system");
+  const [preferredTheme, setPreferredTheme] = useState(() => {
+    try { const saved = localStorage.getItem("pyntral-theme"); return saved === "light" || saved === "dark" ? saved : "system"; }
+    catch { return "system"; }
+  });
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const themeMode: ThemeMode = preferredTheme === "system" ? (schema.data?.theme?.default === "system" || !schema.data?.theme
-    ? (systemDark ? "dark" : "light") : resolveMode(schema.data.theme.default)) : resolveMode(preferredTheme);
+  const loginConfig = publicLogin.data ?? defaultLoginConfig;
+  const theme = (auth.data?.user ? schema.data?.theme : undefined) ?? loginConfig.theme;
+  const themeSelection = preferredTheme === "system" ? theme.default : preferredTheme;
+  const themeMode: ThemeMode = themeSelection === "system" ? (systemDark ? "dark" : "light") : resolveMode(themeSelection);
   useEffect(() => {
     const query = window.matchMedia("(prefers-color-scheme: dark)");
     const update = () => setSystemDark(query.matches);
     query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
   }, []);
-  useEffect(() => { if (!schema.data) return; return applyTheme(schema.data, themeMode); }, [schema.data, themeMode]);
+  useLayoutEffect(() => applyTheme({ theme }, themeMode), [theme, themeMode]);
   const toggleTheme = () => {
     const next = themeMode === "light" ? "dark" : "light";
-    localStorage.setItem("pyntral-theme", next);
+    try { localStorage.setItem("pyntral-theme", next); } catch { /* storage may be unavailable */ }
     setPreferredTheme(next);
   };
   const logout = async () => { try { await api("/auth/logout", { method: "POST" }); } finally {
@@ -1169,8 +1139,14 @@ function AdminApp() {
       client.setQueryData(["auth"], state);
       client.invalidateQueries({ queryKey: ["schema"] });
     };
+    if (publicLogin.isPending) return <div className="fullscreen-loading"><Loading label="Loading sign-in…"/></div>;
+    if (publicLogin.error) return <div className="fullscreen-loading"><Alert error={publicLogin.error}/>
+      <button className="btn subtle" onClick={() => publicLogin.refetch()}>Retry</button></div>;
     const CustomLogin = customAuth.login;
-    return CustomLogin ? <CustomLogin onAuthenticated={authenticated}/> : <Login onSignedIn={authenticated}/>;
+    const props = { onAuthenticated: authenticated, config: loginConfig, themeMode, toggleTheme };
+    return <I18nProvider config={loginConfig.localization}>
+      {CustomLogin ? <CustomLogin {...props}/> : <LoginScreen {...props}/>}
+    </I18nProvider>;
   }
   if (schema.isPending) return <div className="fullscreen-loading"><Loading label="Loading workspace…"/></div>;
   if (schema.error || !schema.data) return <div className="fullscreen-loading"><Alert error={schema.error}/><button className="btn subtle" onClick={() => schema.refetch()}>Retry</button></div>;

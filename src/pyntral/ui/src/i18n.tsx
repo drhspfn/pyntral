@@ -10,6 +10,9 @@ export interface Translator {
 /** Bundled core messages; application dictionaries take precedence. */
 const coreMessages: Record<string, Record<string, string>> = {
   ru: {
+    "login.title": "Вход", "login.subtitle": "Войдите с учётной записью администратора.",
+    "login.username": "Имя пользователя", "login.password": "Пароль", "login.submit": "Продолжить",
+    "login.show_password": "Показать пароль", "login.hide_password": "Скрыть пароль", "login.toggle_theme": "Переключить тему",
     "nav.overview": "Обзор", "nav.sign_out": "Выйти",
     "resources.description": "Просмотр и управление записями.",
     "actions.new": "Новая запись", "actions.create": "Создать запись",
@@ -18,6 +21,9 @@ const coreMessages: Record<string, Record<string, string>> = {
     "table.clear_filters": "Очистить фильтры", "table.sort_by": "Сортировка",
   },
   es: {
+    "login.title": "Iniciar sesión", "login.subtitle": "Usa tu cuenta de administrador para continuar.",
+    "login.username": "Usuario", "login.password": "Contraseña", "login.submit": "Continuar",
+    "login.show_password": "Mostrar contraseña", "login.hide_password": "Ocultar contraseña", "login.toggle_theme": "Cambiar tema",
     "nav.overview": "Resumen", "nav.sign_out": "Cerrar sesión",
     "resources.description": "Consulta y administra tus registros.",
     "actions.new": "Nuevo registro", "actions.create": "Crear registro",
@@ -26,6 +32,9 @@ const coreMessages: Record<string, Record<string, string>> = {
     "table.clear_filters": "Borrar filtros", "table.sort_by": "Ordenar por",
   },
   fr: {
+    "login.title": "Connexion", "login.subtitle": "Utilisez votre compte administrateur pour continuer.",
+    "login.username": "Identifiant", "login.password": "Mot de passe", "login.submit": "Continuer",
+    "login.show_password": "Afficher le mot de passe", "login.hide_password": "Masquer le mot de passe", "login.toggle_theme": "Changer de thème",
     "nav.overview": "Vue d'ensemble", "nav.sign_out": "Se déconnecter",
     "resources.description": "Consulter et gérer les enregistrements.",
     "actions.new": "Nouvel enregistrement", "actions.create": "Créer",

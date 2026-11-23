@@ -35,6 +35,7 @@ from .events import (
 from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
 from .sidebar import SidebarConfig, icon_metadata
+from .login import LoginConfig
 from .hooks import OperationContext
 from .realtime import RealtimeNotifier
 from .jobs import JobManager
@@ -79,6 +80,7 @@ class Admin:
         animations: bool = True,
         show_dashboard: bool = True,
         sidebar: SidebarConfig | None = None,
+        login: LoginConfig | None = None,
         role_weights: dict[str, int] | None = None,
         logging_config: LoggingConfig | None = None,
         event_bus: EventTransport | None = None,
@@ -185,6 +187,9 @@ class Admin:
         if sidebar is not None and not isinstance(sidebar, SidebarConfig):
             raise TypeError("sidebar must be SidebarConfig")
         self.sidebar = sidebar if sidebar is not None else SidebarConfig()
+        if login is not None and not isinstance(login, LoginConfig):
+            raise TypeError("login must be LoginConfig")
+        self.login_config = login if login is not None else LoginConfig()
         self.role_weights = dict(role_weights or {})
         # The CLI explicitly opts into package-owned console logging. Library use
         # never changes the host application's logging handlers implicitly.
@@ -713,6 +718,17 @@ class Admin:
                 content={"error": {"code": error.code, "message": error.message,
                                    "details": error.details}},
             )
+
+        @api.get("/auth/config")
+        async def login_config() -> dict:
+            # Explicit public presentation contract. Do not expose resource metadata,
+            # bridges, principals, credentials or per-principal resolver output here.
+            return {"login": self.login_config.metadata(self.title, self.sidebar.header),
+                    "theme": {"default": self.default_theme, "animations": self.animations,
+                              "tokens": {mode: dict(self.theme.get(mode, {})) for mode in ("light", "dark")}},
+                    "localization": {"code": self.default_locale,
+                                     "messages": {k: v for k, v in self.translations.get(self.default_locale, {}).items()
+                                                  if k.startswith("login.")}}}
 
         @api.get("/auth/me")
         async def me(request: Request) -> dict:

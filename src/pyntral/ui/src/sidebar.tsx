@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { sidebarHeaders, sidebarFooters } from "virtual:pyntral-extensions";
 import type { Schema, SidebarConfig, SidebarRegionProps } from "./types";
-import { Icon } from "./icon";
+import { Brand, hasBrandContent } from "./brand";
 
 export function sidebarConfig(schema: Schema): SidebarConfig {
   return schema.navigation?.sidebar ?? {
@@ -19,26 +19,11 @@ export function SidebarHeaderRegion(props: RegionProps) {
   const header = config.header;
   const Custom = config.headerComponent ? sidebarHeaders[config.headerComponent] : undefined;
   let children: ReactNode = null;
-  if (header) {
-    const hasIcon = header.showIcon && header.icon != null;
-    const hasText = (header.showTitle && !!header.title) || (header.showSubtitle && !!header.subtitle);
-    if (hasIcon || hasText) {
-      const content = <>
-        {hasIcon && <span className={`ra-sidebar-logo ${header.iconBackground ? "has-background" : ""}`}>
-          <Icon icon={header.icon} size={header.iconSize} width={header.logoWidth ?? undefined} themeMode={themeMode}/>
-        </span>}
-        {hasText && <span className="ra-sidebar-heading-text">
-          {header.showTitle && header.title && <strong title={header.title}>{header.title}</strong>}
-          {header.showSubtitle && header.subtitle && <small title={header.subtitle}>{header.subtitle}</small>}
-        </span>}
-      </>;
-      const className = `ra-sidebar-heading align-${header.align} direction-${header.direction}`;
-      children = <div className={`ra-sidebar-header ${header.divider ? "has-divider" : ""}`}>
-        {header.linkToDashboard && schema.navigation.showDashboard !== false
-          ? <button type="button" className={className} aria-label={header.title || "Overview"} onClick={() => navigate("")}>{content}</button>
-          : <div className={className}>{content}</div>}
-      </div>;
-    }
+  if (header && hasBrandContent(header)) {
+    children = <div className={`ra-sidebar-header ${header.divider ? "has-divider" : ""}`}>
+      <Brand config={header} themeMode={themeMode}
+        onClick={header.linkToDashboard && schema.navigation.showDashboard !== false ? () => navigate("") : undefined}/>
+    </div>;
   }
   return Custom ? <Custom {...props}>{children}</Custom> : children;
 }

@@ -6,7 +6,7 @@ export function resolveMode(selection: string): ThemeMode {
 }
 
 /** Set custom CSS variables globally. Components should use var(--ra-*), not hard-coded values. */
-export function applyTheme(schema: Schema, mode: ThemeMode): () => void {
+export function applyTheme(schema: Pick<Schema, "theme">, mode: ThemeMode): () => void {
   const root = document.documentElement;
   root.dataset.theme = mode;
   root.classList.toggle("no-motion", schema.theme?.animations === false);
