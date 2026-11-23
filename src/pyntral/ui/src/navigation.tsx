@@ -1,17 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
-import { LockKeyhole, Bot, ChevronDown, ChevronRight, Cpu, Database, Folder, LayoutDashboard, Package, Settings, Users } from "lucide-react";
-import type { ComponentType } from "react";
-import type { Schema } from "./types";
+import { LockKeyhole, ChevronDown, ChevronRight } from "lucide-react";
+import type { Schema, SidebarConfig, IconSpec, SidebarItemProps } from "./types";
+import { Icon } from "./icon";
+import { sidebarConfig } from "./sidebar";
 import { useAdminFeedback } from "./feedback";
 import { useCurrentAdmin } from "./currentAdmin";
-import { access as accessExtensions } from "virtual:pyntral-extensions";
+import { useI18n } from "./i18n";
+import { OverflowText } from "./overflow-text";
+import { access as accessExtensions, sidebarItems } from "virtual:pyntral-extensions";
 
-type Node = { type: "group" | "resource" | "page"; id: string; label: string; icon: string; order: number; route?: string;
+type Node = { type: "group" | "resource" | "page"; id: string; label: string; icon: IconSpec; order: number; route?: string;
   locked?: boolean; children: Node[] };
-const iconMap: Record<string, ComponentType<{ size?: number }>> = {
-  bot: Bot, cpu: Cpu, folder: Folder, database: Database, boxes: Package,
-  users: Users, settings: Settings, "layout-dashboard": LayoutDashboard,
-};
 function makeTree(schema: Schema): Node[] {
   const root: Node[] = [];
   const groups = new Map<string, Node>();
@@ -25,7 +24,7 @@ function makeTree(schema: Schema): Node[] {
       let node = groups.get(current);
       if (!node) {
         const settings = definitions.get(current);
-        node = { type: "group", id: current, label: part, icon: settings?.icon || "folder", order: settings?.order || 0, children: [] };
+        node = { type: "group", id: current, label: part, icon: settings ? settings.icon : "folder", order: settings?.order || 0, children: [] };
         parent.push(node);
         groups.set(current, node);
       }
@@ -49,38 +48,58 @@ function makeTree(schema: Schema): Node[] {
   return root;
 }
 
-function Branch({ node, schema, route, go, depth }: { node: Node; schema: Schema; route: string; go: (route: string) => void; depth: number }) {
+function ItemContent({ config, schema, type, id, label, icon, depth, active, locked, open }: Omit<SidebarItemProps, "children"> & { config: SidebarConfig }) {
+  const Custom = config.itemComponent ? sidebarItems[config.itemComponent] : undefined;
+  const children = <>
+    {config.showIcons && <Icon icon={icon} size={config.iconSize} fallback={type === "group" ? "folder" : "database"}/>}
+    <OverflowText>{label}</OverflowText>
+    {locked && <LockKeyhole size={13} aria-label="Locked"/>}
+    {type === "group" && (open ? <ChevronDown size={14}/> : <ChevronRight size={14}/>)}
+  </>;
+  return Custom ? <Custom schema={schema} type={type} id={id} label={label} icon={icon}
+    depth={depth} active={active} locked={locked} open={open}>{children}</Custom> : children;
+}
+function Branch({ node, schema, route, go, depth, config }: {
+  node: Node; schema: Schema; route: string; go: (route: string) => void; depth: number; config: SidebarConfig;
+}) {
   const containsRoute = (target: Node): boolean => target.route ? route === target.route || route.startsWith(target.route + "/") : target.children.some(containsRoute);
   const activeChild = containsRoute(node);
   const [open, setOpen] = useState(activeChild || depth === 0);
   useEffect(() => { if (activeChild) setOpen(true); }, [activeChild]);
-  const Icon = iconMap[node.icon] || Folder;
   const { confirm } = useAdminFeedback();
   const currentAdmin = useCurrentAdmin();
   const LockedContent = accessExtensions.denied;
   const resource = schema.resources.find((r) => r.id === node.id);
+  const paddingLeft = 12 + Math.min(depth, config.maxIndentDepth) * config.indent;
+  const content = <ItemContent config={config} schema={schema} type={node.type} id={node.id}
+    label={node.label} icon={node.icon} depth={depth} active={activeChild} locked={!!node.locked}
+    open={node.type === "group" ? open : undefined}/>;
   if (node.type !== "group") return <button type="button" className={`nav-link ${activeChild ? "active" : ""}`}
-    style={{ paddingLeft: `${12 + depth * 12}px` }} onClick={() => {
+    aria-label={node.label} aria-current={activeChild ? "page" : undefined}
+    style={{ paddingLeft }} onClick={() => {
       if (node.locked) void confirm({ title: "Access denied", message: `You cannot access ${node.label}.`,
         confirmLabel: "OK", cancelLabel: "Close",
         content: LockedContent && resource ? <LockedContent currentAdmin={currentAdmin} resource={resource}/> : undefined });
       else go(node.route!);
-    }}>
-    <Icon size={16} /><span>{node.label}</span>{node.locked && <LockKeyhole size={13} aria-label="Locked"/>}</button>;
+    }}>{content}</button>;
   return <div className="nav-branch">
     <button className={`nav-link nav-toggle ${activeChild ? "ancestor-active" : ""}`} type="button"
-      aria-expanded={open} style={{ paddingLeft: `${12 + depth * 12}px` }} onClick={() => setOpen(!open)}>
-      <Icon size={16}/><span>{node.label}</span>{open ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+      aria-label={node.label} aria-expanded={open} style={{ paddingLeft }} onClick={() => setOpen(!open)}>
+      {content}
     </button>
-    {open && <div className="nav-children">{node.children.map((child) => <Branch key={child.type + child.id}
-      node={child} schema={schema} route={route} go={go} depth={depth + 1} />)}</div>}
+    {open && <div className="nav-children">{node.children.map(child => <Branch key={child.type + child.id}
+      node={child} schema={schema} route={route} go={go} depth={depth + 1} config={config}/>)}</div>}
   </div>;
 }
 export function SidebarNavigation({ schema, route, navigate }: { schema: Schema; route: string; navigate: (route: string) => void }) {
   const tree = useMemo(() => makeTree(schema), [schema]);
+  const config = sidebarConfig(schema);
+  const { t } = useI18n();
   return <nav aria-label="Admin navigation">
-    {schema.navigation?.showDashboard !== false && <button className={`nav-link ${!route ? "active" : ""}`} onClick={() => navigate("")}>
-      <LayoutDashboard size={16}/><span>Overview</span></button>}
-    {tree.map((node) => <Branch key={node.type + node.id} node={node} schema={schema} route={route} go={navigate} depth={0}/>)}
+    {schema.navigation?.showDashboard !== false && <button type="button" className={`nav-link ${!route ? "active" : ""}`}
+      aria-current={!route ? "page" : undefined} aria-label={t("nav.overview", "Overview")} onClick={() => navigate("")}>
+      <ItemContent config={config} schema={schema} type="dashboard" id="dashboard" label={t("nav.overview", "Overview")}
+        icon={config.dashboardIcon} depth={0} active={!route} locked={false}/></button>}
+    {tree.map(node => <Branch key={node.type + node.id} node={node} schema={schema} route={route} go={navigate} depth={0} config={config}/>)}
   </nav>;
 }

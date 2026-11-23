@@ -47,7 +47,7 @@ uv run pyntral build --app examples.shop.app:app --force
 
 For packaging changes, build the **generic** SPA into the wheel and check `scripts/smoke_installed.py` on the installed wheel, not source imports. For frontend changes, run the customized Shop build; when available, verify the UI in a browser. Distinguish these two builds explicitly.
 
-PR CI runs **only after adding the `Run checks` label**. To rerun after a new commit, remove and re-add the label.
+PR CI starts when the `Run checks` label is added and runs on subsequent pushes while the label is present.
 
 ## Pull requests and releases
 

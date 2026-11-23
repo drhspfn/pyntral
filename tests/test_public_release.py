@@ -10,7 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_public_identity():
     metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert metadata["project"]["name"] == "pyntral"
-    assert metadata["project"]["version"] == "1.0.0b1"
+    from json import loads
+
+    version = metadata["project"]["version"]
+    assert version == "1.0.0b2"
+    assert loads((ROOT / "src/pyntral/ui/package.json").read_text(encoding="utf-8"))["version"] == version.replace("b", "-beta.")
+    assert f"## {version} — Second public beta" in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert metadata["project"]["scripts"]["pyntral"] == "pyntral.cli:main"
     assert (ROOT / "src/pyntral/__init__.py").is_file()
     assert (ROOT / "pyntral.components.json").is_file()
@@ -18,6 +23,7 @@ def test_public_identity():
 
 def test_all_markdown_relative_links_exist():
     files = [ROOT / "README.md", *ROOT.glob("docs/*.md"),
+             *ROOT.glob("examples/*/README.md"),
              ROOT / "CHANGELOG.md", ROOT / "CONTRIBUTING.md", ROOT / "SECURITY.md"]
     assert len(files) >= 15
     for p in files:

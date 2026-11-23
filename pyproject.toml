@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pyntral"
-version = "1.0.0b1"
+version = "1.0.0b2"
 description = "Extensible React admin console for FastAPI and SQLAlchemy"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,7 +30,9 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+asyncio = ["sqlalchemy[asyncio]>=2.0.40,<3"]
 loguru = ["loguru>=0.8,<1"]
+s3 = ["boto3>=1.35,<2"]
 rabbitmq = ["aio-pika==10.2.3"]
 kafka = ["aiokafka==0.15.0"]
 all-events = ["aio-pika==10.2.3", "aiokafka==0.15.0"]

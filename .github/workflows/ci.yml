@@ -2,7 +2,7 @@ name: PR checks
 
 on:
   pull_request:
-    types: [labeled]
+    types: [labeled, synchronize]
 
 permissions:
   contents: read
@@ -14,7 +14,9 @@ concurrency:
 jobs:
   checks:
     name: Python, frontend and distribution
-    if: github.event.label.name == 'Run checks'
+    if: >-
+      (github.event.action == 'labeled' && github.event.label.name == 'Run checks') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'Run checks'))
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -28,23 +30,23 @@ jobs:
         with:
           node-version: '24'
       - name: Install Python dependencies
-        run: uv sync --extra dev
+        run: uv sync --locked --extra dev --extra asyncio
       - name: Python tests
-        run: uv run pytest -q
+        run: uv run --locked --extra asyncio pytest -q
       - name: Frontend logic tests
         run: node --experimental-strip-types --test src/pyntral/ui/tests/*.test.mjs
       - name: Configure isolated demo credentials
         run: |
           echo 'ADMIN_USERNAME=ci' >> "$GITHUB_ENV"
-          echo "ADMIN_PASSWORD_HASH=$(uv run pyntral hash-password --password ci-development-password-123)" >> "$GITHUB_ENV"
+          echo "ADMIN_PASSWORD_HASH=$(uv run --locked pyntral hash-password --password ci-development-password-123)" >> "$GITHUB_ENV"
           echo 'APP_SECRET_KEY=ci-only-secret-must-be-at-least-32-characters-long' >> "$GITHUB_ENV"
           echo 'ADMIN_SECURE_COOKIE=false' >> "$GITHUB_ENV"
       - name: Generate editor bridge declarations
-        run: uv run pyntral types examples.shop.app:app --editor
+        run: uv run --locked pyntral types examples.shop.app:app --editor
       - name: Typecheck and build customized shop UI (TSX extensions)
-        run: uv run pyntral build --app examples.shop.app:app --force
+        run: uv run --locked pyntral build --app examples.shop.app:app --force
       - name: Build self-contained Python distributions (generic UI)
-        run: uv run python scripts/build_release.py
+        run: uv run --locked python scripts/build_release.py
       - name: Verify both installation modes
         run: |
           test -s .pyntral/generated/bridges.ts
@@ -54,3 +56,22 @@ jobs:
           uv venv /tmp/pyntral-ci-wheel
           uv pip install --python /tmp/pyntral-ci-wheel/bin/python dist/*.whl httpx
           /tmp/pyntral-ci-wheel/bin/python scripts/smoke_installed.py
+
+  windows-dev-reload:
+    name: Windows dev reload
+    if: >-
+      (github.event.action == 'labeled' && github.event.label.name == 'Run checks') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'Run checks'))
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install Python dependencies
+        run: uv sync --locked --extra dev
+      - name: Test dev reload and process isolation
+        run: uv run --locked pytest -q tests/test_dev_reload.py tests/test_cli.py

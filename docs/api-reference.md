@@ -9,8 +9,12 @@ This page summarizes the public interfaces available in the current beta. For pr
 ```python
 from pyntral import (
     Admin, Resource, Field, Relationship, Action, Page, NavigationGroup,
-    RoleAccess, Bridge, BridgeContext,
+    SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec, LoginConfig,
+    RoleAccess, Bridge, BridgeContext, ResourceHook, VirtualField, FieldDependency,
+    FieldView, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature,
+    TimestampFeature, AuditFeature, UploadFeature, LocalStorage, S3Storage,
     Principal, CallbackAuth, LocalAuth, ModelAuth, hash_password, verify_password,
+    SessionStore, SessionIdentity, MemorySessionStore,
     LoggingConfig, EventFormatter, configure_logging, forward_to_loguru, stop_logging,
     AdminEvent, FieldRef, ResourceEvent, ResourceCreated, ResourceUpdated,
     ResourceDeleted, ActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded,
@@ -25,10 +29,15 @@ from pyntral import (
 Admin(
     app,
     *, session_factory, auth, secret_key,
-    path="/admin", secure_cookie=True, dist_dir=None,
+    path="/admin", secure_cookie=True, session_cookie="pyntral_session",
+    session_cookie_path="/", session_max_age=43200, session_store=None,
+    require_async_sessions=False, enable_jobs=True, dist_dir=None,
     title="Pyntral", theme=None, default_theme="system",
-    animations=True, show_dashboard=True, role_weights=None,
+    animations=True, show_dashboard=True, sidebar=None, login=None, role_weights=None,
     logging_config=None, event_bus=None, auto_start_events=True,
+    event_publish_timeout=2.0, max_json_bytes=1048576, storage=None,
+    default_locale="en", translations=None, locale_resolver=None,
+    theme_resolver=None, realtime_updates=False,
 )
 ```
 
@@ -58,27 +67,161 @@ Key methods:
 - `LoggingConfig`: level, channels, events, http, slow_request_ms and optional principal/record identifiers.
 - Event classes: immutable metadata-only Pydantic envelopes; buses implement `EventTransport` lifecycle and publication.
 
+### Sidebar and icon configuration
+
+`Admin(sidebar=SidebarConfig(...))` is optional. Omission uses the defaults
+below. The generic wheel reads this metadata without a custom SPA build.
+
+| `SidebarConfig` parameter | Default | Meaning |
+| --- | --- | --- |
+| `width`, `min_width`, `max_width` | 238, 238, 420 | Desktop width in pixels; 160 ≤ min ≤ width ≤ max ≤ 640. Further clamped to available viewport width. |
+| `mobile_width` | 238 | Independent drawer width (160–480 px), constrained to the viewport. |
+| `resizable` | True | Enable desktop resize separator. |
+| `show_icons` | True | Show navigation glyphs, independent of header and lock/disclosure indicators. |
+| `icon_size` | 16 | Navigation glyph size, 12–32 px. |
+| `indent` | 9 | Indentation per level, 0–24 px. |
+| `max_indent_depth` | 5 | Maximum visual indentation level, 0–8; does not restrict tree depth. |
+| `dashboard_icon` | "layout-dashboard" | IconSpec for Overview. |
+| `header`, `footer` | SidebarHeader(), SidebarFooter() | Region configuration; None hides the built-in region. |
+| `header_component`, `footer_component`, `item_component` | None | Optional registered TSX extension IDs. |
+
+| `SidebarHeader` parameter | Default | Meaning |
+| --- | --- | --- |
+| `title` | None | Inherit Admin.title. |
+| `subtitle` | None | Secondary text. |
+| `icon` | "command" | IconSpec for the logo. |
+| `show_icon`, `show_title`, `show_subtitle` | True | Independent visibility switches. |
+| `align` | "left" | left, center, right. |
+| `direction` | "horizontal" | horizontal or vertical. |
+| `divider` | True | Border below header. |
+| `icon_size` | 24 | Logo height / glyph size (12–120 px). |
+| `logo_width` | None | Optional image width (12–420 px). |
+| `icon_background` | True | Themed icon background. |
+| `link_to_dashboard` | True | Header navigates to Overview when Dashboard is enabled. |
+
+`SidebarFooter(show_user=True, show_avatar=True, show_roles=True, divider=True)`
+controls the built-in account region. A TSX extension may still render its
+own content when the default region is hidden.
+
+`IconSpec = str | SvgIcon | ImageIcon | None` is accepted by
+`Resource.icon`, `Page.icon`, `NavigationGroup.icon`, `Action.icon`,
+`SidebarHeader.icon` and `SidebarConfig.dashboard_icon`.
+
+- String: lowercase kebab-case Lucide name; unknown names fall back in the UI.
+- `SvgIcon(svg: str)` / `SvgIcon.from_file(path)`: SVG XML up to 128 KiB, without DOCTYPE/entity declarations, displayed as an image rather than inline markup.
+- `ImageIcon(src=None, light=None, dark=None)`: at least one HTTP(S) or relative image URL; theme-specific sources override the generic source.
+- `None`: no icon.
+
+See [UI configuration](ui.md#sidebar-branding-and-navigation-icons) and
+[TSX extension contracts](extensions.md#sidebar-extensions) for complete examples.
+
+### Login configuration
+
+`Admin(login=LoginConfig(...))` configures the standard unauthenticated
+screen. The default is a single centered card.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `layout` | "centered" | centered or split. |
+| `side_position` | "left" | Position of the optional split panel (left/right). |
+| `brand_position` | "auto" | auto, form, side, hidden; side requires split. |
+| `brand` | None | Inherit SidebarHeader or override it with another SidebarHeader. |
+| `brand_align`, `brand_direction` | None | Override brand alignment/direction; auto uses left/horizontal on side and form alignment/vertical in the form. |
+| `form_align` | "center" | Form heading alignment (left/center/right); fields remain left-aligned. |
+| `card` | True | Show card surface, border and shadow; False gives a flat form. |
+| `max_width` | 420 | Card/form maximum width, 280–640 px. |
+| `title` | "Sign in" | Form heading. |
+| `subtitle` | "Use your administrator account to continue." | Optional description. |
+| `eyebrow`, `form_icon` | None | Optional extra heading text and IconSpec glyph. |
+| `username_label`, `password_label`, `submit_label` | "Username", "Password", "Continue" | Form and submit labels. |
+| `footer` | None | Optional text beneath the form. |
+| `side_title`, `side_description`, `side_footer` | None | Optional content in the split panel. |
+| `show_theme_toggle`, `show_password_toggle` | True | Independent theme and password visibility controls. |
+
+On mobile, a split layout becomes a single form, with side branding moved
+into it. If the sidebar header is disabled and no login brand is specified,
+the fallback brand uses Admin.title. To suppress all branding use
+`brand_position="hidden"`. See [login customization](ui.md#login-screen-customization).
+
 ## HTTP endpoints
 
-All paths below are relative to `Admin.path` (default `/admin`), and the JSON endpoints require an authenticated session unless indicated.
+All paths below are relative to `Admin.path` (default `/admin`). Except for
+session discovery, public login presentation, login, token exchange and static assets, the endpoints
+require an authenticated session. Resource mutations, bridge calls and logout
+require CSRF protection.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| GET | `/auth/config` | Public login presentation, global theme and login localization. |
 | GET | `/auth/me` | Session state and CSRF token. |
 | POST | `/auth/login` | Username/password authentication. |
 | POST | `/auth/external` | Exchange a token verified by the configured auth callback. |
 | POST | `/auth/logout` | End session (CSRF protected). |
-| GET | `/api/schema` | Access-filtered resource, page, bridge, navigation, theme metadata. |
+| GET | `/api/schema` | Access-filtered resource, page, bridge, navigation/sidebar, theme metadata. |
 | GET | `/api/resources/{name}` | List, sort, search and filter records. |
 | POST | `/api/resources/{name}` | Create a record (CSRF protected). |
 | GET | `/api/resources/{name}/options` | Searchable `{value,label}` options, including `ids` lookup. |
+| GET | `/api/resources/{name}/export` | Bounded CSV or JSON export using the resource query and allowed columns. |
 | GET | `/api/resources/{name}/{id}` | Read a record with available actions. |
 | PATCH | `/api/resources/{name}/{id}` | Update a record (CSRF protected). |
 | DELETE | `/api/resources/{name}/{id}` | Delete a record (CSRF protected). |
 | POST | `/api/resources/{name}/{id}/actions/{action}` | Execute a record action (CSRF protected). |
+| POST | `/api/resources/{name}/actions/{action}` | Execute a resource or bulk action. |
 | GET | `/api/resources/{name}/{id}/relationships/{relation}` | Paginated related collection. |
+| POST | `/api/resources/{name}/{id}/relationships/{relation}/{attach\|detach\|create}` | Attach, detach or create a record in an editable many-to-many relationship. |
+| GET, POST | `/api/resources/{name}/{id}/uploads` | List attachments or upload a binary request body. |
+| GET, DELETE | `/api/uploads/{upload_id}` | Download or remove an attachment. |
+| POST | `/api/resources/{name}/jobs/{job_name}` | Start a registered background job when enabled. |
+| GET, DELETE | `/api/jobs/{job_id}` | Read a job's progress or cancel it. |
+| GET | `/api/realtime` | SSE invalidations when enabled. |
 | POST | `/api/bridge/{name}` | Pydantic-validated RPC (CSRF protected). |
 | GET | `/`, `/{asset_path:path}` | Production SPA assets and history fallback. |
+
+### Public GET /auth/config
+
+This endpoint is intentionally unauthenticated and returns only presentation
+metadata: `login`, `theme`, and `localization`. It uses the same theme shape as
+the authenticated schema (`default`, `animations`, `tokens.light`,
+`tokens.dark`) but does not evaluate per-principal resolvers. Login metadata
+uses camelCase versions of the parameters above, with the brand resolved to
+the shared sidebar header shape and auto position resolved to form or side.
+Only translation keys prefixed `login.` are exposed. Do not place secrets in
+global theme, login text, logos or public login translations. Responses are
+marked no-store. The resource schema remains authenticated.
+
+### Sidebar metadata in GET /api/schema
+
+`navigation.sidebar` uses camelCase keys:
+`width`, `minWidth`, `maxWidth`, `mobileWidth`, `resizable`, `showIcons`,
+`iconSize`, `indent`, `maxIndentDepth`, `dashboardIcon`, `header`, `footer`,
+`headerComponent`, `footerComponent`, `itemComponent`.
+The header includes `title`, `subtitle`, `icon`, `showIcon`, `showTitle`,
+`showSubtitle`, `align`, `direction`, `divider`, `iconSize`, `logoWidth`,
+`iconBackground`, `linkToDashboard`. The footer contains `showUser`,
+`showAvatar`, `showRoles`, `divider`. Hidden regions are null.
+
+All icon fields use the same wire representation:
+
+```json
+"shopping-cart"
+```
+
+```json
+{"kind":"svg","svg":"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><path d=\"M0 0L24 24\"/></svg>"}
+```
+
+```json
+{"kind":"image","src":"/static/logo.png","light":null,"dark":null}
+```
+
+A null icon has no glyph. Metadata is presentation only; server authorization
+remains independent of the sidebar.
+
+Resources with attachments expose `uploads: true` and `uploadMaxBytes` in
+their schema. GET on a record's uploads endpoint returns
+`{"items":[{"id":"...","filename":"...","content_type":"image/png","size_bytes":123}]}`.
+A successful POST returns HTTP 201 with `id`, `filename` and `size_bytes`.
+Downloads remain authenticated and are served as attachments.
 
 ### List endpoint
 
@@ -97,7 +240,9 @@ The response includes `items`, `total`, and may include `actionsByRecord`; exact
 - `PATCH /api/resources/{name}/{id}`: partial JSON column values; success returns `{ "record": { ... } }`.
 - `DELETE /api/resources/{name}/{id}`: returns `{ "ok": true }`.
 - Actions return a JSON result from the handler wrapped by the API; consult the example and actual route code if building a custom client.
-- Bridges accept a JSON value matching the declared Pydantic input model, return `{ "result": ... }`.
+- Bridges accept a JSON object matching the declared Pydantic input model and return `{ "result": ... }`.
+- Versioned resources require `If-Match` for PATCH and DELETE. A missing version returns HTTP 428 and a stale one returns HTTP 412.
+- Attachment POST accepts a binary body, an optional `X-Filename` header and a content type. See [upload limits and storage](resources.md#secure-resource-uploads).
 
 ### Error handling
 

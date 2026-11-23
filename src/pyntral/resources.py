@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, Callable, Generic, TypeVar
 from uuid import UUID
+from pydantic import BaseModel
 
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from sqlalchemy.orm import DeclarativeBase
+from .hooks import ResourceHook
+from .virtual import VirtualField
+from .layout import LayoutSection
+from .jobs import JobAction
+from .sidebar import IconSpec
 
 
 @dataclass(slots=True)
@@ -27,20 +34,76 @@ class FieldView:
 
 
 @dataclass(slots=True)
+class FieldDependency:
+    """Load input options through an authenticated Pydantic Bridge.
+
+    The bridge accepts the source field under its own name, and must return
+    ``{"options": [{"value": ..., "label": ...}, ...]}``. The UI relationship
+    is not a security boundary: validate values again in the write handler.
+    """
+    source: str
+    bridge: str
+
+    def __post_init__(self) -> None:
+        import re
+        if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", self.source):
+            raise ValueError("FieldDependency.source must be an attribute name")
+        if not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_-]*", self.bridge):
+            raise ValueError("FieldDependency.bridge must be a registered bridge slug")
+
+
+@dataclass(slots=True)
+class FileUploadConfig:
+    """Declarative client-side selection; no binary body or signed URL is sent.
+
+    This first version is mock-only. Real uploads must be implemented explicitly
+    by the host using an authenticated, scoped upload session and finalization.
+    """
+    multiple: bool = True
+    max_files: int = 10
+    max_size_bytes: int = 10 * 1024 * 1024
+    max_total_bytes: int = 50 * 1024 * 1024
+    accept: str = "image/png,image/jpeg,image/webp,application/pdf"
+    preview: bool = True
+    allow_paste: bool = True
+    mock_only: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.mock_only:
+            raise ValueError("FileUploadConfig only supports mock_only=True until backend upload finalization exists")
+        if type(self.max_files) is not int or not 1 <= self.max_files <= 50:
+            raise ValueError("max_files must be between 1 and 50")
+        if type(self.max_size_bytes) is not int or not 1 <= self.max_size_bytes <= 100 * 1024 * 1024:
+            raise ValueError("max_size_bytes must be between 1 and 104857600")
+        if type(self.max_total_bytes) is not int or not 1 <= self.max_total_bytes <= 200 * 1024 * 1024:
+            raise ValueError("max_total_bytes must be between 1 and 209715200")
+        if self.max_total_bytes < self.max_size_bytes:
+            raise ValueError("max_total_bytes must not be smaller than max_size_bytes")
+        if not isinstance(self.accept, str) or len(self.accept) > 512 or any(
+            not item.strip() or not re.fullmatch(r"(?:\.[A-Za-z0-9+_-]{1,20}|[A-Za-z0-9.+_-]+/(?:\*|[A-Za-z0-9.+_-]+))", item.strip())
+            for item in self.accept.split(",")
+        ):
+            raise ValueError("accept must be a comma-delimited list of MIME types or extensions")
+
+@dataclass(slots=True)
 class Field:
     label: str | None = None
     visible: bool = True
     readonly: bool = False
     required: bool | None = None
     widget: str | None = None
+    file_upload: FileUploadConfig | None = None
     help: str | None = None
     options: list[dict[str, Any]] | list[str] | None = None
     components: dict[str, str] = field(default_factory=dict)  # {list: id, edit: id, show: id}
     span: int = 1  # Full row when 2 in a two-column layout
     read_role: str | None = None  # Optional minimum role for this field
     write_role: str | None = None  # Optional minimum role to modify this field
+    read_when: Callable[[Any, Any | None], Any] | None = None  # (principal, record) -> bool
+    write_when: Callable[[Any, Any | None], Any] | None = None
     filter_operators: list[str] | None = None  # Restrict supported filter operations for this field
     filter_width: int | None = None  # Optional filter control width in px; auto-sized otherwise
+    dependency: FieldDependency | None = None
     list: FieldView | None = None
     edit: FieldView | None = None
     create: FieldView | None = None
@@ -48,6 +111,8 @@ class Field:
     filter: FieldView | None = None
 
     def __post_init__(self) -> None:
+        if self.file_upload is not None and not isinstance(self.file_upload, FileUploadConfig):
+            raise TypeError("file_upload must be FileUploadConfig")
         if self.span not in (1, 2):
             raise ValueError("Field.span must be 1 or 2")
         if self.filter_width is not None and (
@@ -67,7 +132,7 @@ class Action:
     appearance: str = "button"  # button | badge | menu
     component: str | None = None  # React extension action ID; opens an action page
     dialog: str | None = None  # React extension dialog body, shown before invoking the action
-    icon: str | None = None
+    icon: IconSpec = None
     visible: bool | Callable[..., Any] = True  # (principal, record) -> bool, async supported
     kind: str = "record"  # record | bulk | resource
 
@@ -83,7 +148,7 @@ class Action:
 @dataclass(slots=True)
 class NavigationGroup:
     path: str  # e.g. "Agents" or "Agents/Runtime"
-    icon: str = "folder"
+    icon: IconSpec = "folder"
     order: int = 0
 
 
@@ -125,7 +190,7 @@ class Page:
     name: str
     label: str
     component: str  # registered React component ID
-    icon: str = "layout-dashboard"
+    icon: IconSpec = "layout-dashboard"
     navigation: str | None = None
     navigation_order: int = 0
     min_role: str | None = None
@@ -152,7 +217,7 @@ class Resource(Generic[ModelT]):
     model: type[ModelT]
     name: str | None = None
     label: str | None = None
-    icon: str = "database"
+    icon: IconSpec = "database"
     navigation: str | None = None
     navigation_order: int = 0
     list_fields: list[str] | None = None
@@ -160,6 +225,7 @@ class Resource(Generic[ModelT]):
     show_search: bool = False  # Optional quick search above the advanced filters
     fields: dict[str, Field] = field(default_factory=dict)
     actions: list[Action] = field(default_factory=list)
+    jobs: list[JobAction] = field(default_factory=list)
     page_size: int = 20
     title_field: str | None = None  # String field name; use visible_name for static typing
     visible_name: InstrumentedAttribute[str] | InstrumentedAttribute[int] | InstrumentedAttribute[UUID] | None = None
@@ -168,7 +234,22 @@ class Resource(Generic[ModelT]):
     form_layout: str = "stack"  # stack | grid
     detail_layout: str = "stack"  # stack | grid
     crud_views: dict[str, str] = field(default_factory=dict)  # list/create/edit/show -> extension ID
+    hooks: list[ResourceHook] = field(default_factory=list)
+    virtual_fields: dict[str, VirtualField] = field(default_factory=dict)
+    create_schema: type[BaseModel] | None = None
+    edit_schema: type[BaseModel] | None = None
+    version_field: str | None = None  # Requires SQLAlchemy mapper.version_id_col
+    form_sections: list[LayoutSection] = field(default_factory=list)
+    detail_sections: list[LayoutSection] = field(default_factory=list)
+    features: list[Any] = field(default_factory=list)  # ResourceFeature protocol; applied on registration
+    _features_applied: bool = field(default=False, init=False, repr=False)
+    _server_defaults: dict[str, Callable[[], Any]] = field(default_factory=dict, init=False, repr=False)
+    _server_onupdate: dict[str, Callable[[], Any]] = field(default_factory=dict, init=False, repr=False)
+    _audit_enabled: bool = field(default=False, init=False, repr=False)
+    _uploads_enabled: bool = field(default=False, init=False, repr=False)
+    _upload_max_bytes: int = field(default=10_485_760, init=False, repr=False)
     scope: Callable[..., Any] | None = None  # (principal, SELECT) -> SELECT
+    operation_policy: Callable[[Any, str, Any | None], Any] | None = None
     access: RoleAccess | None = None
     allow_create: bool = True
     allow_edit: bool = True
@@ -176,6 +257,12 @@ class Resource(Generic[ModelT]):
     allow_show: bool = True
 
     def __post_init__(self) -> None:
+        action_names = [action.name for action in self.actions] + [action.name for action in self.jobs]
+        if len(action_names) != len(set(action_names)):
+            raise ValueError("Job and action names must be distinct")
+        for schema in (self.create_schema, self.edit_schema):
+            if schema is not None and (not isinstance(schema, type) or not issubclass(schema, BaseModel)):
+                raise TypeError("create_schema and edit_schema must inherit Pydantic BaseModel")
         if self.form_layout not in ("stack", "grid") or self.detail_layout not in ("stack", "grid"):
             raise ValueError("Layout must be stack or grid")
         if any(k not in {"list", "create", "edit", "show"} or not v or not isinstance(v, str)

@@ -8,14 +8,17 @@ Pyntral is a beta library. Prepare and verify the production SPA separately from
 
 ```bash
 uv sync --extra dev
-uv run pyntral build --app your_app.main:app --base /admin/
+uv run pyntral build --app your_app.main:app
 ```
 
 **Standard PyPI installation:** the wheel contains a precompiled generic bundle (`pyntral/web_dist`). No Node/npm or local frontend build is required.
 
 **Customized installation:** `pyntral build --app your.module:app` writes `.pyntral/dist/`. On deployment, preserve the generated `index.html` and `assets/` together. Set the bundle location with `Admin(dist_dir=...)` or `PYNTRAL_DIST`. Start the host ASGI app using its normal deployment command and proxy HTTPS traffic to it.
 
-The build output is tied to the base path. If you mount at `/ops`, build with `--base /ops/`. The mounted FastAPI sub-app serves the SPA history fallback so client routes are reachable directly.
+The bundled and customized production SPAs resolve their URLs from the ASGI
+mount path, including a reverse-proxy `root_path`. Use `--base` to match the
+Vite development proxy. Rebuild custom bundles made before runtime mount support
+when deploying under a different prefix.
 
 ## Secrets and cookies
 
@@ -29,9 +32,29 @@ The build output is tied to the base path. If you mount at `/ops`, build with `-
 
 Use Alembic for controlled SQLAlchemy schema migrations; `Resource` registration alone does not migrate tables. Configure explicit deletes/cascades or application-level archive actions. Retain restrictive foreign key constraints unless your data model explicitly calls for cascades.
 
+For network databases, use SQLAlchemy `AsyncSession` with an async driver.
+Install `pyntral[asyncio]` and your database driver, then pass
+`require_async_sessions=True` to check the Admin and ModelAuth session
+factories during startup. Synchronous session factories remain available for
+local integration. Host-provided synchronous hooks and callbacks must avoid
+blocking I/O on the request path.
+
+By default Pyntral reads at most 1 MiB of JSON per request, including logins.
+Override this with `max_json_bytes`. Job requests additionally have an 8 KiB
+limit. Configure the proxy's request size, timeout and login rate limits for
+your deployment, including both login endpoints.
+
 Check resource `RoleAccess`, `AuthBackend.authorize`, row scopes, field policies and custom bridge handlers in every deployment. A hidden sidebar entry is **not** an authorization boundary. Do not expose admin endpoints to unauthenticated public clients.
 
 ## Multiple instances and event transports
+
+For one worker the default revocable memory session store and in-process jobs
+work together. If several workers serve the admin, supply a shared
+`SessionStore` implementation and the same signing secret to every worker, and
+set `enable_jobs=False`.
+Use your application's durable job queue for distributed jobs. Start with
+`realtime_updates=False` for a replicated deployment and enable it after
+verifying that each web worker independently receives invalidations.
 
 The default event bus is process-local. For multiple workers, use RabbitMQ or Kafka with appropriately configured consumer groups/queues; follow [events](events.md) for ACK/retry behavior. Events are emitted after CRUD commit but **without** a transactional outbox; a crash can lose events during the commit-to-publish interval. Add an external reliability layer before relying on events as an audit ledger or financial system source of truth.
 
@@ -39,7 +62,15 @@ The application and broker workers should reuse consistent connection and identi
 
 ## Release readiness
 
-Confirmed in the local development workflow: Python integration tests, Python package building and import checks (see release notes for exact results). The frontend has been syntax-checked previously, but full browser acceptance tests and a live RabbitMQ/Kafka test matrix are **not** claimed for this beta.
+The verified beta configuration uses one admin worker with in-memory sessions
+and SQLite. Release checks cover the Python API, Shop build with ESLint and
+TypeScript, and an installed-wheel smoke test at the default mount and a
+proxy-prefixed mount. Chromium checks cover key flows, including keyboard
+navigation and optimistic edit conflicts.
+
+PostgreSQL, live RabbitMQ/Kafka, S3/MinIO and multi-worker SSE are experimental
+integration paths in this beta. Validate those paths, your auth provider and
+proxy limits in your own deployment before relying on them.
 
 Before publishing a stable release, complete:
 

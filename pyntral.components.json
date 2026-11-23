@@ -16,5 +16,14 @@
   },
   "crud": {
     "tags-list": "admin/TagCatalog.tsx"
+  },
+  "sidebarHeaders": {
+    "shop-header": "admin/SidebarRegion.tsx"
+  },
+  "sidebarFooters": {
+    "shop-footer": "admin/SidebarFooter.tsx"
+  },
+  "sidebarItems": {
+    "shop-item": "admin/SidebarItem.tsx"
   }
 }

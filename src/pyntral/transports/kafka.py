@@ -99,17 +99,17 @@ class KafkaEventBus(BrokerEventBus):
 
     async def close(self) -> None:
         self._started = False
-        if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
-            self._task = None
+        task, self._task = self._task, None
+        producer, self._producer = self._producer, None
+        consumer, self._consumer = self._consumer, None
         try:
-            if self._consumer is not None:
-                await self._consumer.stop()
+            if task is not None:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
         finally:
-            if self._producer is not None:
-                await self._producer.stop()
-            self._producer = self._consumer = None
+            try:
+                if consumer is not None:
+                    await consumer.stop()
+            finally:
+                if producer is not None:
+                    await producer.stop()

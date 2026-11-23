@@ -17,7 +17,7 @@ The official wheel contains a **generic production SPA** at `pyntral/web_dist/`.
 
 `.github/workflows/publish-pypi.yml` runs when a Git tag `v*` is pushed. It:
 
-1. Verifies `v<version>` matches `pyproject.toml` (for example `v1.0.0b1`).
+1. Verifies `v<version>` matches `pyproject.toml` (for example `v1.0.0b2`).
 2. Runs Python and JavaScript logic tests.
 3. Compiles the **generic** frontend using a temporary project without application-specific components or bridge contracts. This build runs ESLint, TypeScript and Vite.
 4. Copies its production bundle to `src/pyntral/web_dist/` and builds the Python wheel and sdist with `uv build`.
@@ -51,17 +51,17 @@ Check the wheel in an isolated environment:
 
 ```bash
 uv venv /tmp/pyntral-check
-uv pip install --python /tmp/pyntral-check/bin/python dist/*.whl
-/tmp/pyntral-check/bin/python -c 'from pathlib import Path; import pyntral; print(Path(pyntral.__file__).parent / "web_dist" / "index.html")'
+uv pip install --python /tmp/pyntral-check/bin/python dist/*.whl httpx
+/tmp/pyntral-check/bin/python scripts/smoke_installed.py
 ```
 
-On Windows, use the corresponding `.venv\\Scripts\\python.exe` interpreter.
+On Windows, use `Scripts\python.exe` under the environment directory.
 
 After confirming all checks, create and push the release tag:
 
 ```bash
-git tag v1.0.0b1
-git push origin v1.0.0b1
+git tag v1.0.0b2
+git push origin v1.0.0b2
 ```
 
 Check the workflow outcome and PyPI package files before announcing availability. **No PyPI publication is performed by creating this repository.**

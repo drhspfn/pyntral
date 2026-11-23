@@ -2,7 +2,17 @@
 
 [Documentation index](README.md) · [Authorization](authorization.md)
 
-An `Admin` requires an `AuthBackend` and a `secret_key` of at least 32 characters. It mounts signed-cookie sessions with a CSRF token for state-changing requests. `secure_cookie=True` is the production default: serve Pyntral behind HTTPS.
+An `Admin` requires an `AuthBackend` and a `secret_key` of at least 32 characters. It stores sessions server-side and sends an opaque signed cookie, with a CSRF token for state-changing requests. `secure_cookie=True` is the production default: serve Pyntral behind HTTPS.
+
+## Login presentation
+
+`Admin(login=LoginConfig(...))` customizes the standard login screen without
+changing authentication. The public `/auth/config` endpoint returns only
+login branding, global theme tokens and login localization, not resources,
+credentials, session identities or per-user resolver results.
+See [login screen customization](ui.md#login-screen-customization) for
+centered/split layouts and branding. Custom external authentication screens
+can still be registered as `auth.login` extensions.
 
 ## Local credentials
 
@@ -84,3 +94,19 @@ Do not embed secrets, session tokens, or arbitrary personal information in `attr
 - Admin sessions are not a replacement for API authentication of unrelated host routes.
 
 See [deployment](deployment.md) and [security policy](../SECURITY.md).
+
+
+
+## Revocation and replicas
+
+Logout revokes the current session server-side. The default memory store is
+bounded, belongs to one process, and signs users out when that process restarts.
+For multiple replicas, pass a shared implementation of the async
+`SessionStore` protocol as `session_store`, backed by infrastructure such as
+the host application's Redis service. Use the same signing secret, cookie
+configuration, and mount path on each replica. The store must share expiry
+and revocation across processes. The default configuration requires no session
+table or migration. Configure a unique `session_cookie` and,
+where practical, `session_cookie_path` for independent admin installations.
+`session_max_age` controls the absolute lifetime in seconds. Existing signed
+cookies issued before server-side session storage require a fresh sign-in.

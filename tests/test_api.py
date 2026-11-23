@@ -216,8 +216,9 @@ def test_model_auth_reloads_account(db):
     assert client.get("/admin/api/schema").status_code == 401
 
 
-def test_hashes_and_static_safety(harness, tmp_path):
-    client, _db, _admin = harness
+def test_hashes_and_static_safety(harness, tmp_path, monkeypatch):
+    client, _db, admin = harness
+    monkeypatch.setattr(admin, "dist_dir", tmp_path)
     assert verify_password("abc", hash_password("abc"))
     assert not verify_password("wrong", hash_password("abc"))
     assert not verify_password("abc", "not-a-hash")
@@ -240,3 +241,97 @@ def test_served_spa_and_unknown_assets(db, tmp_path):
     assert client.get("/admin/assets/app.js").status_code == 200
     assert client.get("/admin/assets/not-found.js").status_code == 404
     assert client.get("/admin/favicon.svg").status_code == 404
+
+
+def test_unicode_local_auth_and_streaming_json_limit():
+    app = FastAPI()
+    Admin(app, session_factory=lambda: None, auth=LocalAuth("André", hash_password("sample")),
+          secret_key="x" * 64, secure_cookie=False, max_json_bytes=96)
+    with TestClient(app) as client:
+        assert client.post("/admin/auth/login", json={"username": "André", "password": "sample"}).status_code == 200
+        chunks = iter((b'{"username":"demo","password":"', b'x' * 128, b'"}'))
+        rejected = client.post("/admin/auth/login", content=chunks)
+        assert rejected.status_code == 413
+
+
+def test_custom_session_store_shares_revocation_between_admin_instances():
+    from pyntral import MemorySessionStore
+
+    store = MemorySessionStore()
+
+    def unused_database():
+        pytest.fail("Admin sessions must not depend on the application's database")
+
+    def app():
+        host = FastAPI()
+        Admin(host, path="/ops", session_factory=unused_database,
+              auth=CallbackAuth(lambda *_: Principal(id="operator", username="operator")),
+              session_store=store, session_cookie="ops_session",
+              session_cookie_path="/ops", secret_key="s" * 64, secure_cookie=False)
+        return host
+
+    with TestClient(app()) as first, TestClient(app()) as second:
+        auth = first.post("/ops/auth/login", json={"username": "operator", "password": "fixture"})
+        assert auth.status_code == 200
+        assert "path=/ops" in auth.headers["set-cookie"].lower()
+        second.cookies.update(first.cookies)
+        assert second.get("/ops/auth/me").json()["user"]["id"] == "operator"
+        assert first.post("/ops/auth/logout", headers={"X-CSRF-Token": auth.json()["csrf"]}).status_code == 200
+        assert second.get("/ops/auth/me").json()["user"] is None
+
+
+def test_async_sessions_requirement_rejects_sync_factories(db):
+    app = FastAPI()
+    Admin(app, session_factory=db, auth=LocalAuth("demo", hash_password("fixture")),
+          secret_key="a" * 64, require_async_sessions=True)
+    with pytest.raises(TypeError, match="requires SQLAlchemy AsyncSession"):
+        with TestClient(app):
+            pytest.fail("Startup accepted a synchronous session factory")
+
+
+
+@pytest.mark.asyncio
+async def test_async_admin_with_memory_sessions_preserves_normal_crud(tmp_path):
+    pytest.importorskip("greenlet")
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{(tmp_path / 'async.db').as_posix()}")
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        sessions = async_sessionmaker(engine)
+        app = FastAPI()
+        admin = Admin(app, session_factory=sessions,
+                      auth=CallbackAuth(lambda *_: Principal(id="operator", username="operator")),
+                      secret_key="s" * 64, secure_cookie=False, require_async_sessions=True)
+        admin.add_resource(Resource(Team))
+        async with app.router.lifespan_context(app):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://fixture") as client:
+                auth = await client.post("/admin/auth/login", json={"username": "operator", "password": "fixture"})
+                headers = {"X-CSRF-Token": auth.json()["csrf"]}
+                response = await client.post("/admin/api/resources/teams", json={"name":"Async team"}, headers=headers)
+                assert response.status_code == 201, response.text
+                record_id = response.json()["record"]["id"]
+                edited = await client.patch(f"/admin/api/resources/teams/{record_id}",
+                                            json={"name":"Edited"}, headers=headers)
+                assert edited.json()["record"]["name"] == "Edited"
+    finally:
+        await engine.dispose()
+
+
+def test_disable_jobs_removes_schema_and_execution(harness):
+    from pyntral import JobAction
+
+    async def run(_context):
+        pytest.fail("Disabled jobs cannot run")
+
+    client, _db, admin = harness
+    admin.enable_jobs = False
+    admin.resources["teams"].resource.jobs.append(JobAction("fixture", run))
+    headers = signed_in(client)
+    schema = client.get("/admin/api/schema").json()
+    teams = next(item for item in schema["resources"] if item["id"] == "teams")
+    assert teams["jobs"] == []
+    result = client.post("/admin/api/resources/teams/jobs/fixture", json={}, headers=headers)
+    assert result.status_code == 404

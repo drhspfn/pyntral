@@ -3,7 +3,8 @@ import type { Principal } from "./types";
 export interface AuthState { user: Principal | null; csrf: string | null }
 let csrf: string | null = null;
 export function setCsrf(value: string | null) { csrf = value; }
-export const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const mount = document.querySelector<HTMLBaseElement>("base[data-pyntral-base]");
+export const base = (mount ? new URL(mount.href).pathname : import.meta.env.BASE_URL).replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string, public details?: unknown) {
@@ -14,7 +15,7 @@ export class ApiError extends Error {
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const method = (options.method || "GET").toUpperCase();
   const headers = new Headers(options.headers);
-  if (options.body != null) headers.set("Content-Type", "application/json");
+  if (options.body != null && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   if (!["GET", "HEAD", "OPTIONS"].includes(method) && csrf) headers.set("X-CSRF-Token", csrf);
   let response: Response;
   try {

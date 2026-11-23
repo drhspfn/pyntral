@@ -1,32 +1,38 @@
 /** Public UI primitives. Import from @pyntral/ui in customer TSX extensions. */
 import {
   forwardRef, useEffect, useId, useMemo, useRef, useState,
-  type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent,
+  type CSSProperties, type InputHTMLAttributes, type KeyboardEvent,
   type ReactNode, type TextareaHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
 import { usePopupPosition } from "./popover";
+import { useI18n } from "./i18n";
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, LoaderCircle, Search, X } from "lucide-react";
 
 export { FilterOperatorButton } from "./filter-operator";
+export { Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup } from "./controls";
+export { SortableList } from "./sortable";
+import { Button } from "./button";
+export { Button } from "./button";
+export type { ButtonProps, ButtonVariant } from "./button";
+export { FileUpload } from "./file-upload";
+export { FileRow } from "./file-row";
+export { Icon } from "./icon";
+export { Brand } from "./brand";
+export type { BrandProps } from "./brand";
+export type { IconProps } from "./icon";
+export type { FileRowProps } from "./file-row";
+export { Collapsible } from "./collapsible";
+export type { CollapsibleProps } from "./collapsible";
+export { OverflowText } from "./overflow-text";
+export { formatFileRejection } from "./file-upload-state";
+export type { FileUploadProps, FileUploadReceipt, FileUploadContext } from "./file-upload";
+export { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, PopoverClose, usePopover } from "./popover-component";
+export type { PopoverProps, PopoverContentProps } from "./popover-component";
+export type { SortableListProps } from "./sortable";
+export type { CheckboxProps, CheckboxGroupProps, ChoiceOption, RadioGroupProps, SwitchProps, ToggleGroupProps } from "./controls";
 export type { FilterOperator } from "./filter-state";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  loading?: boolean;
-  startIcon?: ReactNode;
-  endIcon?: ReactNode;
-}
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
-  variant = "secondary", loading = false, startIcon, endIcon, disabled, children, className = "", ...props
-}, ref) {
-  return <button {...props} ref={ref} className={`ra-button ra-button-${variant} ${className}`}
-    disabled={disabled || loading} aria-busy={loading}>
-    {loading ? <LoaderCircle className="spin" size={16}/> : startIcon}
-    {children && <span>{children}</span>}{!loading && endIcon}
-  </button>;
-});
 export function Badge({ children, tone = "neutral", className = "" }: {
   children: ReactNode; tone?: "neutral" | "success" | "danger" | "primary"; className?: string;
 }) {
@@ -217,7 +223,7 @@ export function Select<T extends string | number = string | number>({
           <ChevronDown size={16}/></button>
       </span>
     </div>
-    {opened && !disabled && createPortal(<div ref={panel} className="ra-select-menu" style={popupStyle}
+    {opened && !disabled && createPortal(<div ref={panel} className="ra-select-menu" data-ra-popover-nested="" style={popupStyle}
       id={listId} role="listbox" aria-multiselectable={multiple}>
       {loadError && <div className="ra-select-empty" role="alert">{loadError} <button type="button" onClick={() => setRetries((n) => n + 1)}>Retry</button></div>}
       {!loading && !loadError && candidateOptions.length === 0 && <div className="ra-select-empty">{emptyLabel}</div>}
@@ -240,6 +246,7 @@ export function AsyncSelect<T extends string | number = string | number>(props: 
 export function Calendar({ value, onChange, min, max }: {
   value: string | null; onChange: (isoDate: string) => void; min?: string; max?: string;
 }) {
+  const { locale } = useI18n();
   const initial = value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T12:00:00`) : new Date();
   const [month, setMonth] = useState(() => new Date(initial.getFullYear(), initial.getMonth(), 1));
   useEffect(() => {
@@ -257,9 +264,11 @@ export function Calendar({ value, onChange, min, max }: {
   const todayIso = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
   return <div className="ra-calendar">
     <div className="ra-calendar-head"><Button variant="ghost" aria-label="Previous month" onClick={() => setMonth(new Date(year, mo - 1, 1))} startIcon={<ChevronLeft size={17}/>}/>
-      <strong>{month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong>
+      <strong>{month.toLocaleDateString(locale, { month: "long", year: "numeric" })}</strong>
       <Button variant="ghost" aria-label="Next month" onClick={() => setMonth(new Date(year, mo + 1, 1))} startIcon={<ChevronRight size={17}/>}/></div>
-    <div className="ra-calendar-days">{["Mo","Tu","We","Th","Fr","Sa","Su"].map((day) => <span key={day}>{day}</span>)}
+    <div className="ra-calendar-days">{Array.from({length:7}, (_,i) =>
+      new Date(Date.UTC(2024, 0, i+1)).toLocaleDateString(locale, {weekday:"short"}))
+      .map((day, i) => <span key={i}>{day}</span>)}
       {dayCells.map((day, index) => day > 0 && day <= days ? <button key={index} type="button"
         className={`${value === iso(day) ? "selected" : ""} ${todayIso === iso(day) ? "today" : ""}`}
         disabled={(min !== undefined && iso(day) < min) || (max !== undefined && iso(day) > max)}
@@ -273,6 +282,7 @@ export function DatePicker({ value, onChange, includeTime = false, min, max, id,
   min?: string; max?: string; placeholder?: string; id?: string; ariaLabel?: string;
   popupMinHeight?: number;
 }) {
+  const { locale } = useI18n();
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -294,9 +304,9 @@ export function DatePicker({ value, onChange, includeTime = false, min, max, id,
   return <div className="ra-date-picker" ref={container}>
     <Button id={id} type="button" className="ra-date-trigger" aria-expanded={open} aria-label={ariaLabel} variant="secondary"
       startIcon={<CalendarDays size={16}/>} onClick={() => setOpen(!open)}>
-      {value ? (valid ? parsed!.toLocaleString() : value) : placeholder}</Button>
+      {value ? (valid ? parsed!.toLocaleString(locale) : value) : placeholder}</Button>
     {value && <button type="button" className="ra-date-clear" title="Clear date" onClick={() => onChange(null)}><X size={14}/></button>}
-    {open && createPortal(<div ref={panel} className="ra-date-popover" style={popupStyle}><Calendar value={date} min={min?.slice(0,10)} max={max?.slice(0,10)}
+    {open && createPortal(<div ref={panel} className="ra-date-popover" data-ra-popover-nested="" style={popupStyle}><Calendar value={date} min={min?.slice(0,10)} max={max?.slice(0,10)}
       onChange={(day) => { onChange(serialize(day, time)); if (!includeTime) setOpen(false); }}/>
       {includeTime && <div className="ra-date-time"><label>Time <input type="time" value={time}
         onChange={(event) => { if (date) onChange(serialize(date, event.target.value)); }}/></label>

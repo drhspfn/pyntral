@@ -15,7 +15,8 @@
 | `pyntral types MODULE:app [--out PATH] [--editor]` | Generate bridges without building the SPA, optionally copy types and configure VS Code. |
 | `pyntral types MODULE:app --watch` | Regenerate types in a fresh Python subprocess as source files change. |
 | `pyntral dev MODULE:app` | Run Uvicorn and Vite in development. |
-| `pyntral build [--force] [--app MODULE:app] [--base /admin/]` | Typecheck and bundle the SPA; use content-based build cache. |
+| `pyntral build [--force] [--app MODULE:app]` | Typecheck and bundle the SPA using a content-based build cache. |
+| `pyntral schema MODULE:app [--out PATH] [--format markdown\|json]` | Generate resource documentation without building the SPA. |
 
 All commands accept `--project PATH` **before the subcommand** to point at another project directory.
 
@@ -44,7 +45,9 @@ Additional flags: `--access-log`, `--log-format compact|json`, `--log-channel NA
 
 `pyntral dev` copies packaged UI sources only when their hash changes; npm dependencies are reinstalled when the manifest changes. The build fingerprint includes UI sources, extension configuration/files, generated types and public base path. Running `pyntral build` again may be a cache hit; `--force` always rebuilds.
 
-`.pyntral/` is **generated state**; do not commit it. It may be deleted to force a clean rebuild. `.env` and your application database are **not** part of this directory and should be kept separately.
+Do not commit `.pyntral/`. Remove its generated UI files to force a clean
+rebuild. If the application also uses a subdirectory for file storage, preserve
+that directory. Keep `.env` and the application database separate.
 
 ## External TSX components
 
@@ -57,16 +60,16 @@ Use `pyntral.components.json` at the project root. The CLI checks that extension
 **Customized application:** when adding your own TSX fields, pages or dialogs, run:
 
 ```bash
-uv run pyntral build --force --app examples.shop.app:app --base /admin/
+uv run pyntral build --force --app examples.shop.app:app
 ```
 
-The backend serves `.pyntral/dist/` automatically from the current working directory when built. You can override it with `Admin(dist_dir=...)` or `PYNTRAL_DIST=/absolute/path`. A customized SPA must be built for its actual route base: if you change `Admin(path="/console")`, use `--base /console/`. The generic SPA distributed in the wheel is built for `/admin/`.
+The backend serves `.pyntral/dist/` automatically from the current working directory when built. You can override it with `Admin(dist_dir=...)` or `PYNTRAL_DIST=/absolute/path`. Both production bundles resolve the configured `Admin.path` and ASGI `root_path` at runtime. Use `pyntral dev --base /console/` for Vite development against `Admin(path="/console")`.
 
 **Maintainers:** the PyPI workflow runs `uv run python scripts/build_release.py`, which compiles a generic SPA in an empty temporary host project and then bundles it into Python wheel/sdist. This release script is not part of a consuming application's installation process.
 
 ## Windows
 
-The CLI resolves `npm.cmd` on Windows and `npm` elsewhere. Run the same `uv run pyntral ...` commands in PowerShell. If Node is missing, install Node 22.12+ and ensure npm is on `PATH` before retrying.
+The CLI resolves `npm.cmd` on Windows and `npm` elsewhere for dependency installation and builds. Development launches the actual Vite JavaScript entry point with Node and keeps it running while a separate Uvicorn process is restarted on Python changes. Child processes have isolated process groups; reloads do not send Ctrl+C to the shared console. A failed Python import leaves Vite and the watcher running, and saving corrected Python code retries the backend. Ctrl+C stops both servers. Run the same `uv run pyntral ...` commands in PowerShell. If Node is missing, install Node 22.12+ and ensure npm is on `PATH` before retrying.
 
 ## Reproducibility
 

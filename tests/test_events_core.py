@@ -241,3 +241,25 @@ def test_resource_events_require_identifiers_and_disallow_custom_payload():
         payload: str = "secret"
     with pytest.raises(ValueError, match="metadata only"):
         asyncio.run(InMemoryEventBus().publish(AccidentalPayload()))
+
+
+@pytest.mark.asyncio
+async def test_slow_publication_is_cancelled_at_the_request_deadline():
+    import asyncio
+
+    from pyntral import Admin, CallbackAuth, InMemoryEventBus, ResourceUpdated
+
+    finished = asyncio.Event()
+    bus = InMemoryEventBus()
+
+    async def blocked(_event):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            finished.set()
+
+    bus.subscribe(ResourceUpdated, blocked)
+    admin = Admin(FastAPI(), session_factory=lambda: None, auth=CallbackAuth(lambda *_: None),
+                  secret_key="x" * 64, event_bus=bus, event_publish_timeout=0.02)
+    await asyncio.wait_for(admin._publish(ResourceUpdated(resource="test", record_id="1")), timeout=0.5)
+    assert finished.is_set()

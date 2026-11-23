@@ -7,13 +7,16 @@ import decimal
 import enum
 import math
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
+from contextlib import asynccontextmanager
+from inspect import isawaitable
 import re
 from typing import Any
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import String, and_, func, inspect, or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import RelationshipProperty, selectinload
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlalchemy.sql.sqltypes import Numeric
@@ -24,6 +27,7 @@ from .orm_types import type_name
 
 from .auth import Principal, maybe_await
 from .resources import Resource
+from .sidebar import icon_metadata
 
 PRIVATE_NAMES = ("password", "secret", "token", "api_key", "private_key", "credential")
 
@@ -110,6 +114,10 @@ class MapperAdapter:
             raise ValueError(f"{resource.model.__name__}: exactly one primary key required")
         self.pk = keys[0]
         self.pk_name = next((k for k, c in self.columns.items() if c is self.pk), self.pk.key)
+        if resource.version_field is not None:
+            col = self.columns.get(resource.version_field)
+            if col is None or column_kind(col) != "integer" or self.mapper.version_id_col is not col:
+                raise ValueError("version_field must be an integer SQLAlchemy version_id_col")
         self.relations: dict[str, RelationshipProperty] = {
             prop.key: prop for prop in self.mapper.relationships
         }
@@ -118,9 +126,34 @@ class MapperAdapter:
             if any(prop.direction.name == "MANYTOONE" and column in prop.local_columns
                    for prop in self.relations.values())
         }
+        for field_name in set(resource._server_defaults) | set(resource._server_onupdate):
+            if field_name not in self.columns:
+                raise ValueError(f"Server-managed field is not mapped: {field_name}")
+        for name, virtual in resource.virtual_fields.items():
+            if name in self.columns or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]*", name):
+                raise ValueError(f"Invalid or conflicting virtual field: {name}")
+        for mode, sections in (("form", resource.form_sections), ("detail", resource.detail_sections)):
+            if len({sec.id for sec in sections}) != len(sections):
+                raise ValueError(f"Duplicate {mode} layout section IDs")
+            seen_fields: set[str] = set()
+            for section in sections:
+                if seen_fields.intersection(section.fields):
+                    raise ValueError(f"Duplicate field in {mode} layout sections")
+                seen_fields.update(section.fields)
+                for name in section.fields:
+                    if name not in self.columns and name not in resource.virtual_fields:
+                        raise ValueError(f"Unknown {mode} layout field: {name}")
+                if section.visible_if and section.visible_if["field"] not in self.columns and section.visible_if["field"] not in resource.virtual_fields:
+                    raise ValueError(f"Unknown conditional layout field: {section.visible_if['field']}")
         for name, configuration in resource.fields.items():
             if name not in self.columns:
                 raise ValueError(f"Unknown column in {resource.name}: {name}")
+            if configuration.file_upload is not None and column_kind(self.columns[name]) != "json":
+                raise ValueError(f"File upload mock field must use JSON column: {resource.name}.{name}")
+            if configuration.dependency is not None:
+                source = configuration.dependency.source
+                if source == name or source not in self.columns or not self.visible(source):
+                    raise ValueError(f"Invalid dependency source for {resource.name}.{name}: {source}")
             if configuration.filter_operators is not None:
                 supported = self.filter_operators(name, ignore_custom=True)
                 if any(operator not in supported for operator in configuration.filter_operators):
@@ -130,7 +163,7 @@ class MapperAdapter:
                 if any(operator not in supported for operator in configuration.filter.operators):
                     raise ValueError(f"Unsupported filter operator for {resource.name}.{name}")
         for name in (resource.list_fields or []) + resource.search_fields:
-            if name not in self.columns:
+            if name not in self.columns and not (name in resource.virtual_fields and name not in resource.search_fields):
                 raise ValueError(f"Unknown column in {resource.name}: {name}")
         for name in resource.search_fields:
             if not self.visible(name):
@@ -196,13 +229,20 @@ class MapperAdapter:
     def writable(self, name: str) -> bool:
         col = self.columns[name]
         opt = self._field(name)
-        return self.visible(name) and name != self.pk_name and not (opt and opt.readonly) and (
+        return self.visible(name) and name not in (self.pk_name, self.resource.version_field) and not (opt and opt.readonly) and (
             not col.computed and not col.identity and column_kind(col) != "binary"
         )
 
     def serialize(self, record: Any, allowed_fields: set[str] | None = None) -> dict[str, Any]:
-        return jsonable_encoder({name: getattr(record, name) for name in self.columns
-                                 if self.visible(name) and (allowed_fields is None or name in allowed_fields)})
+        values = {name: getattr(record, name) for name in self.columns
+                  if self.visible(name) and (allowed_fields is None or name in allowed_fields)}
+        for name, virtual in self.resource.virtual_fields.items():
+            if virtual.getter is not None and (allowed_fields is None or name in allowed_fields):
+                value = virtual.getter(record)
+                if isawaitable(value):
+                    raise AdminError(500, "Virtual field getter must be synchronous", "virtual_field_error")
+                values[name] = value
+        return jsonable_encoder(values)
 
     def pk_value(self, raw: str) -> Any:
         return convert_value(self.pk, raw)
@@ -234,12 +274,13 @@ class MapperAdapter:
                 and not column.primary_key
                 and not column.identity
             )
+            writable = self.writable(name)
             view_configs = {}
             for view in ("list", "create", "edit", "show", "filter"):
                 cfg = self.view_config(name, view)
                 view_configs[view] = {
                     "visible": self.view_visible(name, view),
-                    "readonly": (cfg.readonly if cfg and cfg.readonly is not None else not self.writable(name)),
+                    "readonly": not writable or (cfg is not None and cfg.readonly is True),
                     "required": (cfg.required if cfg and cfg.required is not None else
                                  options.required if options and options.required is not None else is_required),
                     "component": (cfg.component if cfg and cfg.component is not None else
@@ -252,15 +293,28 @@ class MapperAdapter:
                     "label": options.label if options and options.label else name.replace("_", " ").title(),
                     "kind": kind,
                     "required": options.required if options and options.required is not None else is_required,
-                    "readonly": not self.writable(name),
+                    "readonly": not writable,
                     "primaryKey": name == self.pk_name,
+                    "sortable": True,
                     "nullable": column.nullable,
                     "widget": options.widget if options else None,
+                    "fileUpload": ({"multiple": options.file_upload.multiple,
+                                    "maxFiles": options.file_upload.max_files,
+                                    "maxSizeBytes": options.file_upload.max_size_bytes,
+                                    "maxTotalBytes": options.file_upload.max_total_bytes,
+                                    "accept": options.file_upload.accept,
+                                    "preview": options.file_upload.preview,
+                                    "allowPaste": options.file_upload.allow_paste,
+                                    "mockOnly": True}
+                                   if options and options.file_upload else None),
                     "help": options.help if options else None,
                     "maxLength": getattr(column.type, "length", None) if kind == "string" else None,
                     "precision": getattr(column.type, "precision", None) if kind == "number" else None,
                     "scale": getattr(column.type, "scale", None) if kind == "number" else None,
                     "filterWidth": options.filter_width if options else None,
+                    "dependency": ({"source": options.dependency.source,
+                                    "bridge": options.dependency.bridge}
+                                   if options and options.dependency else None),
                     "filterOperators": list(self.filter_operators(name)),
                     "options": (
                         options.options if options and options.options is not None
@@ -272,14 +326,45 @@ class MapperAdapter:
                     "views": view_configs,
                 }
             )
+        for name, virtual in self.resource.virtual_fields.items():
+            # Each access is independently checked by the backend; a setter-only
+            # field must never be serialized into a list or record response.
+            views = {mode: {
+                "visible": virtual.getter is not None if mode in ("list", "show", "filter")
+                else virtual.setter is not None,
+                "readonly": virtual.setter is None,
+                "required": virtual.required if mode == "create" else False,
+                "component": virtual.component,
+                "order": None,
+            } for mode in ("list", "create", "edit", "show", "filter")}
+            views["filter"]["visible"] = False  # Not backed by an SQL expression.
+            fields.append({
+                "name": name, "label": virtual.label or name.replace("_", " ").title(),
+                "kind": virtual.kind, "required": virtual.required, "readonly": virtual.setter is None,
+                "primaryKey": False, "sortable": False, "nullable": True, "widget": virtual.widget, "fileUpload": None, "help": None,
+                "maxLength": None, "precision": None, "scale": None, "filterWidth": None,
+                "dependency": None,
+                "filterOperators": [], "options": None, "relation": None,
+                "components": {}, "span": 1, "views": views,
+            })
         return {
             "id": self.resource.name,
             "label": self.resource.label,
-            "icon": self.resource.icon,
+            "icon": icon_metadata(self.resource.icon),
             "navigation": self.resource.navigation,
             "navigationOrder": self.resource.navigation_order,
             "primaryKey": self.pk_name,
+            "versionField": self.resource.version_field,
+            "uploads": self.resource._uploads_enabled,
+            "uploadMaxBytes": self.resource._upload_max_bytes if self.resource._uploads_enabled else None,
             "titleField": self._title_field(),
+            "layouts": {mode: [
+                {"id": section.id, "title": section.title, "kind": section.kind,
+                 "fields": section.fields, "visibleIf": section.visible_if,
+                 "defaultOpen": section.default_open, "columns": section.columns}
+                for section in items
+            ] for mode, items in (("form", self.resource.form_sections),
+                                  ("detail", self.resource.detail_sections))},
             "formLayout": self.resource.form_layout,
             "detailLayout": self.resource.detail_layout,
             "pageSize": self.resource.page_size,
@@ -288,7 +373,8 @@ class MapperAdapter:
             "fields": fields,
             "listFields": [
                 name for name in (self.resource.list_fields or list(self.columns)[:6])
-                if self.view_visible(name, "list")
+                if (self.view_visible(name, "list") if name in self.columns
+                    else self.resource.virtual_fields[name].getter is not None)
             ],
             "searchFields": self.resource.search_fields,
             "relationships": [
@@ -309,11 +395,16 @@ class MapperAdapter:
                 if self._related_resource(prop, registry) is not None
                 and (name not in self.resource.relationships or self.resource.relationships[name].visible)
             ],
+            "jobs": [
+                {"name": a.name, "label": a.label or a.name.replace("_", " ").title(),
+                 "confirmation": a.confirmation, "cancellable": a.cancellable}
+                for a in self.resource.jobs
+            ],
             "actions": [
                 {"name": a.name, "label": a.label or a.name.replace("_", " ").title(),
                  "variant": a.variant, "confirmation": a.confirmation,
                  "position": a.position, "appearance": a.appearance,
-                 "component": a.component, "dialog": a.dialog, "icon": a.icon, "kind": a.kind}
+                 "component": a.component, "dialog": a.dialog, "icon": icon_metadata(a.icon), "kind": a.kind}
                 for a in self.resource.actions
             ],
             "capabilities": {
@@ -329,13 +420,19 @@ class MapperAdapter:
             return self.resource.visible_name.key
         return self.resource.title_field or self._guess_title()
 
-    def _label(self, row: Any) -> str:
-        if self.resource.label_factory is not None:
+    def _label(self, row: Any, fields: set[str]) -> str:
+        if self.resource.label_factory is not None and all(
+            name in fields for name, field in self.resource.fields.items()
+            if field.read_role is not None or field.read_when is not None
+        ) and all(
+            name in fields for name, field in self.resource.virtual_fields.items() if field.read_role is not None
+        ):
             label = self.resource.label_factory(row)
             if not isinstance(label, str):
                 raise AdminError(500, "label_factory must return a string", "invalid_label")
             return label
-        return str(getattr(row, self._title_field()))
+        title = self._title_field()
+        return str(getattr(row, title if title in fields else self.pk_name))
 
     def _guess_title(self) -> str:
         for name in ("name", "title", "email", "username", self.pk_name):
@@ -346,7 +443,7 @@ class MapperAdapter:
     def parsed_payload(self, payload: Mapping[str, Any], *, create: bool) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise AdminError(422, "Expected JSON object", "validation_error")
-        unexpected = set(payload) - set(self.columns)
+        unexpected = set(payload) - set(self.columns) - set(self.resource.virtual_fields)
         forbidden = [name for name in payload if name in self.columns and not self.writable(name)]
         if unexpected or forbidden:
             raise AdminError(422, "Unknown or read-only fields", "validation_error", {
@@ -354,6 +451,17 @@ class MapperAdapter:
             })
         out = {}
         for name, value in payload.items():
+            # A mock picker must not become a writable metadata injection path.
+            if name in self.columns and (config := self._field(name)) is not None and config.file_upload is not None:
+                raise AdminError(422, "Mock file fields are not writable; use an explicit verified upload workflow", "validation_error")
+            if name in self.resource.virtual_fields:
+                virtual = self.resource.virtual_fields[name]
+                if virtual.setter is None:
+                    raise AdminError(422, "Read-only virtual field", "validation_error")
+                if virtual.required and create and value in (None, ""):
+                    raise AdminError(422, f"{name} is required", "validation_error")
+                out[name] = value
+                continue
             view = self.view_config(name, "create" if create else "edit")
             if view and view.required and (value is None or value == ""):
                 raise AdminError(422, f"{name} is required", "validation_error")
@@ -362,6 +470,11 @@ class MapperAdapter:
                 raise AdminError(422, f"{name} cannot be null", "validation_error")
             out[name] = convert_value(col, value)
         if create:
+            missing_virtual = [name for name, field in self.resource.virtual_fields.items()
+                               if field.required and field.setter is not None and name not in out]
+            if missing_virtual:
+                raise AdminError(422, "Missing required virtual fields", "validation_error",
+                                 {"fields": missing_virtual})
             missing = [
                 name for name, col in self.columns.items()
                 if self.writable(name) and not col.nullable and col.default is None
@@ -382,23 +495,41 @@ class MapperAdapter:
             return await maybe_await(self.resource.scope(principal, statement))
         return statement
 
+    def _search(self, stmt: Any, query: str, fields: set[str] | None, *, use_title: bool = False) -> Any:
+        title = self._title_field()
+        candidates = self.resource.search_fields or ([title] if use_title else [])
+
+        def searchable(name: str) -> bool:
+            field = self._field(name)
+            return (fields is None or name in fields) and (field is None or field.read_when is None)
+
+        columns = [name for name in candidates if searchable(name)
+                   and column_kind(self.columns[name]) in ("string", "enum")]
+        if columns:
+            escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            return stmt.where(or_(*(func.lower(getattr(self.resource.model, name)).like(
+                f"%{escaped}%", escape="\\") for name in columns)))
+        if use_title and title == self.pk_name and searchable(title):
+            try:
+                return stmt.where(getattr(self.resource.model, self.pk_name) == self.pk_value(query))
+            except AdminError:
+                pass
+        return stmt.where(False) if candidates else stmt
+
     async def list(
         self, session: Any, principal: Principal, *, offset: int = 0,
         limit: int | None = None, q: str = "", sort: str | None = None,
         desc: bool = False, filters: dict[str, str] | None = None,
         allowed_fields: set[str] | None = None,
         filter_fields: set[str] | None = None,
+        per_record_fields: Any = None,
     ) -> dict[str, Any]:
         if offset < 0:
             raise AdminError(422, "offset must be nonnegative")
         limit = min(max(limit or self.resource.page_size, 1), 200)
         stmt = select(self.resource.model)
-        searchable = [n for n in self.resource.search_fields if allowed_fields is None or n in allowed_fields]
-        if q and searchable:
-            stmt = stmt.where(or_(*(
-                func.lower(getattr(self.resource.model, n)).like(f"%{q.lower().replace('%', r'\%').replace('_', r'\_')}%", escape="\\")
-                for n in searchable
-            )))
+        if q:
+            stmt = self._search(stmt, q, allowed_fields)
         exposed = {name for name in self.columns if self.view_visible(name, "filter") and
                    (filter_fields is None or name in filter_fields)}
         overrides = {name: self.filter_operators(name) for name in self.columns}
@@ -411,48 +542,113 @@ class MapperAdapter:
         total_stmt = select(func.count()).select_from(stmt.order_by(None).subquery())
         total = (await maybe_await(session.execute(total_stmt))).scalar_one()
         if sort:
-            if sort not in self.columns or not self.visible(sort) or (allowed_fields is not None and sort not in allowed_fields):
+            if (sort not in self.columns or not self.visible(sort) or
+                (allowed_fields is not None and sort not in allowed_fields) or
+                (self._field(sort) is not None and self._field(sort).read_when is not None)):
                 raise AdminError(422, "Invalid sort column")
             key = getattr(self.resource.model, sort)
         else:
             key = getattr(self.resource.model, self.pk_name)
         stmt = stmt.order_by(key.desc() if desc else key.asc()).limit(limit).offset(offset)
         result = await maybe_await(session.execute(stmt))
-        return {"items": [self.serialize(row, allowed_fields) for row in result.scalars().all()],
-                "total": total, "offset": offset, "limit": limit}
+        serialized = []
+        for row in result.scalars().all():
+            fields = await per_record_fields(row) if per_record_fields is not None else allowed_fields
+            serialized.append(self.serialize(row, fields))
+        return {"items": serialized, "total": total, "offset": offset, "limit": limit}
 
-    async def get(self, session: Any, identifier: str, principal: Principal) -> Any:
+    async def get(self, session: Any, identifier: str, principal: Principal, *,
+                  lock: bool | None = None) -> Any:
         stmt = await self._scope(
             select(self.resource.model).where(getattr(self.resource.model, self.pk_name) == self.pk_value(identifier)),
             principal,
         )
+        if lock is not None:
+            stmt = stmt.with_for_update(read=not lock, of=self.resource.model)
         result = await maybe_await(session.execute(stmt))
         record = result.scalar_one_or_none()
         if record is None:
             raise AdminError(404, "Record not found", "not_found")
         return record
 
-    async def create(self, session: Any, payload: dict[str, Any]) -> dict[str, Any]:
-        record = self.resource.model(**self.parsed_payload(payload, create=True))
+    async def _audit(self, session: Any, record: Any, operation: str,
+                     principal: Principal | None, field_names: list[str]) -> None:
+        if not self.resource._audit_enabled:
+            return
+        from .audit import AuditEntry
+        session.add(AuditEntry(
+            resource=self.resource.name, record_id=str(getattr(record, self.pk_name)),
+            actor_id=str(principal.id) if principal is not None else "system",
+            operation=operation, field_names=sorted(set(field_names)),
+        ))
+
+    async def _stage_create(self, session: Any, payload: dict[str, Any]) -> Any:
+        parsed = self.parsed_payload(payload, create=True)
+        mapped = {key: value for key, value in parsed.items() if key in self.columns}
+        for key, factory in self.resource._server_defaults.items():
+            mapped[key] = factory()
+        record = self.resource.model(**mapped)
+        for key, value in parsed.items():
+            if key in self.resource.virtual_fields:
+                await maybe_await(self.resource.virtual_fields[key].setter(record, value))
         session.add(record)
+        return record
+
+    async def _flush_create(self, session: Any, record: Any, payload: dict[str, Any],
+                            principal: Principal | None) -> None:
+        async with self._transaction_errors(session):
+            await maybe_await(session.flush())
+        await self._audit(session, record, "create", principal, list(payload))
+
+    async def create(self, session: Any, payload: dict[str, Any],
+                     principal: Principal | None = None) -> dict[str, Any]:
+        record = await self._stage_create(session, payload)
+        if self.resource._audit_enabled:
+            await self._flush_create(session, record, payload, principal)
         await self._commit(session)
         await maybe_await(session.refresh(record))
         return self.serialize(record)
 
-    async def update(self, session: Any, record: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    async def _stage_update(self, session: Any, record: Any, payload: dict[str, Any],
+                            principal: Principal | None) -> set[str]:
         for name, value in self.parsed_payload(payload, create=False).items():
-            setattr(record, name, value)
-        await self._commit(session)
-        await maybe_await(session.refresh(record))
-        return self.serialize(record)
+            if name in self.resource.virtual_fields:
+                await maybe_await(self.resource.virtual_fields[name].setter(record, value))
+            else:
+                setattr(record, name, value)
+        for key, factory in self.resource._server_onupdate.items():
+            setattr(record, key, factory())
+        await self._audit(session, record, "update", principal, list(payload))
+        state = inspect(record)
+        return {name for name in self.columns if state.attrs[name].history.has_changes()}
 
-    async def delete(self, session: Any, record: Any) -> None:
+    async def update(self, session: Any, record: Any, payload: dict[str, Any],
+                     principal: Principal | None = None) -> dict[str, Any]:
+        await self._stage_update(session, record, payload, principal)
+        async with self._transaction_errors(session):
+            await maybe_await(session.flush())
+        await maybe_await(session.refresh(record))
+        result = self.serialize(record)
+        await self._commit(session)
+        return result
+
+    async def delete(self, session: Any, record: Any,
+                     principal: Principal | None = None) -> None:
+        await self._audit(session, record, "delete", principal, [])
         await maybe_await(session.delete(record))
         await self._commit(session)
 
     async def _commit(self, session: Any) -> None:
-        try:
+        async with self._transaction_errors(session):
             await maybe_await(session.commit())
+
+    @asynccontextmanager
+    async def _transaction_errors(self, session: Any):
+        try:
+            yield
+        except StaleDataError as exc:
+            await maybe_await(session.rollback())
+            raise AdminError(412, "Record changed since it was loaded", "precondition_failed") from exc
         except IntegrityError as exc:
             await maybe_await(session.rollback())
             raise AdminError(409, "Database constraint prevents this operation. The record may be referenced by other records or a value must be unique.", "integrity_error") from exc
@@ -462,43 +658,46 @@ class MapperAdapter:
 
     async def options(
         self, session: Any, principal: Principal, query: str = "", limit: int = 30,
-        ids: list[str] | None = None,
+        ids: list[str] | None = None, *, allowed_fields: set[str],
+        per_record_fields: Callable[[Any], Awaitable[set[str] | None]],
     ) -> list[dict[str, Any]]:
         if len(query) > 200:
             raise AdminError(422, "Search text too long", "validation_error")
-        title = self._title_field()
+        if self.pk_name not in allowed_fields:
+            return []
+        key = getattr(self.resource.model, self.pk_name)
         stmt = select(self.resource.model)
         if ids:
             if len(ids) > 100:
                 raise AdminError(422, "Too many selected IDs", "validation_error")
-            keys = [self.pk_value(v) for v in ids]
-            stmt = stmt.where(getattr(self.resource.model, self.pk_name).in_(keys))
+            stmt = stmt.where(key.in_([self.pk_value(value) for value in ids]))
         elif query:
-            columns = [n for n in (self.resource.search_fields or [title])
-                       if n in self.columns and column_kind(self.columns[n]) in ("string", "enum")]
-            if columns:
-                # Escape LIKE wildcards: search is literal and cannot broaden a scope.
-                escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                stmt = stmt.where(or_(*(func.lower(getattr(self.resource.model, n)).like(
-                    f"%{escaped}%", escape="\\") for n in columns)))
-            elif title == self.pk_name:
-                try:
-                    stmt = stmt.where(getattr(self.resource.model, self.pk_name) == self.pk_value(query))
-                except AdminError:
-                    return []
-        stmt = (await self._scope(stmt, principal)).order_by(
-            getattr(self.resource.model, self.pk_name)
-        ).limit(min(limit, 100))
-        result = await maybe_await(session.execute(stmt))
-        return [
-            {"value": jsonable_encoder(getattr(row, self.pk_name)), "label": self._label(row)}
-            for row in result.scalars()
-        ]
+            stmt = self._search(stmt, query, allowed_fields, use_title=True)
+        stmt = (await self._scope(stmt, principal)).order_by(key)
+        options: list[dict[str, Any]] = []
+        limit = min(limit, 100)
+        offset = 0
+        batch_size = 100
+        while len(options) < limit:
+            rows = (await maybe_await(session.execute(stmt.limit(batch_size).offset(offset)))).scalars().all()
+            for row in rows:
+                fields = await per_record_fields(row)
+                if fields is None or self.pk_name not in fields:
+                    continue
+                options.append({"value": jsonable_encoder(getattr(row, self.pk_name)),
+                                "label": self._label(row, fields)})
+                if len(options) == limit:
+                    break
+            if len(rows) < batch_size:
+                break
+            offset += batch_size
+        return options
 
     async def relation(
         self, session: Any, principal: Principal, record: Any, name: str,
         target: "MapperAdapter", offset: int = 0, limit: int = 20, query: str = "",
         allowed_fields: set[str] | None = None,
+        per_record_fields: Any = None,
     ) -> dict[str, Any]:
         if name not in self.relations:
             raise AdminError(404, "Relationship not found", "not_found")
@@ -514,23 +713,15 @@ class MapperAdapter:
         if len(query) > 200:
             raise AdminError(422, "Search text too long", "validation_error")
         if query:
-            searchable = [n for n in (target.resource.search_fields or [target._title_field()])
-                          if n in target.columns and column_kind(target.columns[n]) in ("string", "enum")
-                          and (allowed_fields is None or n in allowed_fields)]
-            if searchable:
-                escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                stmt = stmt.where(or_(*(func.lower(getattr(target.resource.model, n)).like(
-                    f"%{escaped}%", escape="\\") for n in searchable)))
-            elif target._title_field() == target.pk_name:
-                try:
-                    stmt = stmt.where(getattr(target.resource.model, target.pk_name) == target.pk_value(query))
-                except AdminError:
-                    return {"items": [], "total": 0, "offset": offset, "limit": limit}
+            stmt = target._search(stmt, query, allowed_fields, use_title=True)
         count = (await maybe_await(session.execute(
             select(func.count()).select_from(stmt.order_by(None).subquery())
         ))).scalar_one()
         results = await maybe_await(session.execute(
             stmt.order_by(getattr(target.resource.model, target.pk_name)).offset(offset).limit(min(limit, 100))
         ))
-        return {"items": [target.serialize(row, allowed_fields) for row in results.scalars()],
-                "total": count, "offset": offset, "limit": limit}
+        items = []
+        for row in results.scalars():
+            fields = await per_record_fields(row) if per_record_fields is not None else allowed_fields
+            items.append(target.serialize(row, fields))
+        return {"items": items, "total": count, "offset": offset, "limit": limit}

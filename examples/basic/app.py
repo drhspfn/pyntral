@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from sqlalchemy import String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-from pyntral import Admin, LocalAuth, Resource
+from pyntral import Admin, LocalAuth, Resource, SidebarConfig, SidebarHeader, LoginConfig
 
 
 class Base(DeclarativeBase):
@@ -29,9 +29,15 @@ Base.metadata.create_all(engine)  # Example only: use Alembic migrations in prod
 app = FastAPI(title="Pyntral minimal example")
 admin = Admin(
     app,
+    title="Customer workspace",
+    sidebar=SidebarConfig(
+        header=SidebarHeader(icon="contact", subtitle="Customer management"),
+        dashboard_icon="house",
+    ),
+    login=LoginConfig(title="Sign in", subtitle="Manage your customers securely."),
     session_factory=SessionLocal,
     auth=LocalAuth.from_env(),
     secret_key=os.environ["APP_SECRET_KEY"],
     secure_cookie=os.getenv("ADMIN_SECURE_COOKIE", "true").lower() == "true",
 )
-admin.add_resource(Resource(Customer, search_fields=["name", "email"]))
+admin.add_resource(Resource(Customer, icon="users-round", search_fields=["name", "email"]))

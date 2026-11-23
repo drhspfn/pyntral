@@ -71,7 +71,7 @@ Extension categories and their React props:
 | --- | --- | --- |
 | `profile` | `{ user, schema, navigate, close }` | Additional user-menu entries alongside the built-in sign out. |
 | `access` | `{ resource, currentAdmin }` | Access-denied UI. The server still returns 403. |
-| `auth` | `{ onAuthenticated }` | Custom login screen; should call verified server authentication endpoints. |
+| `auth` | `{ onAuthenticated, config, themeMode, toggleTheme }` | Custom login screen; should call verified server authentication endpoints. |
 | `themes` | `{ schema, mode }` | Theme-level React decoration/customization. |
 
 Use `@pyntral/types` for the corresponding types. A custom login screen does not make unverified IdP tokens trustworthy: see [authentication](authentication.md).
@@ -115,3 +115,59 @@ available Pyntral UI primitive or React component inside the override.
 For resource/bulk action pages, register an action component as usual. It
 receives `CustomCollectionActionProps`, with `selectedIds` and `invoke(payload)`;
 all IDs are revalidated by the backend on invocation.
+
+## Sidebar extensions
+
+Use declarative `SidebarConfig` for standard branding. To replace or augment regions, register these optional extension IDs in the manifest:
+
+```json
+{
+  "sidebarHeaders": { "shop-header": "admin/SidebarRegion.tsx" },
+  "sidebarFooters": { "shop-footer": "admin/SidebarRegion.tsx" },
+  "sidebarItems": { "shop-item": "admin/SidebarItem.tsx" }
+}
+```
+
+```python
+sidebar = SidebarConfig(
+    header_component="shop-header",
+    footer_component="shop-footer",
+    item_component="shop-item",
+)
+# Pass sidebar=sidebar to Admin(...)
+```
+
+Header and footer components receive `SidebarRegionProps`: `schema`, `config`, `user`, `themeMode`, `navigate(route)`, `close()`, and `children` containing the default region (or null). They can render their own layout or wrap the existing content. Navigate through the supplied callback to retain router guards and mobile drawer behavior.
+
+Item extensions receive `SidebarItemProps`: `type`, `id`, `label`, `icon`, `depth`, `active`, `locked`, `open` (groups only), `schema`, and `children` containing the built-in item content. The framework owns the outer button, accessible label, navigation, group disclosure and access-denied behavior. Render only non-interactive content inside item extensions (no nested buttons or links).
+
+```tsx
+import type { SidebarItemProps } from "@pyntral/types";
+
+export default function MyItem({ children, active }: SidebarItemProps) {
+  return <>{children}{active && <small aria-hidden="true">•</small>}</>;
+}
+```
+
+These slots participate in the existing custom build, manifest fingerprinting, editor type generation and extension linting. Missing registry IDs fall back to the default UI.
+
+### Custom login screen presentation
+
+The existing `auth.login` component receives `LoginScreenProps` with
+`onAuthenticated`, `config` (PublicLoginConfig), `themeMode`, and
+`toggleTheme`. Existing implementations that only consume
+`onAuthenticated` continue to work. The global theme tokens are installed
+before the extension renders.
+
+```tsx
+import type { LoginScreenProps } from "@pyntral/types";
+import { Brand, Button } from "@pyntral/ui";
+
+export default function CustomLogin({ config, themeMode, toggleTheme }: LoginScreenProps) {
+  return <main>
+    {config.login.brand && <Brand config={config.login.brand} themeMode={themeMode}/>}
+    <Button onClick={toggleTheme}>Toggle theme</Button>
+    {/* Add your actual credential/verified-token flow here; call onAuthenticated only with the server response. */}
+  </main>;
+}
+```
