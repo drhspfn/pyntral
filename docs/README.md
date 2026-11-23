@@ -21,6 +21,7 @@ Pyntral is an early-stage Python-admin framework with a React frontend. These gu
 ## Frontend customization
 
 - [UI component library and theme tokens](ui.md)
+- [Login screen customization](ui.md#login-screen-customization)
 - [Sidebar branding, icons, and resizing](ui.md#sidebar-branding-and-navigation-icons)
 - [Custom fields, pages, dialogs, menus, and actions](extensions.md)
 - [Sidebar extension slots](extensions.md#sidebar-extensions)

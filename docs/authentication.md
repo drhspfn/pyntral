@@ -4,6 +4,16 @@
 
 An `Admin` requires an `AuthBackend` and a `secret_key` of at least 32 characters. It stores sessions server-side and sends an opaque signed cookie, with a CSRF token for state-changing requests. `secure_cookie=True` is the production default: serve Pyntral behind HTTPS.
 
+## Login presentation
+
+`Admin(login=LoginConfig(...))` customizes the standard login screen without
+changing authentication. The public `/auth/config` endpoint returns only
+login branding, global theme tokens and login localization, not resources,
+credentials, session identities or per-user resolver results.
+See [login screen customization](ui.md#login-screen-customization) for
+centered/split layouts and branding. Custom external authentication screens
+can still be registered as `auth.login` extensions.
+
 ## Local credentials
 
 Use this for demos and private single-admin environments:

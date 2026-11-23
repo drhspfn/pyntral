@@ -48,7 +48,7 @@ export function LoginScreen({ config, themeMode, toggleTheme, onAuthenticated }:
       {login.error instanceof Error ? login.error.message : t("login.error", "Sign in failed")}
     </span></div>}
     <FormField label={label("login.username", settings.usernameLabel, "Username")} htmlFor={`${id}-username`}>
-      <TextInput id={`${id}-username`} name="username" autoComplete="username" autoFocus required
+      <TextInput id={`${id}-username`} name="username" autoComplete="username" required
         maxLength={320} value={username} onChange={event => setUsername(event.target.value)}/>
     </FormField>
     <FormField label={label("login.password", settings.passwordLabel, "Password")} htmlFor={`${id}-password`}>

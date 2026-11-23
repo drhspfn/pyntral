@@ -21,7 +21,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, CallbackAuth, Field, FileUploadConfig, FieldDependency, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon,
+    SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, LoginConfig,
     ResourceUpdated, ResourceHook, VirtualField, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase, UploadFeature, LocalStorage, UploadBase,
 )
 
@@ -327,6 +327,17 @@ admin = Admin(
         footer=SidebarFooter(show_roles=True),
         header_component="shop-header", footer_component="shop-footer",
         item_component="shop-item",
+    ),
+    login=LoginConfig(
+        layout="split" if os.getenv("SHOP_LOGIN_LAYOUT") == "split" else "centered",
+        side_position="left",
+        max_width=420,
+        title="Sign in",
+        subtitle="Use your administrator account to continue.",
+        footer="Shop demonstration · Local administrator account",
+        side_title="Commerce workspace",
+        side_description="Manage products, customers and orders in one workspace.",
+        side_footer="Pyntral shop demonstration",
     ),
     default_theme="system",
     theme_resolver=lambda principal: {

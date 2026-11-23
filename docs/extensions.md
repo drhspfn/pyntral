@@ -71,7 +71,7 @@ Extension categories and their React props:
 | --- | --- | --- |
 | `profile` | `{ user, schema, navigate, close }` | Additional user-menu entries alongside the built-in sign out. |
 | `access` | `{ resource, currentAdmin }` | Access-denied UI. The server still returns 403. |
-| `auth` | `{ onAuthenticated }` | Custom login screen; should call verified server authentication endpoints. |
+| `auth` | `{ onAuthenticated, config, themeMode, toggleTheme }` | Custom login screen; should call verified server authentication endpoints. |
 | `themes` | `{ schema, mode }` | Theme-level React decoration/customization. |
 
 Use `@pyntral/types` for the corresponding types. A custom login screen does not make unverified IdP tokens trustworthy: see [authentication](authentication.md).
@@ -150,3 +150,24 @@ export default function MyItem({ children, active }: SidebarItemProps) {
 ```
 
 These slots participate in the existing custom build, manifest fingerprinting, editor type generation and extension linting. Missing registry IDs fall back to the default UI.
+
+### Custom login screen presentation
+
+The existing `auth.login` component receives `LoginScreenProps` with
+`onAuthenticated`, `config` (PublicLoginConfig), `themeMode`, and
+`toggleTheme`. Existing implementations that only consume
+`onAuthenticated` continue to work. The global theme tokens are installed
+before the extension renders.
+
+```tsx
+import type { LoginScreenProps } from "@pyntral/types";
+import { Brand, Button } from "@pyntral/ui";
+
+export default function CustomLogin({ config, themeMode, toggleTheme }: LoginScreenProps) {
+  return <main>
+    {config.login.brand && <Brand config={config.login.brand} themeMode={themeMode}/>}
+    <Button onClick={toggleTheme}>Toggle theme</Button>
+    {/* Add your actual credential/verified-token flow here; call onAuthenticated only with the server response. */}
+  </main>;
+}
+```

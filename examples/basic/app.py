@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from sqlalchemy import String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-from pyntral import Admin, LocalAuth, Resource, SidebarConfig, SidebarHeader
+from pyntral import Admin, LocalAuth, Resource, SidebarConfig, SidebarHeader, LoginConfig
 
 
 class Base(DeclarativeBase):
@@ -34,6 +34,7 @@ admin = Admin(
         header=SidebarHeader(icon="contact", subtitle="Customer management"),
         dashboard_icon="house",
     ),
+    login=LoginConfig(title="Sign in", subtitle="Manage your customers securely."),
     session_factory=SessionLocal,
     auth=LocalAuth.from_env(),
     secret_key=os.environ["APP_SECRET_KEY"],

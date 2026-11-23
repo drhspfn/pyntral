@@ -21,7 +21,7 @@ Pyntral attaches a React single-page administration UI to an existing FastAPI ap
 - **Model-driven CRUD** — register SQLAlchemy models, configure fields and relations, and manage records through one API.
 - **Practical filtering** — type-aware operators, numeric/date ranges, enum include/exclude, and searchable foreign keys.
 - **Built to extend** — nested navigation groups, custom pages, record actions, dialogs, field renderers, and a shared React component kit.
-- **Python-configured branding** — sidebar layouts, SVG and theme-specific image logos, dynamic Lucide icons, configurable navigation sizing, and optional TSX header/footer/item slots.
+- **Python-configured branding** — centered or split login, public light/dark theme configuration, sidebar layouts, SVG and theme-specific image logos, dynamic Lucide icons, configurable navigation sizing, and optional TSX header/footer/item slots.
 - **Authentication and access controls** — local credentials, SQLAlchemy-backed users, external identity callbacks, role thresholds, field visibility, and server-side authorization.
 - **Typed Python ↔ React operations** — authenticated Pydantic bridges with generated TypeScript clients.
 - **Event-oriented** — metadata-only events with in-process, optional RabbitMQ, or optional Kafka transports.
@@ -201,3 +201,7 @@ The image build runs ESLint, strict TypeScript checking, and Vite. See the
 ## CI and publishing
 
 Add the `Run checks` label to start PR CI. It reruns on pushes while the label is present. Releases are published as **Python wheels and source distributions on PyPI** using GitHub OIDC Trusted Publishing. The compiled generic React SPA is packaged inside the Python distribution; no npm package is published. See [release setup](docs/publishing.md).
+
+The sign-in screen also accepts `Admin(login=LoginConfig(...))`, inherits
+the same application branding, and applies global theme tokens before
+authentication. See [login customization](docs/ui.md#login-screen-customization).

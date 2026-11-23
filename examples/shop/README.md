@@ -81,6 +81,16 @@ Do not copy this demo's unscoped resource-wide Reactivate action directly into
 a multi-tenant application: production handlers should explicitly enforce
 tenant and row scopes as well as Pyntral authorization.
 
+### Configurable login screen
+
+Sign out to view the centered login card. It uses the same SVG logo, title and
+subtitle as the sidebar, and the global light/dark theme tokens. The theme
+button and password visibility button work before authentication. Set
+`SHOP_LOGIN_LAYOUT=split` before starting the example to try the two-column
+layout; the branding moves into the card on narrow screens. The configured
+per-admin theme resolver takes effect only after sign-in, unless an explicit
+local theme choice overrides it. See [LoginConfig](../../docs/api-reference.md#login-configuration).
+
 ### Sidebar branding, icons and extension slots
 
 Shop configures its sidebar in `examples/shop/app.py` with `SidebarConfig`,

@@ -167,7 +167,7 @@ its code and message dictionary. Core navigation/toolbars/CRUD use translation
 keys with English fallback. Calendars format months, weekdays and dates using
 the locale; custom components can import `useI18n()` from `@pyntral/i18n`.
 Unknown translation keys fall back to their English source text. External
-login screens must provide their own localized strings.
+custom login screens may supply their own strings; the standard sign-in UI uses the public login localization dictionary.
 
 ## Server-resolved per-user themes
 
@@ -275,3 +275,68 @@ admin = Admin(
 - `icon=None` hides a specific navigation/resource/action icon. Use the canonical kebab-case Lucide names for strings.
 
 For fully custom header, footer and item presentation, see [React extensions](extensions.md#sidebar-extensions).
+
+## Login screen customization
+
+The built-in sign-in screen defaults to a single centered card. It shares
+`Brand`, `Icon`, `Button`, `Card`, `FormField` and `TextInput` with the
+administration interface. It inherits the sidebar logo/title/subtitle unless
+a separate `SidebarHeader` is passed as `LoginConfig.brand`.
+
+```python
+from pyntral import LoginConfig, SidebarConfig, SidebarHeader, SvgIcon
+
+sidebar = SidebarConfig(
+    header=SidebarHeader(title="My workspace", icon=SvgIcon.from_file("assets/logo.svg"))
+)
+login = LoginConfig(
+    layout="centered", max_width=420, card=True,
+    brand_position="form", brand_align="center", brand_direction="vertical",
+    title="Sign in", subtitle="Use your work account.",
+    footer="Internal workspace", show_theme_toggle=True,
+    show_password_toggle=True,
+)
+# Pass sidebar=sidebar and login=login to Admin(...)
+```
+
+For a two-column page, use:
+
+```python
+login = LoginConfig(
+    layout="split", side_position="right", brand_position="side",
+    side_title="Manage your workspace", side_description="One place for your operations.",
+    form_align="left", card=False, max_width=380,
+)
+```
+
+On viewports up to 800 px the second panel is hidden and its brand is shown
+with the form. The theme switch is available before sign-in and uses the
+same local browser preference as the admin header. If no explicit preference
+is saved, the public global default theme (or system preference) applies;
+after authentication, a per-user theme resolver may override that default.
+Logging out removes per-user tokens and reapplies global public tokens.
+
+All normal theme tokens apply before authentication, including `primary`,
+`primary-hover`, `on-primary`, `input`, `text`, `border` and `radius`.
+Login-specific overrides are optional and fall back to the shared palette:
+
+| Token key passed to Admin(theme=...) | Default fallback |
+| --- | --- |
+| `login-bg` | bg |
+| `login-card-bg` | surface |
+| `login-card-border` | border |
+| `login-card-radius` | radius |
+| `login-card-shadow` | shadow |
+| `login-side-bg` | surface |
+
+For example, `theme={"light": {"login-card-radius": "16px"}, "dark": {"login-card-radius": "16px"}}`.
+The global theme and login presentation are public; do not include private
+tokens or secret-bearing image URLs. Authentication and permission rules
+are unchanged.
+
+Standard form labels support `login.title`, `login.subtitle`,
+`login.username`, `login.password`, `login.submit`, `login.show_password`,
+`login.hide_password`, and `login.toggle_theme` translations. Explicit
+non-default label strings take precedence. The default locale is used before
+sign-in. Custom `auth.login` extensions receive the public config and theme
+controls; see [extensions](extensions.md).

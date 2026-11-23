@@ -9,7 +9,7 @@ This page summarizes the public interfaces available in the current beta. For pr
 ```python
 from pyntral import (
     Admin, Resource, Field, Relationship, Action, Page, NavigationGroup,
-    SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec,
+    SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec, LoginConfig,
     RoleAccess, Bridge, BridgeContext, ResourceHook, VirtualField, FieldDependency,
     FieldView, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature,
     TimestampFeature, AuditFeature, UploadFeature, LocalStorage, S3Storage,
@@ -33,7 +33,7 @@ Admin(
     session_cookie_path="/", session_max_age=43200, session_store=None,
     require_async_sessions=False, enable_jobs=True, dist_dir=None,
     title="Pyntral", theme=None, default_theme="system",
-    animations=True, show_dashboard=True, sidebar=None, role_weights=None,
+    animations=True, show_dashboard=True, sidebar=None, login=None, role_weights=None,
     logging_config=None, event_bus=None, auto_start_events=True,
     event_publish_timeout=2.0, max_json_bytes=1048576, storage=None,
     default_locale="en", translations=None, locale_resolver=None,
@@ -115,15 +115,44 @@ own content when the default region is hidden.
 See [UI configuration](ui.md#sidebar-branding-and-navigation-icons) and
 [TSX extension contracts](extensions.md#sidebar-extensions) for complete examples.
 
+### Login configuration
+
+`Admin(login=LoginConfig(...))` configures the standard unauthenticated
+screen. The default is a single centered card.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `layout` | "centered" | centered or split. |
+| `side_position` | "left" | Position of the optional split panel (left/right). |
+| `brand_position` | "auto" | auto, form, side, hidden; side requires split. |
+| `brand` | None | Inherit SidebarHeader or override it with another SidebarHeader. |
+| `brand_align`, `brand_direction` | None | Override brand alignment/direction; auto uses left/horizontal on side and form alignment/vertical in the form. |
+| `form_align` | "center" | Form heading alignment (left/center/right); fields remain left-aligned. |
+| `card` | True | Show card surface, border and shadow; False gives a flat form. |
+| `max_width` | 420 | Card/form maximum width, 280–640 px. |
+| `title` | "Sign in" | Form heading. |
+| `subtitle` | "Use your administrator account to continue." | Optional description. |
+| `eyebrow`, `form_icon` | None | Optional extra heading text and IconSpec glyph. |
+| `username_label`, `password_label`, `submit_label` | "Username", "Password", "Continue" | Form and submit labels. |
+| `footer` | None | Optional text beneath the form. |
+| `side_title`, `side_description`, `side_footer` | None | Optional content in the split panel. |
+| `show_theme_toggle`, `show_password_toggle` | True | Independent theme and password visibility controls. |
+
+On mobile, a split layout becomes a single form, with side branding moved
+into it. If the sidebar header is disabled and no login brand is specified,
+the fallback brand uses Admin.title. To suppress all branding use
+`brand_position="hidden"`. See [login customization](ui.md#login-screen-customization).
+
 ## HTTP endpoints
 
 All paths below are relative to `Admin.path` (default `/admin`). Except for
-session discovery, login, token exchange and static assets, the endpoints
+session discovery, public login presentation, login, token exchange and static assets, the endpoints
 require an authenticated session. Resource mutations, bridge calls and logout
 require CSRF protection.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| GET | `/auth/config` | Public login presentation, global theme and login localization. |
 | GET | `/auth/me` | Session state and CSRF token. |
 | POST | `/auth/login` | Username/password authentication. |
 | POST | `/auth/external` | Exchange a token verified by the configured auth callback. |
@@ -147,6 +176,18 @@ require CSRF protection.
 | GET | `/api/realtime` | SSE invalidations when enabled. |
 | POST | `/api/bridge/{name}` | Pydantic-validated RPC (CSRF protected). |
 | GET | `/`, `/{asset_path:path}` | Production SPA assets and history fallback. |
+
+### Public GET /auth/config
+
+This endpoint is intentionally unauthenticated and returns only presentation
+metadata: `login`, `theme`, and `localization`. It uses the same theme shape as
+the authenticated schema (`default`, `animations`, `tokens.light`,
+`tokens.dark`) but does not evaluate per-principal resolvers. Login metadata
+uses camelCase versions of the parameters above, with the brand resolved to
+the shared sidebar header shape and auto position resolved to form or side.
+Only translation keys prefixed `login.` are exposed. Do not place secrets in
+global theme, login text, logos or public login translations. Responses are
+marked no-store. The resource schema remains authenticated.
 
 ### Sidebar metadata in GET /api/schema
 

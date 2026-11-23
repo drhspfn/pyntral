@@ -10,6 +10,7 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Composable password, soft-delete, timestamp, audit and upload features. Authenticated attachments support local storage and an optional S3/MinIO backend.
 - Conditional field and operation policies, CSV/JSON export, configurable form layouts, table preferences and filter presets.
 - Localization, per-admin theme settings and reusable choice, popover, sortable and mock file-picker controls.
+- Configurable centered/split login screen, shared application branding, password visibility, pre-authentication theme tokens and localization, and optional login-specific theme tokens.
 - Declarative sidebar configuration with configurable dimensions, resizing, header/footer branding, dynamic Lucide icons, SVG/image icons and custom React region/item slots.
 - Public FileRow, Collapsible and OverflowText primitives, reused by built-in attachments, layouts and navigation.
 - Optional SSE invalidation, in-process jobs with progress and cancellation, and CLI resource schema documentation.

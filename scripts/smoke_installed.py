@@ -44,6 +44,10 @@ def main() -> None:
                     )
                     assert client.get("/admin/resources/anything").content == root.content
                     assert client.get("/admin/api/schema").status_code == 401
+                    public = client.get("/admin/auth/config")
+                    assert public.status_code == 200
+                    assert public.json()["login"]["layout"] == "centered"
+                    assert public.json()["login"]["brand"]["title"] == "Wheel workspace"
                     asset = client.get("/admin/assets/" + assets[0].name)
                     assert asset.status_code == 200, asset.text
                     assert asset.content == assets[0].read_bytes()

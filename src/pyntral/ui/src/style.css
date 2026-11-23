@@ -171,7 +171,7 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .form-field>label{font-size:12px;font-weight:650;color:var(--ra-text-secondary)}
 .required{color:var(--ra-danger)}
 .form-field input:not([type=checkbox]),.form-field select,.form-field textarea{border:1px solid var(--ra-border);border-radius:7px;background:var(--ra-input);width:100%;min-height:37px;padding:9px 10px;font-size:12px;outline:none}
-.form-field input:focus,.form-field textarea:focus,.form-field select:focus,.login-form input:focus{border-color:var(--ra-primary)}
+.form-field input:focus,.form-field textarea:focus,.form-field select:focus{border-color:var(--ra-primary)}
 .form-field small{font-size:11px;line-height:1.4;color:var(--ra-muted)}
 .form-field textarea{resize:vertical;font:12px ui-monospace,monospace}
 .check-field{min-height:37px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ra-text-secondary)}
@@ -699,7 +699,7 @@ button.ra-brand:hover{background:var(--ra-surface-alt)}
 .ra-login-page.layout-split.side-right{grid-template-columns:minmax(0,55fr) minmax(0,45fr)}
 .ra-login-page.side-right .ra-login-side{grid-column:2;grid-row:1;border-right:0;border-left:1px solid var(--ra-border)}
 .ra-login-page.side-right .ra-login-panel{grid-column:1;grid-row:1}
-.ra-login-panel{display:grid;place-items:center;min-width:0;padding:72px 24px 32px}
+.ra-login-panel{display:grid;place-items:center;min-width:0;padding:64px 24px}
 .ra-login-card{width:min(100%,var(--ra-login-width,420px));min-width:0;padding:clamp(20px,4vw,32px);
   background:var(--ra-login-card-bg,var(--ra-surface));border-color:var(--ra-login-card-border,var(--ra-border));
   border-radius:var(--ra-login-card-radius,var(--ra-radius));box-shadow:var(--ra-login-card-shadow,var(--ra-shadow))}
@@ -743,6 +743,6 @@ button.ra-brand:hover{background:var(--ra-surface-alt)}
   .ra-login-page .ra-login-side{display:none}
   .ra-login-page.side-right .ra-login-panel{grid-column:1;grid-row:1}
   .ra-login-brand.mobile-only:not(:empty){display:block}
-  .ra-login-panel{padding:64px 16px 24px}
+  .ra-login-panel{padding:64px 16px 32px}
 }
 @media(max-width:360px){.ra-login-card{padding:18px 14px}.ra-login-card.is-flat{padding-inline:0}}

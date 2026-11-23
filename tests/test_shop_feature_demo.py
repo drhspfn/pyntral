@@ -23,6 +23,11 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
     demo = importlib.import_module("examples.shop.app")
     try:
         with TestClient(demo.app) as client:
+            public = client.get("/admin/auth/config").json()
+            assert public["login"]["layout"] in ("centered", "split")
+            assert public["login"]["brand"]["title"] == "Shop demo"
+            assert public["login"]["brand"]["icon"]["kind"] == "svg"
+            assert public["theme"]["tokens"]["light"]["primary"] == "#276b9e"
             login = client.post("/admin/auth/login", json={"username": "shop-admin", "password": "test-password"})
             assert login.status_code == 200, login.text
             csrf = {"X-CSRF-Token": login.json()["csrf"]}
