@@ -34,7 +34,7 @@ Use Alembic for controlled SQLAlchemy schema migrations; `Resource` registration
 
 For network databases, use SQLAlchemy `AsyncSession` with an async driver.
 Install `pyntral[asyncio]` and your database driver, then pass
-`require_async_sessions=True` to check the Admin, ModelAuth and SQL session-store
+`require_async_sessions=True` to check the Admin and ModelAuth session
 factories during startup. Synchronous session factories remain available for
 local integration. Host-provided synchronous hooks and callbacks must avoid
 blocking I/O on the request path.
@@ -49,8 +49,9 @@ Check resource `RoleAccess`, `AuthBackend.authorize`, row scopes, field policies
 ## Multiple instances and event transports
 
 For one worker the default revocable memory session store and in-process jobs
-work together. For several workers use a shared `SQLSessionStore`, the same
-signing secret, and `enable_jobs=False` unless a single worker serves the admin.
+work together. If several workers serve the admin, supply a shared
+`SessionStore` implementation and the same signing secret to every worker, and
+set `enable_jobs=False`.
 Use your application's durable job queue for distributed jobs. Start with
 `realtime_updates=False` for a replicated deployment and enable it after
 verifying that each web worker independently receives invalidations.

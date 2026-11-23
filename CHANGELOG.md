@@ -52,5 +52,5 @@ See [release readiness](docs/deployment.md#release-readiness) for verification r
 - Preserve timestamp field policies, mask password inputs, and release slots when queued jobs are cancelled.
 
 - Preserve host lifespan state and serve installed SPA bundles under custom mount paths and proxy prefixes.
-- Add revocable sessions, shared SQL session storage, bounded request bodies and event publication, and an async database deployment check.
+- Add revocable in-memory sessions with an optional shared store, bounded request bodies and event publication, and an async database deployment check.
 - Restore keyboard focus in confirmation dialogs, record tabs, and the mobile navigation drawer.

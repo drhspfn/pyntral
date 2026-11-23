@@ -38,7 +38,7 @@ from .hooks import OperationContext
 from .realtime import RealtimeNotifier
 from .jobs import JobManager
 from .validation import validate_payload
-from .sessions import MemorySessionStore, SessionIdentity, SessionStore, SQLSessionStore
+from .sessions import MemorySessionStore, SessionIdentity, SessionStore
 from .storage import _PENDING_DELETE_RECORD, StorageBackend, UploadEntry, safe_upload_name, normalize_mime
 from .bridge import Bridge, BridgeContext
 from .logging import (LoggingConfig, configure_logging, emit as emit_log, request_id_var)
@@ -149,8 +149,6 @@ class Admin:
                     factories = [self.session_factory]
                     if isinstance(self.auth, ModelAuth):
                         factories.append(self.auth.session_factory)
-                    if isinstance(self.session_store, SQLSessionStore):
-                        factories.append(self.session_store.session_factory)
                     for factory in factories:
                         session = factory()
                         try:

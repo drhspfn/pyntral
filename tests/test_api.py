@@ -254,18 +254,19 @@ def test_unicode_local_auth_and_streaming_json_limit():
         assert rejected.status_code == 413
 
 
-def test_shared_sql_sessions_are_revoked_across_admin_instances(tmp_path):
-    from pyntral import SessionBase, SQLSessionStore
+def test_custom_session_store_shares_revocation_between_admin_instances():
+    from pyntral import MemorySessionStore
 
-    engine = create_engine(f"sqlite:///{(tmp_path / 'sessions.db').as_posix()}")
-    SessionBase.metadata.create_all(engine)
-    sessions = sessionmaker(engine)
+    store = MemorySessionStore()
+
+    def unused_database():
+        pytest.fail("Admin sessions must not depend on the application's database")
 
     def app():
         host = FastAPI()
-        Admin(host, path="/ops", session_factory=lambda: None,
+        Admin(host, path="/ops", session_factory=unused_database,
               auth=CallbackAuth(lambda *_: Principal(id="operator", username="operator")),
-              session_store=SQLSessionStore(sessions), session_cookie="ops_session",
+              session_store=store, session_cookie="ops_session",
               session_cookie_path="/ops", secret_key="s" * 64, secure_cookie=False)
         return host
 
@@ -277,7 +278,6 @@ def test_shared_sql_sessions_are_revoked_across_admin_instances(tmp_path):
         assert second.get("/ops/auth/me").json()["user"]["id"] == "operator"
         assert first.post("/ops/auth/logout", headers={"X-CSRF-Token": auth.json()["csrf"]}).status_code == 200
         assert second.get("/ops/auth/me").json()["user"] is None
-    engine.dispose()
 
 
 def test_async_sessions_requirement_rejects_sync_factories(db):
@@ -291,20 +291,18 @@ def test_async_sessions_requirement_rejects_sync_factories(db):
 
 
 @pytest.mark.asyncio
-async def test_async_admin_with_shared_sessions_preserves_normal_crud(tmp_path):
+async def test_async_admin_with_memory_sessions_preserves_normal_crud(tmp_path):
     pytest.importorskip("greenlet")
     from httpx import ASGITransport, AsyncClient
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-    from pyntral import SessionBase, SQLSessionStore
 
     engine = create_async_engine(f"sqlite+aiosqlite:///{(tmp_path / 'async.db').as_posix()}")
     try:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
-            await connection.run_sync(SessionBase.metadata.create_all)
         sessions = async_sessionmaker(engine)
         app = FastAPI()
-        admin = Admin(app, session_factory=sessions, session_store=SQLSessionStore(sessions),
+        admin = Admin(app, session_factory=sessions,
                       auth=CallbackAuth(lambda *_: Principal(id="operator", username="operator")),
                       secret_key="s" * 64, secure_cookie=False, require_async_sessions=True)
         admin.add_resource(Resource(Team))

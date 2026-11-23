@@ -91,11 +91,12 @@ See [deployment](deployment.md) and [security policy](../SECURITY.md).
 
 Logout revokes the current session server-side. The default memory store is
 bounded, belongs to one process, and signs users out when that process restarts.
-For multiple replicas use `SQLSessionStore(session_factory)` with the same
-database, signing secret, cookie configuration, and mount path on each replica.
-Create the `pyntral_sessions` table via `SessionBase.metadata` in Alembic
-before enabling the shared store. The store should use an async session factory
-when database latency matters. Configure a unique `session_cookie` and,
+For multiple replicas, pass a shared implementation of the async
+`SessionStore` protocol as `session_store`, backed by infrastructure such as
+the host application's Redis service. Use the same signing secret, cookie
+configuration, and mount path on each replica. The store must share expiry
+and revocation across processes. The default configuration requires no session
+table or migration. Configure a unique `session_cookie` and,
 where practical, `session_cookie_path` for independent admin installations.
 `session_max_age` controls the absolute lifetime in seconds. Existing signed
 cookies issued before server-side session storage require a fresh sign-in.

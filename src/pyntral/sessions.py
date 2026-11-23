@@ -1,15 +1,12 @@
-"""Revocable admin sessions for one process or a shared SQL database."""
+"""Revocable admin sessions with a process-local default and a pluggable store."""
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Callable, Protocol
+from typing import Protocol
 
-from sqlalchemy import Float, JSON, String, delete
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
-from .auth import Principal, maybe_await
+from .auth import Principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,54 +51,3 @@ class MemorySessionStore:
     async def revoke(self, session_id: str) -> None:
         with self._lock:
             self._sessions.pop(session_id, None)
-
-
-class SessionBase(DeclarativeBase):
-    pass
-
-
-class _SessionRow(SessionBase):
-    __tablename__ = "pyntral_sessions"
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    principal: Mapped[dict] = mapped_column(JSON)
-    csrf: Mapped[str] = mapped_column(String(64))
-    audience: Mapped[str] = mapped_column(String(255))
-    expires_at: Mapped[float] = mapped_column(Float, index=True)
-
-
-class SQLSessionStore:
-    """Use the same session database and signing key on all admin replicas."""
-
-    def __init__(self, session_factory: Callable[[], Any]):
-        self.session_factory = session_factory
-
-    async def put(self, session_id: str, identity: SessionIdentity) -> None:
-        session = self.session_factory()
-        try:
-            await maybe_await(session.execute(delete(_SessionRow).where(_SessionRow.expires_at <= time.time())))
-            principal = identity.principal.as_dict()
-            principal.pop("name")
-            principal.pop("role")
-            session.add(_SessionRow(id=session_id, principal=principal, csrf=identity.csrf,
-                                    audience=identity.audience, expires_at=identity.expires_at))
-            await maybe_await(session.commit())
-        finally:
-            await maybe_await(session.close())
-
-    async def get(self, session_id: str) -> SessionIdentity | None:
-        session = self.session_factory()
-        try:
-            row = await maybe_await(session.get(_SessionRow, session_id))
-            if row is None or row.expires_at <= time.time():
-                return None
-            return SessionIdentity(Principal(**row.principal), row.csrf, row.audience, row.expires_at)
-        finally:
-            await maybe_await(session.close())
-
-    async def revoke(self, session_id: str) -> None:
-        session = self.session_factory()
-        try:
-            await maybe_await(session.execute(delete(_SessionRow).where(_SessionRow.id == session_id)))
-            await maybe_await(session.commit())
-        finally:
-            await maybe_await(session.close())
