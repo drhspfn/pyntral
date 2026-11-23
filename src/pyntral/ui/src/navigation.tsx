@@ -5,6 +5,7 @@ import type { Schema } from "./types";
 import { useAdminFeedback } from "./feedback";
 import { useCurrentAdmin } from "./currentAdmin";
 import { useI18n } from "./i18n";
+import { OverflowText } from "./overflow-text";
 import { access as accessExtensions } from "virtual:pyntral-extensions";
 
 type Node = { type: "group" | "resource" | "page"; id: string; label: string; icon: string; order: number; route?: string;
@@ -61,17 +62,17 @@ function Branch({ node, schema, route, go, depth }: { node: Node; schema: Schema
   const LockedContent = accessExtensions.denied;
   const resource = schema.resources.find((r) => r.id === node.id);
   if (node.type !== "group") return <button type="button" className={`nav-link ${activeChild ? "active" : ""}`}
-    style={{ paddingLeft: `${12 + depth * 12}px` }} onClick={() => {
+    style={{ paddingLeft: `${12 + Math.min(depth, 5) * 9}px` }} onClick={() => {
       if (node.locked) void confirm({ title: "Access denied", message: `You cannot access ${node.label}.`,
         confirmLabel: "OK", cancelLabel: "Close",
         content: LockedContent && resource ? <LockedContent currentAdmin={currentAdmin} resource={resource}/> : undefined });
       else go(node.route!);
     }}>
-    <Icon size={16} /><span>{node.label}</span>{node.locked && <LockKeyhole size={13} aria-label="Locked"/>}</button>;
+    <Icon size={16} /><OverflowText>{node.label}</OverflowText>{node.locked && <LockKeyhole size={13} aria-label="Locked"/>}</button>;
   return <div className="nav-branch">
     <button className={`nav-link nav-toggle ${activeChild ? "ancestor-active" : ""}`} type="button"
-      aria-expanded={open} style={{ paddingLeft: `${12 + depth * 12}px` }} onClick={() => setOpen(!open)}>
-      <Icon size={16}/><span>{node.label}</span>{open ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+      aria-expanded={open} style={{ paddingLeft: `${12 + Math.min(depth, 5) * 9}px` }} onClick={() => setOpen(!open)}>
+      <Icon size={16}/><OverflowText>{node.label}</OverflowText>{open ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
     </button>
     {open && <div className="nav-children">{node.children.map((child) => <Branch key={child.type + child.id}
       node={child} schema={schema} route={route} go={go} depth={depth + 1} />)}</div>}

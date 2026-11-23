@@ -12,7 +12,7 @@ import { fields as customFields, pages as customPages, actions as customActions,
 import { SidebarNavigation } from "./navigation";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
-import { AsyncSelect, Checkbox, DatePicker, FileUpload, FormField, SearchInput, Select, TextInput, Textarea,
+import { AsyncSelect, Button, Card, Checkbox, Collapsible, DatePicker, FileRow, FileUpload, FormField, SearchInput, Select, TextInput, Textarea,
   type SelectOption } from "./ui";
 import { RelationInput } from "./relation";
 import { AdvancedFilterField, serializeFilters, filterOperators, type FilterValues } from "./filters";
@@ -575,12 +575,11 @@ function StructuredFields({ resource, mode, fields, values, render }: {
       aria-labelledby={`${tabGroup}-tab-${section.id}`} tabIndex={mode === "detail" ? 0 : undefined}>
       {current?.id === section.id && content(section.fields, section.columns)}</section>)}
     {sections.filter((section) => section.kind !== "tab" && visible(section)).map((section) =>
-      section.kind === "accordion" ? <details className="ra-layout-group" key={section.id}
-        open={accordionOpen[section.id] ?? section.defaultOpen}
-        onToggle={(event) => { const open = event.currentTarget.open;
-          setAccordionOpen((previous) => previous[section.id] === open ? previous : { ...previous, [section.id]: open }); }}>
-        <summary>{section.title}</summary>{content(section.fields, section.columns)}
-      </details> : <section className="ra-layout-group" key={section.id}>
+      section.kind === "accordion" ? <Collapsible className="ra-layout-group" key={section.id}
+        header={section.title} open={accordionOpen[section.id] ?? section.defaultOpen}
+        onOpenChange={(open) => setAccordionOpen(previous => ({ ...previous, [section.id]: open }))}>
+        {content(section.fields, section.columns)}
+      </Collapsible> : <section className="ra-layout-group" key={section.id}>
         <h3>{section.title}</h3>{content(section.fields, section.columns)}
       </section>)}
     {trailing.length > 0 && <section className="ra-layout-group">
@@ -812,38 +811,51 @@ function RelatedRecords({ resource, identifier, relation, target, navigate }: {
 function ResourceUploads({ resource, identifier }: { resource: ResourceDef; identifier: string }) {
   const client = useQueryClient();
   const feedback = useAdminFeedback();
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const url = `/api/resources/${resource.id}/${encodeURIComponent(identifier)}/uploads`;
-  const rows = useQuery({ queryKey: ["uploads", resource.id, identifier], queryFn: () =>
-    api<{ items: { id: string; filename: string; size_bytes: number }[] }>(url) });
+  const queryKey = ["uploads", resource.id, identifier];
+  const rows = useQuery({ queryKey, queryFn: () =>
+    api<{ items: { id: string; filename: string; size_bytes: number; content_type?: string }[] }>(url) });
   const send = useMutation({
     mutationFn: (upload: File) => api(url, { method: "POST", body: upload,
       headers: { "X-Filename": encodeURIComponent(upload.name), "Content-Type": upload.type || "application/octet-stream" } }),
-    onSuccess: async () => { setFile(null); await client.invalidateQueries({ queryKey: ["uploads", resource.id, identifier] });
+    onSuccess: async () => { setFiles([]); await client.invalidateQueries({ queryKey });
       feedback.toast("Attachment uploaded", { kind: "success" }); },
     onError: (error: unknown) => feedback.toast(error instanceof Error ? error.message : "Upload failed", { kind: "error" }),
   });
   const remove = useMutation({
     mutationFn: (uploadId: string) => api(`/api/uploads/${encodeURIComponent(uploadId)}`, { method: "DELETE" }),
-    onSuccess: async () => { await client.invalidateQueries({ queryKey: ["uploads", resource.id, identifier] });
+    onSuccess: async () => { await client.invalidateQueries({ queryKey });
       feedback.toast("Attachment removed", { kind: "success" }); },
+    onError: (error: unknown) => feedback.toast(error instanceof Error ? error.message : "Remove failed", { kind: "error" }),
   });
-  return <div className="surface relationship-card">
-    <h3>Attachments</h3>
+  const maxBytes = resource.uploadMaxBytes ?? 10 * 1024 * 1024;
+  return <Card title="Attachments" description="Files attached to this record." className="relationship-card ra-attachments">
     {rows.isLoading && <Loading label="Loading attachments" />}
     {rows.error && <Alert error={rows.error}/>}
-    {rows.data?.items.map((asset) => <div className="ra-upload-item" key={asset.id}>
-      <a href={`${base}/api/uploads/${encodeURIComponent(asset.id)}`} download>{asset.filename}</a>
-      <small>{asset.size_bytes} bytes</small>
-      {resource.capabilities.edit && <button className="btn subtle" disabled={remove.isPending} onClick={() =>
-        void feedback.confirm({title:"Remove attachment?",destructive:true}).then(ok => {if(ok)remove.mutate(asset.id);})}>Remove</button>}
-    </div>)}
-    {resource.capabilities.edit && <form className="ra-upload-form" onSubmit={(event) => {
-      event.preventDefault(); if (file) send.mutate(file); }}>
-      <input type="file" aria-label="Choose attachment" onChange={(event) => setFile(event.target.files?.[0] ?? null)}/>
-      <button type="submit" className="btn primary" disabled={!file || send.isPending}>Upload</button>
-    </form>}
-  </div>;
+    {rows.data && <div className="ra-file-list">
+      {rows.data.items.length === 0 && <p className="ra-attachments-empty">No attachments yet.</p>}
+      {rows.data.items.map(asset => {
+        const href = `${base}/api/uploads/${encodeURIComponent(asset.id)}`;
+        return <FileRow key={asset.id} name={asset.filename} size={asset.size_bytes}
+          mimeType={asset.content_type} href={href}
+          previewUrl={asset.size_bytes <= 5 * 1024 * 1024 ? href : undefined}
+          disabled={remove.isPending || send.isPending}
+          onRemove={resource.capabilities.edit ? () => {
+            void feedback.confirm({ title: "Remove attachment?", destructive: true }).then(ok => { if (ok) remove.mutate(asset.id); });
+          } : undefined}/>;
+      })}
+    </div>}
+    {resource.capabilities.edit && <div className="ra-attachments-picker">
+      <FileUpload files={files} onFilesChange={setFiles} multiple={false} maxFiles={1}
+        maxSizeBytes={maxBytes} maxTotalBytes={maxBytes} disabled={send.isPending}
+        label="Add attachment"/>
+      <Button type="button" variant="primary" loading={send.isPending}
+        disabled={!files.length} onClick={() => { if (files[0]) send.mutate(files[0]); }}>
+        Upload attachment
+      </Button>
+    </div>}
+  </Card>;
 }
 
 function RecordShow({ resource, id, schema, navigate }: {

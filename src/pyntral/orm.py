@@ -355,6 +355,7 @@ class MapperAdapter:
             "primaryKey": self.pk_name,
             "versionField": self.resource.version_field,
             "uploads": self.resource._uploads_enabled,
+            "uploadMaxBytes": self.resource._upload_max_bytes if self.resource._uploads_enabled else None,
             "titleField": self._title_field(),
             "layouts": {mode: [
                 {"id": section.id, "title": section.title, "kind": section.kind,

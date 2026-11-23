@@ -1,6 +1,8 @@
 /** Controlled file picker. File bytes remain in the browser unless an explicit upload callback runs. */
 import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
-import { FileImage, FilePlus2, FileText, LoaderCircle, Paperclip, Trash2, UploadCloud, X } from "lucide-react";
+import { FilePlus2, Paperclip, Trash2, UploadCloud } from "lucide-react";
+import { Button } from "./button";
+import { FileRow } from "./file-row";
 import { formatFileSize, formatFileRejection, selectFiles, type FileConstraints, type FileRejection } from "./file-upload-state";
 
 export interface FileUploadReceipt {
@@ -27,18 +29,6 @@ export interface FileUploadProps extends FileConstraints {
   /** No upload happens unless the consumer explicitly provides this callback and presses Upload. */
   onUpload?: (file: File, context: FileUploadContext) => Promise<FileUploadReceipt>;
   onUploaded?: (receipts: FileUploadReceipt[]) => void;
-}
-function FilePreview({ file, enabled }: { file: File; enabled: boolean }) {
-  const [src, setSrc] = useState<string | null>(null);
-  const safeImage = /^(image\/png|image\/jpeg|image\/gif|image\/webp)$/.test(file.type);
-  useEffect(() => {
-    if (!enabled || !safeImage) return;
-    const url = URL.createObjectURL(file);
-    setSrc(url);
-    return () => { URL.revokeObjectURL(url); setSrc(null); };
-  }, [file, enabled, safeImage]);
-  return src ? <img src={src} alt="" className="ra-file-thumbnail"/> :
-    safeImage ? <FileImage size={20}/> : <FileText size={20}/>;
 }
 export function FileUpload({
   files, onFilesChange, onRejected, multiple = true, maxFiles = 10,
@@ -120,24 +110,19 @@ export function FileUpload({
       <small>{files.length}/{multiple ? maxFiles : 1} files · Up to {formatFileSize(maxSizeBytes)} each</small>
     </div>
     {!!files.length && <div className="ra-file-list" aria-live="polite">
-      {files.map((file, index) => <div key={file.name + ":" + file.lastModified + ":" + index} className="ra-file-row">
-        <FilePreview file={file} enabled={preview}/>
-        <div className="ra-file-info"><strong title={file.name}>{file.name}</strong>
-          <small>{formatFileSize(file.size)} · {file.type || "Unknown type"}</small></div>
-        <button type="button" className="ra-file-remove" aria-label={`Remove ${file.name}`}
-          disabled={disabled || uploading} onClick={() => onFilesChange(files.filter((_, i) => i !== index))}>
-          <X size={16}/></button>
-      </div>)}
+      {files.map((file, index) => <FileRow key={file.name + ":" + file.lastModified + ":" + index}
+        name={file.name} size={file.size} file={file} preview={preview} disabled={disabled || uploading}
+        onRemove={() => onFilesChange(files.filter((_, i) => i !== index))}/>)}
     </div>}
     {error && <p className="ra-file-error" role="alert">{error}</p>}
     <div className="ra-file-actions">
       <span><Paperclip size={13}/> {files.length} selected</span>
-      {!!files.length && <button type="button" className="btn subtle" disabled={disabled || uploading}
-        onClick={() => onFilesChange([])}><Trash2 size={14}/> Clear</button>}
-      {onUpload && <button type="button" className="btn primary" disabled={disabled || uploading || !files.length}
-        onClick={() => { void upload(); }}>{uploading ? <LoaderCircle className="spin" size={15}/> : <FilePlus2 size={15}/>}
-          {uploading ? `Uploading ${Math.round(progress)}%` : "Upload"}</button>}
-      {uploading && <button type="button" className="btn subtle" onClick={() => abort.current?.abort()}>Cancel</button>}
+      {!!files.length && <Button type="button" disabled={disabled || uploading}
+        onClick={() => onFilesChange([])} startIcon={<Trash2 size={14}/>}>Clear</Button>}
+      {onUpload && <Button type="button" variant="primary" loading={uploading} disabled={disabled || !files.length}
+        onClick={() => { void upload(); }} startIcon={<FilePlus2 size={15}/>}>
+          {uploading ? `Uploading ${Math.round(progress)}%` : "Upload"}</Button>}
+      {uploading && <Button type="button" onClick={() => abort.current?.abort()}>Cancel</Button>}
     </div>
   </div>;
 }

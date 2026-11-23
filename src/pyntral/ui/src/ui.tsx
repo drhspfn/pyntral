@@ -1,7 +1,7 @@
 /** Public UI primitives. Import from @pyntral/ui in customer TSX extensions. */
 import {
   forwardRef, useEffect, useId, useMemo, useRef, useState,
-  type ButtonHTMLAttributes, type CSSProperties, type InputHTMLAttributes, type KeyboardEvent,
+  type CSSProperties, type InputHTMLAttributes, type KeyboardEvent,
   type ReactNode, type TextareaHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
@@ -12,7 +12,15 @@ import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, LoaderCirc
 export { FilterOperatorButton } from "./filter-operator";
 export { Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup } from "./controls";
 export { SortableList } from "./sortable";
+import { Button } from "./button";
+export { Button } from "./button";
+export type { ButtonProps, ButtonVariant } from "./button";
 export { FileUpload } from "./file-upload";
+export { FileRow } from "./file-row";
+export type { FileRowProps } from "./file-row";
+export { Collapsible } from "./collapsible";
+export type { CollapsibleProps } from "./collapsible";
+export { OverflowText } from "./overflow-text";
 export { formatFileRejection } from "./file-upload-state";
 export type { FileUploadProps, FileUploadReceipt, FileUploadContext } from "./file-upload";
 export { Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, PopoverClose, usePopover } from "./popover-component";
@@ -21,22 +29,6 @@ export type { SortableListProps } from "./sortable";
 export type { CheckboxProps, CheckboxGroupProps, ChoiceOption, RadioGroupProps, SwitchProps, ToggleGroupProps } from "./controls";
 export type { FilterOperator } from "./filter-state";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  loading?: boolean;
-  startIcon?: ReactNode;
-  endIcon?: ReactNode;
-}
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
-  variant = "secondary", loading = false, startIcon, endIcon, disabled, children, className = "", ...props
-}, ref) {
-  return <button {...props} ref={ref} className={`ra-button ra-button-${variant} ${className}`}
-    disabled={disabled || loading} aria-busy={loading}>
-    {loading ? <LoaderCircle className="spin" size={16}/> : startIcon}
-    {children && <span>{children}</span>}{!loading && endIcon}
-  </button>;
-});
 export function Badge({ children, tone = "neutral", className = "" }: {
   children: ReactNode; tone?: "neutral" | "success" | "danger" | "primary"; className?: string;
 }) {

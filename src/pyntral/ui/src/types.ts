@@ -66,6 +66,7 @@ export interface ResourceDef {
   primaryKey: string;
   versionField?: string | null;
   uploads?: boolean;
+  uploadMaxBytes?: number | null;
   titleField: string;
   pageSize: number;
   showSearch?: boolean;
