@@ -1,12 +1,11 @@
 """Exercise the supervisor independently of the npm toolchain, including real reloads."""
 from __future__ import annotations
 
-import os
+import json
 import socket
 import subprocess
 import sys
 import time
-from pathlib import Path
 from urllib.request import urlopen
 
 from pyntral import cli
@@ -97,24 +96,25 @@ def test_real_dev_reload_keeps_frontend_and_recovers_from_invalid_code(tmp_path)
         )
 
     write_app(1)
+    frontend_script = tmp_path / "frontend_stub.py"
+    frontend_script.write_text(
+        "import os, time\n"
+        "from pathlib import Path\n"
+        "Path('frontend-pid').write_text(str(os.getpid()))\n"
+        "deadline = time.monotonic() + 90\n"
+        "while not Path('frontend-stop').exists() and time.monotonic() < deadline:\n"
+        "    time.sleep(0.05)\n", encoding="utf-8",
+    )
     supervisor = """
 import os, sys
 from pathlib import Path
 from pyntral.cli import _run_dev_processes
 project = Path(sys.argv[1])
-frontend = [
-    sys.executable, "-c",
-    "import os,time; from pathlib import Path; "
-    "Path('frontend-pid').write_text(str(os.getpid())); "
-    "deadline=time.monotonic()+60; "
-    "exec('while not Path(\\'frontend-stop\\').exists() and time.monotonic()<deadline:\\n time.sleep(.05)')"
-]
+frontend = [sys.executable, str(project / "frontend_stub.py")]
 backend = [sys.executable, "-m", "uvicorn", "reload_app:app",
            "--host", "127.0.0.1", "--port", sys.argv[2], "--workers", "1"]
 raise SystemExit(_run_dev_processes(project, project, dict(os.environ), backend, frontend))
 """
-    import json
-
     def wait_version(process, expected):
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline and process.poll() is None:
@@ -133,6 +133,9 @@ raise SystemExit(_run_dev_processes(project, project, dict(os.environ), backend,
                                    cwd=tmp_path, stdout=output, stderr=subprocess.STDOUT)
         try:
             first = wait_version(process, 1)
+            deadline = time.monotonic() + 5
+            while not frontend_pid.exists() and time.monotonic() < deadline:
+                time.sleep(0.05)
             assert frontend_pid.exists()
             original_frontend = frontend_pid.read_text()
             # Change file size too: Python bytecode caches use mtime/size.
