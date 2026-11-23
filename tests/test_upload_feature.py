@@ -25,6 +25,10 @@ def test_secure_local_upload_download_delete(tmp_path):
     with TestClient(app) as c:
         login=c.post('/admin/auth/login',json={'username':'a','password':'x'})
         h={'X-CSRF-Token':login.json()['csrf']}
+        schema = c.get('/admin/api/schema').json()
+        resource = next(item for item in schema['resources'] if item['id'] == 'docs')
+        assert resource['uploads'] is True
+        assert resource['uploadMaxBytes'] == 10
         record=c.post('/admin/api/resources/docs',json={'name':'doc'},headers=h).json()['record']['id']
         url=f'/admin/api/resources/docs/{record}/uploads'
         assert c.post(url,content=b'abc').status_code==403
@@ -34,6 +38,9 @@ def test_secure_local_upload_download_delete(tmp_path):
         id=upload.json()['id']
         assert upload.json()['filename']=='test.html'
         items=c.get(url).json()['items'];assert len(items)==1
+        assert items[0]['filename'] == 'test.html'
+        assert items[0]['size_bytes'] == 3
+        assert items[0]['content_type'] == 'text/html'
         download=c.get(f'/admin/api/uploads/{id}')
         assert download.status_code==200 and download.content==b'pdf'
         assert 'attachment' in download.headers['content-disposition']

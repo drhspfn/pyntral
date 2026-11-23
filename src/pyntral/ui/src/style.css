@@ -207,7 +207,7 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .login-note{display:flex;align-items:center;gap:7px;justify-content:center;margin-top:24px}
 .mobile-backdrop{display:none}
 @media(max-width:1000px){.main-content{padding:25px}.topbar{padding:0 25px}}
-@media(max-width:800px){.sidebar{visibility:hidden;transform:translateX(-105%);transition:transform var(--ra-motion-duration);box-shadow:var(--ra-shadow)}.sidebar.open{visibility:visible;transform:translateX(0)}.mobile-backdrop{display:block;position:fixed;inset:0;background:var(--ra-mobile-backdrop);z-index:19} .main-column{margin-left:0;width:100%}.mobile-menu{display:grid}.topbar{padding:0 15px}}
+@media(max-width:800px){.sidebar{width:min(238px,100%);visibility:hidden;transform:translateX(-105%);transition:transform var(--ra-motion-duration);box-shadow:var(--ra-shadow)}.sidebar.open{visibility:visible;transform:translateX(0)}.mobile-backdrop{display:block;position:fixed;inset:0;background:var(--ra-mobile-backdrop);z-index:19} .main-column{margin-left:0;width:100%}.mobile-menu{display:grid}.topbar{padding:0 15px}}
 @media(max-width:600px){.page-heading{align-items:flex-start;flex-direction:column}.field-grid,.details-grid{grid-template-columns:1fr}.table-toolbar{flex-wrap:wrap}.searchbox{width:100%}.pager{flex-wrap:wrap;gap:8px}.login-page{grid-template-columns:1fr}.login-side{display:none}.login-panel{padding:24px}.main-content{padding:19px}.topbar-breadcrumb{display:none}}
 /* Public feedback system. All appearance is based on overridable --ra-* tokens. */
 .ra-toast-stack{position:fixed;right:22px;bottom:22px;z-index:1001;display:flex;flex-direction:column;gap:10px;max-width:min(420px,calc(100vw - 24px));width:max-content;pointer-events:none}
@@ -426,7 +426,6 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .ra-attachments .ra-card-header { margin:0; }
 .ra-attachments-empty { color:var(--ra-muted); font-size:12px; margin:0; padding:8px 0; }
 .ra-attachments-picker { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; min-width:0; }
-.ra-attachments-picker>.ra-button { justify-self:end; }
 
 .ra-table-compact .data-table td, .ra-table-compact .data-table th { padding-block: .35rem; }
 .data-table .ra-column-pinned { position: sticky; left: var(--ra-pin-left, 0px); z-index: 1;
@@ -632,7 +631,7 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .ra-file-remove,.ra-file-download{border:0;background:transparent;color:var(--ra-muted);display:grid;place-items:center;width:32px;min-height:32px;padding:5px;border-radius:6px}
 .ra-file-download:hover{background:var(--ra-surface-alt);color:var(--ra-primary)}
 .ra-file-remove:hover{color:var(--ra-danger)}
-.ra-file-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ra-file-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
 .ra-file-actions>span{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ra-muted);margin-right:auto}
 .ra-file-error{margin:0;font-size:12px;color:var(--ra-danger);overflow-wrap:anywhere}
 
@@ -664,5 +663,15 @@ h2 {font-size:15px;letter-spacing:-.2px}
   .field-grid,.details-grid{grid-template-columns:minmax(0,1fr)}
   .form-actions{flex-wrap:wrap}
   .ra-collapsible-actions{max-width:50%}
-  .ra-attachments-picker>.ra-button{justify-self:stretch}
+  .ra-attachments-picker .ra-file-actions>.ra-button{width:100%}
+}
+
+/* Desktop resize handle shares the shell's width variable with the fixed sidebar. */
+.ra-sidebar-resizer{display:none}
+@media(min-width:801px){
+  .ra-sidebar-resizer{display:block;position:fixed;inset:0 auto 0 calc(var(--ra-sidebar-width) - 4px);
+    width:8px;z-index:21;cursor:col-resize;touch-action:none;outline-offset:-2px}
+  .ra-sidebar-resizer::after{content:"";position:absolute;inset:0 3px;background:transparent}
+  .ra-sidebar-resizer:hover::after,.ra-sidebar-resizer:focus-visible::after,.ra-sidebar-resizer:active::after{
+    background:var(--ra-primary)}
 }

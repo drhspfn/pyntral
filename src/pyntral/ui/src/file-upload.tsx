@@ -1,5 +1,5 @@
 /** Controlled file picker. File bytes remain in the browser unless an explicit upload callback runs. */
-import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { FilePlus2, Paperclip, Trash2, UploadCloud } from "lucide-react";
 import { Button } from "./button";
 import { FileRow } from "./file-row";
@@ -26,6 +26,8 @@ export interface FileUploadProps extends FileConstraints {
   id?: string;
   className?: string;
   label?: string;
+  /** Consumer-owned actions, e.g. a submit button for a record attachment. */
+  actions?: ReactNode;
   /** No upload happens unless the consumer explicitly provides this callback and presses Upload. */
   onUpload?: (file: File, context: FileUploadContext) => Promise<FileUploadReceipt>;
   onUploaded?: (receipts: FileUploadReceipt[]) => void;
@@ -34,7 +36,7 @@ export function FileUpload({
   files, onFilesChange, onRejected, multiple = true, maxFiles = 10,
   maxSizeBytes = 10 * 1024 * 1024, maxTotalBytes = 50 * 1024 * 1024,
   accept, preview = true, allowPaste = true, disabled = false,
-  id, className = "", label = "Add files", onUpload, onUploaded,
+  id, className = "", label = "Add files", actions, onUpload, onUploaded,
 }: FileUploadProps) {
   const input = useRef<HTMLInputElement>(null);
   const abort = useRef<AbortController | null>(null);
@@ -115,14 +117,15 @@ export function FileUpload({
         onRemove={() => onFilesChange(files.filter((_, i) => i !== index))}/>)}
     </div>}
     {error && <p className="ra-file-error" role="alert">{error}</p>}
-    <div className="ra-file-actions">
-      <span><Paperclip size={13}/> {files.length} selected</span>
-      {!!files.length && <Button type="button" disabled={disabled || uploading}
+    {(multiple || onUpload || actions != null) && <div className="ra-file-actions">
+      {multiple && <span><Paperclip size={13}/> {files.length} selected</span>}
+      {multiple && files.length > 1 && <Button type="button" disabled={disabled || uploading}
         onClick={() => onFilesChange([])} startIcon={<Trash2 size={14}/>}>Clear</Button>}
       {onUpload && <Button type="button" variant="primary" loading={uploading} disabled={disabled || !files.length}
         onClick={() => { void upload(); }} startIcon={<FilePlus2 size={15}/>}>
           {uploading ? `Uploading ${Math.round(progress)}%` : "Upload"}</Button>}
       {uploading && <Button type="button" onClick={() => abort.current?.abort()}>Cancel</Button>}
-    </div>
+      {actions}
+    </div>}
   </div>;
 }

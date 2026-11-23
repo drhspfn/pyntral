@@ -849,11 +849,11 @@ function ResourceUploads({ resource, identifier }: { resource: ResourceDef; iden
     {resource.capabilities.edit && <div className="ra-attachments-picker">
       <FileUpload files={files} onFilesChange={setFiles} multiple={false} maxFiles={1}
         maxSizeBytes={maxBytes} maxTotalBytes={maxBytes} disabled={send.isPending}
-        label="Add attachment"/>
-      <Button type="button" variant="primary" loading={send.isPending}
-        disabled={!files.length} onClick={() => { if (files[0]) send.mutate(files[0]); }}>
-        Upload attachment
-      </Button>
+        label="Add attachment"
+        actions={<Button type="button" variant="primary" loading={send.isPending}
+          disabled={!files.length} onClick={() => { if (files[0]) send.mutate(files[0]); }}>
+          Upload attachment
+        </Button>}/>
     </div>}
   </Card>;
 }
@@ -998,6 +998,16 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
   const { t } = useI18n();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [preferredSidebarWidth, setPreferredSidebarWidth] = useState(238);
+  const sidebarLimit = () => Math.max(238, Math.min(420, Math.floor(window.innerWidth * 0.42)));
+  const [sidebarMax, setSidebarMax] = useState(sidebarLimit);
+  const sidebarWidth = Math.min(preferredSidebarWidth, sidebarMax);
+  useEffect(() => {
+    const resize = () => setSidebarMax(Math.max(238, Math.min(420, Math.floor(window.innerWidth * 0.42))));
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+  const resizeSidebar = (width: number) => setPreferredSidebarWidth(Math.round(Math.max(238, Math.min(sidebarMax, width))));
   const openMenu = useRef<HTMLButtonElement>(null);
   const closeMenu = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLElement>(null);
@@ -1016,7 +1026,7 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
     };
   }, [drawerOpen]);
   const navigateAndClose = (url: string) => { navigate(url); setDrawerOpen(false); };
-  return <div className="app-shell">
+  return <div className="app-shell" style={{ "--ra-sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
     {drawerOpen && <div className="mobile-backdrop" onClick={() => setDrawerOpen(false)}/>}
     <aside ref={drawer} id="workspace-sidebar" className={`sidebar ${drawerOpen ? "open" : ""}`}
       role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen || undefined} aria-label="Workspace sidebar"
@@ -1039,6 +1049,23 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
           <div className="user-name"><strong>{user.display_name || user.username}</strong><span>{user.roles.join(", ") || "Member"}</span></div>
           </div></div>
     </aside>
+    <div className="ra-sidebar-resizer" role="separator" tabIndex={0} aria-label="Resize sidebar"
+      aria-orientation="vertical" aria-controls="workspace-sidebar" aria-valuemin={238}
+      aria-valuemax={sidebarMax} aria-valuenow={sidebarWidth}
+      onPointerDown={event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={event => {
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) resizeSidebar(event.clientX);
+      }}
+      onKeyDown={event => {
+        const next = event.key === "ArrowLeft" ? sidebarWidth - 16 : event.key === "ArrowRight" ? sidebarWidth + 16 :
+          event.key === "Home" ? 238 : event.key === "End" ? sidebarMax : null;
+        if (next === null) return;
+        event.preventDefault(); resizeSidebar(next);
+      }}/>
     <div className="main-column" inert={drawerOpen}><header className="topbar"><div className="topbar-left">
       <button ref={openMenu} className="mobile-menu" onClick={() => setDrawerOpen(true)} aria-label="Open menu"
         aria-expanded={drawerOpen} aria-controls="workspace-sidebar"><Menu size={21}/></button>

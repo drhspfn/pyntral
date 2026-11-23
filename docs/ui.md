@@ -210,10 +210,27 @@ On narrow screens, resource heading actions wrap without overflowing. The mobile
 
 ## Controlled FileUpload (mock-first)
 
-`FileUpload` is a reusable `@pyntral/ui` atom with `files: File[]` and `onFilesChange`. It supports keyboard file selection, drag-and-drop, clipboard paste scoped to the dropzone, MIME/extension `accept`, single/multiple mode, per-file and aggregate byte limits, max count, deduplication, optional image thumbnails (PNG/JPEG/GIF/WebP only), removal, error callbacks and responsive rows. Object URLs are revoked when previews unmount. Files are **not uploaded** by default.
+`FileUpload` is a reusable `@pyntral/ui` atom with `files: File[]` and `onFilesChange`. It supports keyboard file selection, drag-and-drop, clipboard paste scoped to the dropzone, MIME/extension `accept`, single/multiple mode, per-file and aggregate byte limits, max count, deduplication, optional raster image thumbnails (PNG/JPEG/GIF/WebP/AVIF), removal, error callbacks and responsive rows. Object URLs are revoked when previews unmount. Files are **not uploaded** by default.
 
 A host may supply `onUpload(file, {signal, onProgress})` and `onUploaded(receipts)` to explicitly own the future upload transport. This atom does not discover remote URLs, call a Bridge, authorize an S3 bucket or persist a database file record on its own. The application must create a scoped, short-lived upload grant through its authenticated backend, enforce max size/type and authorization server-side, upload with explicit network policy (signed headers/origin, expiry, no credentials leakage), then finalize a file entity only after verifying the uploaded object. `onUpload` is sequential and cancellable; its callback is responsible for request timeouts, checksums, retries and revoking unused grants.
 
 The Shop Demo Insights page contains one multi-file picker with previews and one single-file picker without previews. Both use mock selection only.
 
 File validation errors use actionable messages with actual and configured byte sizes, accepted types, selection limits, and duplicate information. The public `formatFileRejection(rejection, constraints)` helper powers the inline accessible error; the Shop mock demo additionally shows the same message through a toast. The callback still returns stable reason codes for custom UX.
+
+### File rows and record attachments
+
+`FileRow` is exported from `@pyntral/ui` for both selected and persisted files. It takes `name`, `size` (bytes), optional `mimeType`, local `file` or remote `previewUrl`, `preview`, download `href`, optional controlled `onRemove`, and `disabled`. Removing a row from `FileUpload` updates its controlled `files` via `onFilesChange`. Consumers may supply `actions` to add their own submit controls. The built-in record attachment panel uses the resource's server-provided upload limit, and lazily previews supported persisted raster images up to 5 MiB via the authorized download endpoint. Other files retain a file icon; failed previews do not prevent downloading.
+
+### Collapsible and truncated labels
+
+```tsx
+import { Button, Collapsible, OverflowText } from "@pyntral/ui";
+
+<Collapsible header="Full content" defaultOpen
+  actions={open => <Button type="button" onClick={onEdit}>{open ? "Edit" : "Open editor"}</Button>}>
+  <p>Content</p>
+</Collapsible>
+```
+
+`Collapsible` accepts `open` and `onOpenChange` for controlled mode, `defaultOpen` for uncontrolled mode, `disabled`, custom non-interactive `header` content, and separate `actions` that remain available even while closed. Both header and actions may be render functions receiving the current open state. The disclosure is a keyboard-accessible button; the content remains mounted when collapsed. `OverflowText` renders an ellipsized text label and shows a themed tooltip on hover or keyboard focus only when the label is actually clipped. It is used in sidebar navigation. Desktop sidebar width can be adjusted by dragging the separator or using arrow keys when it is focused (Home/End select the limits).
