@@ -234,3 +234,44 @@ import { Button, Collapsible, OverflowText } from "@pyntral/ui";
 ```
 
 `Collapsible` accepts `open` and `onOpenChange` for controlled mode, `defaultOpen` for uncontrolled mode, `disabled`, custom non-interactive `header` content, and separate `actions` that remain available even while closed. Both header and actions may be render functions receiving the current open state. The disclosure is a keyboard-accessible button; the content remains mounted when collapsed. `OverflowText` renders an ellipsized text label and shows a themed tooltip on hover or keyboard focus only when the label is actually clipped. It is used in sidebar navigation. Desktop sidebar width can be adjusted by dragging the separator or using arrow keys when it is focused (Home/End select the limits).
+
+## Sidebar branding and navigation icons
+
+The generic SPA consumes the sidebar configuration directly from the authenticated schema.
+The default header now displays `Admin.title` rather than a hard-coded Pyntral brand.
+No TSX or frontend rebuild is necessary when using a distribution that supports this API.
+
+```python
+from pyntral import Admin, SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon
+
+admin = Admin(
+    app, session_factory=Session, auth=auth, secret_key=secret,
+    title="Shop administration",
+    sidebar=SidebarConfig(
+        width=260, min_width=238, max_width=420, mobile_width=260,
+        resizable=True, show_icons=True, icon_size=18,
+        indent=9, max_indent_depth=5, dashboard_icon="house",
+        header=SidebarHeader(
+            title="My Shop", subtitle="Administration panel",
+            icon=SvgIcon.from_file("assets/logo.svg"),
+            show_icon=True, show_title=True, show_subtitle=True,
+            align="left", direction="horizontal", divider=True,
+            icon_size=32, logo_width=32, icon_background=False,
+            link_to_dashboard=True,
+        ),
+        footer=SidebarFooter(show_user=True, show_avatar=True, show_roles=True),
+    ),
+)
+```
+
+- `header=None` or `footer=None` hides that built-in region. `SidebarHeader(title=None)` inherits the application title.
+- Header alignment supports `left`, `center`, and `right`; direction supports `horizontal` and `vertical`. The independent `show_*` switches allow icon-only or text-only branding.
+- For a full-width wordmark, use a vertical header with `show_title=False`, `show_subtitle=False`, `icon_background=False`, and explicit `logo_width`/ `icon_size`. Images retain their aspect ratio.
+- The desktop separator is shown only if resizing is enabled and the effective width range permits it. The configured width bounds are constrained to 42% of the desktop viewport when needed. The mobile drawer uses `mobile_width` independently. Width changes are local to the mounted UI.
+- `show_icons=False` hides navigation glyphs while preserving disclosure and access-lock indicators. Header icons are controlled independently.
+- `Icon` is exported from `@pyntral/ui`: `<Icon icon="shopping-cart" size={18}/>`. It uses the bundled Lucide dynamic catalogue, loading icons on demand; unknown names use a contextual fallback. This also means the distribution includes the catalogue's lazy chunks.
+- `SvgIcon` accepts raw SVG or `SvgIcon.from_file(path)`. The XML is validated and displayed in an isolated image context, never as inline DOM or executable markup. SVG colors are the colors authored in the file (not inherited CSS).
+- `ImageIcon(src="/static/logo.webp")` uses an existing image route. `ImageIcon(light="/static/logo-dark.svg", dark="/static/logo-light.svg")` follows the UI theme. Relative URLs resolve against the mounted admin base; absolute paths and HTTP(S) URLs also work. The app must serve these files and permit them in its CSP.
+- `icon=None` hides a specific navigation/resource/action icon. Use the canonical kebab-case Lucide names for strings.
+
+For fully custom header, footer and item presentation, see [React extensions](extensions.md#sidebar-extensions).

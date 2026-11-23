@@ -1,9 +1,10 @@
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type ComponentProps } from "react";
 import { CircleHelp } from "lucide-react";
-import { DynamicIcon, iconNames, type IconName } from "lucide-react/dynamic";
+import { DynamicIcon, dynamicIconImports } from "lucide-react/dynamic";
 import type { IconSpec, ThemeMode } from "./types";
 
-const names = new Set<string>(iconNames);
+const names = new Set<string>(Object.keys(dynamicIconImports));
+type IconName = ComponentProps<typeof DynamicIcon>["name"];
 export interface IconProps {
   icon: IconSpec;
   size?: number;
@@ -46,7 +47,8 @@ export function Icon({ icon, size = 16, width, className, label, fallback = "cir
       width={width ?? size} height={size} alt={label ?? ""} className={`ra-icon-image ${className ?? ""}`}/>;
   }
   const name = names.has(icon) ? icon : names.has(fallback) ? fallback : "circle-help";
-  return <DynamicIcon name={name as IconName} size={size} className={className}
-    aria-label={label} aria-hidden={label ? undefined : true}
-    fallback={() => <span className="ra-icon-placeholder" style={{ width: size, height: size }} aria-hidden="true"/>}/>;
+  return <span className={`ra-icon-slot ${className ?? ""}`} style={{ width: size, height: size }}>
+    <DynamicIcon key={name} name={name as IconName} size={size}
+      aria-label={label} aria-hidden={label ? undefined : true}/>
+  </span>;
 }

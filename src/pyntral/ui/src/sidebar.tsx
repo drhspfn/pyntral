@@ -1,8 +1,7 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { sidebarHeaders, sidebarFooters } from "virtual:pyntral-extensions";
 import type { Schema, SidebarConfig, SidebarRegionProps } from "./types";
 import { Icon } from "./icon";
-import { OverflowText } from "./overflow-text";
 
 export function sidebarConfig(schema: Schema): SidebarConfig {
   return schema.navigation?.sidebar ?? {
@@ -25,14 +24,13 @@ export function SidebarHeaderRegion(props: RegionProps) {
     const hasText = (header.showTitle && !!header.title) || (header.showSubtitle && !!header.subtitle);
     if (hasIcon || hasText) {
       const content = <>
-        {hasIcon && <div className={`ra-sidebar-logo ${header.iconBackground ? "has-background" : ""}`}
-          style={{ "--ra-logo-size": `${header.iconSize}px` } as CSSProperties}>
+        {hasIcon && <span className={`ra-sidebar-logo ${header.iconBackground ? "has-background" : ""}`}>
           <Icon icon={header.icon} size={header.iconSize} width={header.logoWidth ?? undefined} themeMode={themeMode}/>
-        </div>}
-        {hasText && <div className="ra-sidebar-heading-text">
-          {header.showTitle && header.title && <strong><OverflowText>{header.title}</OverflowText></strong>}
-          {header.showSubtitle && header.subtitle && <small><OverflowText>{header.subtitle}</OverflowText></small>}
-        </div>}
+        </span>}
+        {hasText && <span className="ra-sidebar-heading-text">
+          {header.showTitle && header.title && <strong title={header.title}>{header.title}</strong>}
+          {header.showSubtitle && header.subtitle && <small title={header.subtitle}>{header.subtitle}</small>}
+        </span>}
       </>;
       const className = `ra-sidebar-heading align-${header.align} direction-${header.direction}`;
       children = <div className={`ra-sidebar-header ${header.divider ? "has-divider" : ""}`}>

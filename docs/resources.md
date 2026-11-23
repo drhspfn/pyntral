@@ -463,3 +463,7 @@ Resource(MyAssetDraft, fields={
 ```
 
 This first version is explicitly mock-only: the browser holds native `File` objects, and selecting files cannot result in a CRUD save containing fake file objects. Saving a record with staged mock files raises a user-visible error until the selections are cleared. No file bytes, object URLs, signed upload grants or file receipts travel through the resource schema or generic JSON `POST/PATCH`. Existing `UploadFeature` endpoints remain separate and unchanged. Actual S3/MinIO persistence needs an authenticated initiation/verification/finalization protocol and must not infer a trusted MIME type or checksum solely from the browser.
+
+### Resource, page, group and action icons
+
+All four accept a Lucide name (for example `"shopping-cart"`), `SvgIcon`, `ImageIcon`, or `None`. Names are resolved by the shared UI `Icon` primitive, including in Overview and action buttons. A null icon explicitly hides the glyph. See [Sidebar branding and navigation icons](ui.md#sidebar-branding-and-navigation-icons) for the icon formats and appearance configuration.

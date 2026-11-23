@@ -1001,9 +1001,11 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
   }, []);
-  const sidebarMax = Math.max(config.minWidth, Math.min(config.maxWidth, Math.floor(viewportWidth * 0.42)));
-  const sidebarWidth = Math.max(config.minWidth, Math.min(config.resizable ? preferredSidebarWidth : config.width, sidebarMax));
-  const resizeSidebar = (width: number) => setPreferredSidebarWidth(Math.round(Math.max(config.minWidth, Math.min(sidebarMax, width))));
+  const viewportLimit = Math.max(160, Math.floor(viewportWidth * 0.42));
+  const sidebarMin = Math.min(config.minWidth, viewportLimit);
+  const sidebarMax = Math.max(sidebarMin, Math.min(config.maxWidth, viewportLimit));
+  const sidebarWidth = Math.max(sidebarMin, Math.min(config.resizable ? preferredSidebarWidth : config.width, sidebarMax));
+  const resizeSidebar = (width: number) => setPreferredSidebarWidth(Math.round(Math.max(sidebarMin, Math.min(sidebarMax, width))));
   const openMenu = useRef<HTMLButtonElement>(null);
   const closeMenu = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLElement>(null);
@@ -1031,8 +1033,10 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
         if (!drawerOpen || event.defaultPrevented) return;
         if (event.key === "Escape") { event.preventDefault(); setDrawerOpen(false); }
         if (event.key !== "Tab") return;
-        const buttons = drawer.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
-        const first = buttons?.[0], last = buttons?.[buttons.length - 1];
+        const focusable = Array.from(drawer.current?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]'
+        ) ?? []).filter(element => element.tabIndex >= 0 && element.getClientRects().length > 0);
+        const first = focusable[0], last = focusable[focusable.length - 1];
         if (event.shiftKey && event.target === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && event.target === last) { event.preventDefault(); first?.focus(); }
       }}>
@@ -1042,8 +1046,8 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
       <SidebarNavigation schema={schema} route={route} navigate={navigateAndClose}/>
       <SidebarFooterRegion {...regionProps}/>
     </aside>
-    {config.resizable && sidebarMax > config.minWidth && <div className="ra-sidebar-resizer" role="separator" tabIndex={0} aria-label="Resize sidebar"
-      aria-orientation="vertical" aria-controls="workspace-sidebar" aria-valuemin={config.minWidth}
+    {config.resizable && sidebarMax > sidebarMin && <div className="ra-sidebar-resizer" role="separator" tabIndex={0} aria-label="Resize sidebar"
+      aria-orientation="vertical" aria-controls="workspace-sidebar" aria-valuemin={sidebarMin}
       aria-valuemax={sidebarMax} aria-valuenow={sidebarWidth}
       onPointerDown={event => {
         if (event.button !== 0) return;
@@ -1055,7 +1059,7 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
       }}
       onKeyDown={event => {
         const next = event.key === "ArrowLeft" ? sidebarWidth - 16 : event.key === "ArrowRight" ? sidebarWidth + 16 :
-          event.key === "Home" ? config.minWidth : event.key === "End" ? sidebarMax : null;
+          event.key === "Home" ? sidebarMin : event.key === "End" ? sidebarMax : null;
         if (next === null) return;
         event.preventDefault(); resizeSidebar(next);
       }}/>}
