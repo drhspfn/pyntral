@@ -8,9 +8,13 @@ import json
 import time
 import os
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
+from contextlib import closing
+
+from watchfiles import DefaultFilter, watch
 
 from .auth import hash_password
 from .typegen import generate_types, configure_editor
@@ -18,6 +22,7 @@ from .logging import LoggingConfig
 
 CACHE_NAME = ".pyntral"
 IGNORED_DIRS = {"node_modules", "dist", ".git", ".vite"}
+WATCH_EXCLUDED_DIRS = IGNORED_DIRS | {".venv", ".pyntral", "__pycache__", "build", "venv"}
 
 
 def _source_ui() -> Path:
@@ -250,48 +255,144 @@ def dev(project: Path, app: str, *, backend_port: int, frontend_port: int, base:
     if log_file:
         dest = Path(log_file)
         env["PYNTRAL_LOG_FILE"] = str(dest if dest.is_absolute() else project / dest)
-    python = sys.executable
-    backend_cmd = [python, "-m", "uvicorn", app, "--reload", "--host", "127.0.0.1",
-                   "--port", str(backend_port)]
+    # The CLI owns reloads. Uvicorn's Windows reloader sends CTRL_C_EVENT,
+    # which can reach the shared console (including this CLI and Vite).
+    backend_cmd = [sys.executable, "-m", "uvicorn", app, "--host", "127.0.0.1",
+                   "--port", str(backend_port), "--workers", "1"]
     if not access_log:
         backend_cmd.append("--no-access-log")
     backend_cmd += ["--log-level", uvicorn_log_level.lower()]
     if (project / ".env").exists():
         backend_cmd += ["--env-file", str(project / ".env")]
-    backend = subprocess.Popen(backend_cmd, cwd=project, env=env)
-    frontend = None
+    frontend_cmd = _vite_dev_command(ui, frontend_port)
+    print(f"[pyntral] Dev UI: http://127.0.0.1:{frontend_port}{base}", flush=True)
+    return _run_dev_processes(project, ui, env, backend_cmd, frontend_cmd)
+
+
+def _vite_dev_command(ui: Path, port: int) -> list[str]:
+    # Run Vite directly, not through npm.cmd / cmd.exe / npm's extra process
+    # layers. The process handle now belongs to the actual dev server.
+    node = shutil.which("node.exe" if sys.platform == "win32" else "node")
+    if node is None:
+        raise RuntimeError("Node.js not found. Install Node.js >=22.12")
+    vite = ui / "node_modules" / "vite" / "bin" / "vite.js"
+    if not vite.is_file():
+        raise RuntimeError("Vite executable missing; reinstall frontend dependencies")
+    return [node, str(vite), "--strictPort", "--host", "127.0.0.1", "--port", str(port)]
+
+
+def _start_dev_process(command: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Popen:
+    options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+               if sys.platform == "win32" else {"start_new_session": True})
+    return subprocess.Popen(command, cwd=cwd, env=env, **options)
+
+
+def _force_stop_dev_process(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
+    if sys.platform == "win32":
+        # Headless runners may have no attached console. Stop the entire owned
+        # tree (e.g. Vite's helper processes) when graceful signaling fails.
+        try:
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                           capture_output=True, timeout=5, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        if process.poll() is None:
+            process.kill()
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def _stop_dev_process(process: subprocess.Popen | None) -> None:
+    if process is None:
+        return
+    if process.poll() is None:
+        try:
+            if sys.platform == "win32":
+                # CTRL_BREAK_EVENT can be targeted at the child process group,
+                # unlike CTRL_C_EVENT. Uvicorn handles SIGBREAK on Windows.
+                process.send_signal(signal.CTRL_BREAK_EVENT)
+            else:
+                os.killpg(process.pid, signal.SIGTERM)
+        except OSError:
+            _force_stop_dev_process(process)
     try:
-        frontend = subprocess.Popen(
-            [
-                _npm_executable(), "run", "dev", "--",
-                "--host", "127.0.0.1", "--port", str(frontend_port),
-            ],
-            cwd=ui, env=env,
-        )
-        print(f"[pyntral] Dev UI: http://127.0.0.1:{frontend_port}{base}", flush=True)
-        # Do not leave the other process running if either fails.
-        while backend.poll() is None and frontend.poll() is None:
-            import time
-            time.sleep(0.25)
-        return backend.returncode if backend.poll() is not None else frontend.returncode or 0
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        _force_stop_dev_process(process)
+        process.wait(timeout=5)
+
+
+def _watch_python_changes(project: Path):
+    default_filter = DefaultFilter()
+
+    def relevant(change, name: str) -> bool:
+        path = Path(name)
+        try:
+            relative = path.relative_to(project)
+        except ValueError:
+            return False
+        return (path.suffix == ".py"
+                and not any(part in WATCH_EXCLUDED_DIRS or part.startswith(".")
+                            for part in relative.parts[:-1])
+                and default_filter(change, name))
+
+    return watch(project, watch_filter=relevant, debounce=350, step=75,
+                 rust_timeout=300, yield_on_timeout=True, raise_interrupt=True)
+
+
+def _run_dev_processes(project: Path, ui: Path, env: dict[str, str],
+                       backend_cmd: list[str], frontend_cmd: list[str]) -> int:
+    """Supervise one backend and one Vite process; reload only the backend."""
+    backend = frontend = None
+    reported_exit = False
+    try:
+        backend = _start_dev_process(backend_cmd, project, env)
+        frontend = _start_dev_process(frontend_cmd, ui, env)
+        print("[pyntral] Watching Python sources (Ctrl+C to stop)", flush=True)
+        with closing(_watch_python_changes(project)) as changes:
+            while True:
+                frontend_code = frontend.poll()
+                if frontend_code is not None:
+                    print(f"[pyntral] Frontend exited (code {frontend_code})", file=sys.stderr, flush=True)
+                    return frontend_code
+                backend_code = backend.poll()
+                if backend_code is not None and not reported_exit:
+                    print(f"[pyntral] Backend exited (code {backend_code}); waiting for a Python change",
+                          file=sys.stderr, flush=True)
+                    reported_exit = True
+                try:
+                    batch = next(changes)
+                except StopIteration:
+                    return 0
+                if not batch:
+                    continue
+                paths = sorted({str(Path(name).relative_to(project)) for _, name in batch})
+                print(f"[pyntral] Python changes: {', '.join(paths)}. Reloading backend…", flush=True)
+                _stop_dev_process(backend)
+                backend = None
+                # Do not start a replacement if the other server already died.
+                frontend_code = frontend.poll()
+                if frontend_code is not None:
+                    return frontend_code
+                backend = _start_dev_process(backend_cmd, project, env)
+                reported_exit = False
     except KeyboardInterrupt:
         return 130
     finally:
-        for process in (frontend, backend):
-            if process and process.poll() is None:
-                process.terminate()
-        for process in (frontend, backend):
-            if process:
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+        try:
+            _stop_dev_process(frontend)
+        finally:
+            _stop_dev_process(backend)
 
 
 def _python_source_state(project: Path) -> tuple[tuple[str, int, int], ...]:
     """Snapshot source files without scanning node_modules or generated caches."""
-    excluded = {".git", ".venv", ".pyntral", "node_modules", "__pycache__", "dist", "build"}
+    excluded = WATCH_EXCLUDED_DIRS
     result: list[tuple[str, int, int]] = []
     for root, dirs, files in os.walk(project):
         dirs[:] = [name for name in dirs if name not in excluded and not name.startswith(".")]

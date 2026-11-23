@@ -56,3 +56,22 @@ jobs:
           uv venv /tmp/pyntral-ci-wheel
           uv pip install --python /tmp/pyntral-ci-wheel/bin/python dist/*.whl httpx
           /tmp/pyntral-ci-wheel/bin/python scripts/smoke_installed.py
+
+  windows-dev-reload:
+    name: Windows dev reload
+    if: >-
+      (github.event.action == 'labeled' && github.event.label.name == 'Run checks') ||
+      (github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'Run checks'))
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install Python dependencies
+        run: uv sync --locked --extra dev
+      - name: Test dev reload and process isolation
+        run: uv run --locked pytest -q tests/test_dev_reload.py tests/test_cli.py

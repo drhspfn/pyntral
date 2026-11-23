@@ -68,9 +68,10 @@ def test_npm_executable_windows(monkeypatch):
     assert requested == ["npm.cmd"]
 
 
-def test_windows_install_dev_and_build_use_npm_cmd(tmp_path, monkeypatch):
+def test_windows_install_build_use_npm_cmd_and_dev_runs_vite_directly(tmp_path, monkeypatch):
     monkeypatch.setattr(cli.sys, "platform", "win32")
-    monkeypatch.setattr(cli.shutil, "which", lambda name: r"C:\Program Files\nodejs\npm.cmd")
+    monkeypatch.setattr(cli.shutil, "which", lambda name: rf"C:\Program Files\nodejs\{name}")
+    monkeypatch.setattr(cli.subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200, raising=False)
     ui = cli.sync_ui(tmp_path)
     commands = []
 
@@ -99,7 +100,12 @@ def test_windows_install_dev_and_build_use_npm_cmd(tmp_path, monkeypatch):
         def wait(self, timeout=None):
             return self.returncode
 
+    vite = ui / "node_modules" / "vite" / "bin" / "vite.js"
+    vite.parent.mkdir(parents=True, exist_ok=True)
+    vite.write_text("")
+
     def fake_popen(command, **kwargs):
+        assert kwargs["creationflags"] == 0x200
         commands.append(command)
         return FakeProcess()
 
@@ -108,8 +114,10 @@ def test_windows_install_dev_and_build_use_npm_cmd(tmp_path, monkeypatch):
     monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
     assert cli.dev(tmp_path, "examples.shop.app:app", backend_port=8000,
                    frontend_port=5173, base="/admin/") == 0
-    assert commands[-1][0].endswith("npm.cmd")
-    assert commands[-1][1:3] == ["run", "dev"]
+    assert commands[-1][0].endswith("node.exe")
+    assert Path(commands[-1][1]) == vite
+    assert "--strictPort" in commands[-1]
+    assert "--reload" not in commands[-2]
 
 
 def test_dialog_profile_build_fingerprint(tmp_path):
@@ -165,7 +173,7 @@ def test_dev_keeps_uvicorn_level_independent_from_admin_level(tmp_path, monkeypa
     monkeypatch.setattr(cli, "generate_types", lambda *_: None)
     monkeypatch.setattr(cli, "install_frontend", lambda *_: None)
     monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
-    monkeypatch.setattr(cli, "_npm_executable", lambda: "npm")
+    monkeypatch.setattr(cli, "_vite_dev_command", lambda *_: ["node", "vite.js"])
     assert cli.dev(tmp_path, "examples.shop.app:app", backend_port=8000, frontend_port=5173,
                    base="/admin/", log_level="DEBUG", uvicorn_log_level="WARNING") == 0
     cmd, env = commands[0]

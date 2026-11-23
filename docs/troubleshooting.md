@@ -18,6 +18,15 @@ Use `uv add 'pyntral[rabbitmq]'` only from a **different** project after Pyntral
 
 Install Node.js 22.12+ and verify `node --version` and `npm --version` in the same PowerShell session. Pyntral uses `npm.cmd` on Windows and `npm` elsewhere. Retry `uv run pyntral doctor` and `uv run pyntral dev examples.shop.app:app`.
 
+## Dev exits after a Python file changes (Windows)
+
+Older builds delegated reloads to Uvicorn's Windows reloader, which could
+deliver a console interrupt to the CLI and Vite. Current `pyntral dev`
+supervises both servers and restarts only the backend. If a Python edit
+causes an import/startup failure, the backend logs the error while the
+watcher remains alive; save the corrected file to retry. Vite continues
+to handle TSX HMR independently. Ctrl+C intentionally stops both servers.
+
 ## SPA displays 404 or a blank page
 
 Check that `uv run pyntral build --force` generated `.pyntral/dist/index.html` and the `assets/` directory. For production, verify the configured `Admin.path`, any ASGI `root_path` set behind a proxy, and the selected bundle directory. Rebuild a custom bundle made before 1.0.0b2. For Vite development, match `pyntral dev --base` to the admin mount. If serving from another directory, configure `PYNTRAL_DIST` or `dist_dir`.

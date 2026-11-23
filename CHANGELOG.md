@@ -17,6 +17,8 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ### Fixed
 
+- Keep the dev supervisor and Vite alive during Python reloads on Windows; isolate child process groups and recover backend startup failures after the next edit.
+
 - Keep the original edit version across realtime refreshes and return HTTP 412 on stale writes.
 - Apply field and selection policies across exports, searches, and relation selectors.
 - Run authorization, validation, setters, hooks and audit through the same transaction for standard and related creation. Encode mutation responses before committing.

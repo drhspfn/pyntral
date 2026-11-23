@@ -69,7 +69,7 @@ The backend serves `.pyntral/dist/` automatically from the current working direc
 
 ## Windows
 
-The CLI resolves `npm.cmd` on Windows and `npm` elsewhere. Run the same `uv run pyntral ...` commands in PowerShell. If Node is missing, install Node 22.12+ and ensure npm is on `PATH` before retrying.
+The CLI resolves `npm.cmd` on Windows and `npm` elsewhere for dependency installation and builds. Development launches the actual Vite JavaScript entry point with Node and keeps it running while a separate Uvicorn process is restarted on Python changes. Child processes have isolated process groups; reloads do not send Ctrl+C to the shared console. A failed Python import leaves Vite and the watcher running, and saving corrected Python code retries the backend. Ctrl+C stops both servers. Run the same `uv run pyntral ...` commands in PowerShell. If Node is missing, install Node 22.12+ and ensure npm is on `PATH` before retrying.
 
 ## Reproducibility
 
