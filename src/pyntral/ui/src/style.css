@@ -207,7 +207,7 @@ h2 {font-size:15px;letter-spacing:-.2px}
 .login-note{display:flex;align-items:center;gap:7px;justify-content:center;margin-top:24px}
 .mobile-backdrop{display:none}
 @media(max-width:1000px){.main-content{padding:25px}.topbar{padding:0 25px}}
-@media(max-width:800px){.sidebar{width:min(238px,100%);visibility:hidden;transform:translateX(-105%);transition:transform var(--ra-motion-duration);box-shadow:var(--ra-shadow)}.sidebar.open{visibility:visible;transform:translateX(0)}.mobile-backdrop{display:block;position:fixed;inset:0;background:var(--ra-mobile-backdrop);z-index:19} .main-column{margin-left:0;width:100%}.mobile-menu{display:grid}.topbar{padding:0 15px}}
+@media(max-width:800px){.sidebar{width:min(var(--ra-sidebar-mobile-width,238px),100%);visibility:hidden;transform:translateX(-105%);transition:transform var(--ra-motion-duration);box-shadow:var(--ra-shadow)}.sidebar.open{visibility:visible;transform:translateX(0)}.mobile-backdrop{display:block;position:fixed;inset:0;background:var(--ra-mobile-backdrop);z-index:19} .main-column{margin-left:0;width:100%}.mobile-menu{display:grid}.topbar{padding:0 15px}}
 @media(max-width:600px){.page-heading{align-items:flex-start;flex-direction:column}.field-grid,.details-grid{grid-template-columns:1fr}.table-toolbar{flex-wrap:wrap}.searchbox{width:100%}.pager{flex-wrap:wrap;gap:8px}.login-page{grid-template-columns:1fr}.login-side{display:none}.login-panel{padding:24px}.main-content{padding:19px}.topbar-breadcrumb{display:none}}
 /* Public feedback system. All appearance is based on overridable --ra-* tokens. */
 .ra-toast-stack{position:fixed;right:22px;bottom:22px;z-index:1001;display:flex;flex-direction:column;gap:10px;max-width:min(420px,calc(100vw - 24px));width:max-content;pointer-events:none}
@@ -675,3 +675,30 @@ h2 {font-size:15px;letter-spacing:-.2px}
   .ra-sidebar-resizer:hover::after,.ra-sidebar-resizer:focus-visible::after,.ra-sidebar-resizer:active::after{
     background:var(--ra-primary)}
 }
+
+/* Declarative sidebar branding and icon primitives. */
+.ra-icon-image{display:block;object-fit:contain;max-width:100%;flex:none}
+.ra-icon-placeholder{display:inline-block;flex:none}
+.nav-link>.ra-icon-image,.nav-link>.ra-icon-placeholder{flex:none}
+.ra-sidebar-header{min-width:0;margin:0 0 8px;padding:0 0 10px}
+.ra-sidebar-header.has-divider,.ra-sidebar-footer.has-divider{border-bottom:1px solid var(--ra-border)}
+.ra-sidebar-heading{width:100%;display:flex;align-items:center;gap:10px;padding:8px 9px;
+  border:0;background:transparent;color:var(--ra-text);border-radius:var(--ra-radius);min-width:0;text-align:left}
+button.ra-sidebar-heading:hover{background:var(--ra-surface-alt)}
+.ra-sidebar-heading.align-left{justify-content:flex-start;text-align:left}
+.ra-sidebar-heading.align-center{justify-content:center;text-align:center}
+.ra-sidebar-heading.align-right{justify-content:flex-end;text-align:right}
+.ra-sidebar-heading.direction-vertical{flex-direction:column}
+.ra-sidebar-heading.direction-vertical.align-left{align-items:flex-start}
+.ra-sidebar-heading.direction-vertical.align-center{align-items:center}
+.ra-sidebar-heading.direction-vertical.align-right{align-items:flex-end}
+.ra-sidebar-logo{display:flex;align-items:center;justify-content:center;max-width:100%;min-width:0;flex:none;color:var(--ra-primary)}
+.ra-sidebar-logo.has-background{background:var(--ra-primary-soft);border-radius:8px;padding:7px}
+.ra-sidebar-heading.direction-horizontal .ra-sidebar-logo{max-width:100%;flex-shrink:1}
+.ra-sidebar-heading-text{display:flex;flex-direction:column;gap:4px;min-width:0;max-width:100%}
+.ra-sidebar-heading-text strong{font-size:14px;font-weight:750;letter-spacing:-.3px;min-width:0}
+.ra-sidebar-heading-text small{font-size:11px;color:var(--ra-muted);min-width:0}
+.ra-sidebar-footer{padding-top:9px;min-width:0}
+.ra-sidebar-footer.has-divider{border-bottom:0;border-top:1px solid var(--ra-border)}
+.user-name span{overflow-wrap:anywhere}
+@media(max-width:800px){.ra-sidebar-header{padding-right:32px}}

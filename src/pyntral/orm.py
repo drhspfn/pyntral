@@ -27,6 +27,7 @@ from .orm_types import type_name
 
 from .auth import Principal, maybe_await
 from .resources import Resource
+from .sidebar import icon_metadata
 
 PRIVATE_NAMES = ("password", "secret", "token", "api_key", "private_key", "credential")
 
@@ -349,7 +350,7 @@ class MapperAdapter:
         return {
             "id": self.resource.name,
             "label": self.resource.label,
-            "icon": self.resource.icon,
+            "icon": icon_metadata(self.resource.icon),
             "navigation": self.resource.navigation,
             "navigationOrder": self.resource.navigation_order,
             "primaryKey": self.pk_name,
@@ -403,7 +404,7 @@ class MapperAdapter:
                 {"name": a.name, "label": a.label or a.name.replace("_", " ").title(),
                  "variant": a.variant, "confirmation": a.confirmation,
                  "position": a.position, "appearance": a.appearance,
-                 "component": a.component, "dialog": a.dialog, "icon": a.icon, "kind": a.kind}
+                 "component": a.component, "dialog": a.dialog, "icon": icon_metadata(a.icon), "kind": a.kind}
                 for a in self.resource.actions
             ],
             "capabilities": {

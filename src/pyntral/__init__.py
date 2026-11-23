@@ -1,6 +1,7 @@
 """Composable FastAPI + SQLAlchemy admin backend with a React SPA."""
 
 from .admin import Admin
+from .sidebar import SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec
 from .hooks import ResourceHook, OperationContext
 from .virtual import VirtualField
 from .layout import LayoutSection
@@ -21,6 +22,7 @@ from .transports.kafka import KafkaEventBus
 from .logging import LoggingConfig, EventFormatter, configure_logging, forward_to_loguru, stop_logging
 
 __all__ = [
+    "SidebarConfig", "SidebarHeader", "SidebarFooter", "SvgIcon", "ImageIcon", "IconSpec",
     "describe_resources", "render_markdown", "write_schema_docs",
     "JobAction", "JobContext", "JobManager",
     "Admin", "ResourceHook", "OperationContext", "VirtualField", "LayoutSection", "ResourceFeature", "PasswordFeature", "SoftDeleteFeature", "TimestampFeature", "AuditFeature", "AuditEntry", "AuditBase", "UploadFeature", "StorageBackend", "LocalStorage", "S3Storage", "UploadBase", "UploadEntry",

@@ -17,6 +17,8 @@ export { Button } from "./button";
 export type { ButtonProps, ButtonVariant } from "./button";
 export { FileUpload } from "./file-upload";
 export { FileRow } from "./file-row";
+export { Icon } from "./icon";
+export type { IconProps } from "./icon";
 export type { FileRowProps } from "./file-row";
 export { Collapsible } from "./collapsible";
 export type { CollapsibleProps } from "./collapsible";

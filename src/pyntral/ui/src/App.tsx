@@ -2,14 +2,15 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSPrope
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { version as uiVersion } from "../package.json";
 import {
-  Activity, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Boxes,
-  ChevronLeft, ChevronRight, CircleAlert, Command, Database, ExternalLink, Filter,
-  LayoutDashboard, LoaderCircle, LockKeyhole, LogOut, Menu, MoreHorizontal, Pencil,
-  Plus, RefreshCw, Settings2, ShieldCheck, Trash2, Sun, Moon, X,
+  ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Boxes,
+  ChevronLeft, ChevronRight, CircleAlert, Command, ExternalLink, Filter,
+  LoaderCircle, LockKeyhole, LogOut, Menu, MoreHorizontal, Pencil,
+  Plus, RefreshCw, ShieldCheck, Trash2, Sun, Moon, X,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { fields as customFields, pages as customPages, actions as customActions, dialogs as customDialogs, crud as customCrud, themes as customThemes, profile as customProfile, auth as customAuth } from "virtual:pyntral-extensions";
 import { SidebarNavigation } from "./navigation";
+import { sidebarConfig, SidebarHeaderRegion, SidebarFooterRegion } from "./sidebar";
+import { Icon } from "./icon";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
 import { AsyncSelect, Button, Card, Checkbox, Collapsible, DatePicker, FileRow, FileUpload, FormField, SearchInput, Select, TextInput, Textarea,
@@ -33,11 +34,6 @@ import { viewFields } from "./types";
 
 const customProfileMenu = customProfile.menu;
 const ProfileMenuExtension = customProfile.menu;
-
-const icons: Record<string, LucideIcon> = {
-  database: Database, "layout-dashboard": LayoutDashboard, boxes: Boxes,
-  activity: Activity, "shield-check": ShieldCheck, "settings-2": Settings2,
-};
 
 function useNavigation() {
   const [url, setUrl] = useState(() => window.location.pathname);
@@ -160,9 +156,8 @@ function Overview({ schema, navigate }: { schema: Schema; navigate: (route: stri
     <div className="section-head"><h2>Resources</h2></div>
     {schema.resources.some((r) => r.capabilities.list) ? <div className="resource-grid">
       {schema.resources.filter((r) => r.capabilities.list).map((resource) => {
-        const Icon = icons[resource.icon] || Database;
         return <button key={resource.id} className="resource-card" onClick={() => navigate(`resources/${resource.id}`)}>
-          <div className="resource-icon"><Icon size={18}/></div><strong>{resource.label}</strong>
+          {resource.icon != null && <div className="resource-icon"><Icon icon={resource.icon} size={18} fallback="database"/></div>}<strong>{resource.label}</strong>
           <ArrowRight size={15}/>
         </button>;
       })}
@@ -201,10 +196,10 @@ function RecordAction({ resource, record, action, navigate }: {
   const style = action.appearance === "badge" ? "action-badge" : "action-button";
   return <span className="action-wrapper">
     {action.appearance === "menu" ? <details className="record-action-menu"><summary title={action.label}><MoreHorizontal size={16}/></summary>
-      <button type="button" onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); click(); }}>{action.label}</button>
+      <button type="button" onClick={(e) => { e.currentTarget.closest("details")?.removeAttribute("open"); click(); }}><Icon icon={action.icon ?? null} size={13}/>{action.label}</button>
     </details> : <button type="button" className={`${style} ${action.variant === "danger" ? "danger-text" : ""}`}
       disabled={execute.isPending} onClick={click} title={action.label}>
-      {execute.isPending ? <LoaderCircle size={13} className="spin"/> : null}{action.label}</button>}
+      {execute.isPending ? <LoaderCircle size={13} className="spin"/> : <Icon icon={action.icon ?? null} size={13}/>}{action.label}</button>}
   </span>;
 }
 
@@ -288,7 +283,7 @@ function CollectionAction({ schema, resource, action, selected, navigate, clearS
   };
   return <div className="ra-collection-action">
     <button type="button" className={`btn ${action.variant === "danger" ? "danger" : "subtle"}`}
-      disabled={bulk && selected.length === 0} onClick={() => { void run(); }}>{action.label}</button>
+      disabled={bulk && selected.length === 0} onClick={() => { void run(); }}><Icon icon={action.icon ?? null} size={14}/>{action.label}</button>
     {expanded && Custom && <div className="surface ra-collection-panel">
       <button type="button" className="btn subtle" onClick={() => setExpanded(false)}>Close</button>
       <Custom schema={schema} resource={resource} action={action} selectedIds={selected}
@@ -998,16 +993,17 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
   const { t } = useI18n();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [preferredSidebarWidth, setPreferredSidebarWidth] = useState(238);
-  const sidebarLimit = () => Math.max(238, Math.min(420, Math.floor(window.innerWidth * 0.42)));
-  const [sidebarMax, setSidebarMax] = useState(sidebarLimit);
-  const sidebarWidth = Math.min(preferredSidebarWidth, sidebarMax);
+  const config = sidebarConfig(schema);
+  const [preferredSidebarWidth, setPreferredSidebarWidth] = useState(config.width);
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   useEffect(() => {
-    const resize = () => setSidebarMax(Math.max(238, Math.min(420, Math.floor(window.innerWidth * 0.42))));
+    const resize = () => setViewportWidth(window.innerWidth);
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
   }, []);
-  const resizeSidebar = (width: number) => setPreferredSidebarWidth(Math.round(Math.max(238, Math.min(sidebarMax, width))));
+  const sidebarMax = Math.max(config.minWidth, Math.min(config.maxWidth, Math.floor(viewportWidth * 0.42)));
+  const sidebarWidth = Math.max(config.minWidth, Math.min(config.resizable ? preferredSidebarWidth : config.width, sidebarMax));
+  const resizeSidebar = (width: number) => setPreferredSidebarWidth(Math.round(Math.max(config.minWidth, Math.min(sidebarMax, width))));
   const openMenu = useRef<HTMLButtonElement>(null);
   const closeMenu = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLElement>(null);
@@ -1026,7 +1022,8 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
     };
   }, [drawerOpen]);
   const navigateAndClose = (url: string) => { navigate(url); setDrawerOpen(false); };
-  return <div className="app-shell" style={{ "--ra-sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
+  const regionProps = { schema, config, user, themeMode, navigate: navigateAndClose, close: () => setDrawerOpen(false) };
+  return <div className="app-shell" style={{ "--ra-sidebar-width": `${sidebarWidth}px`, "--ra-sidebar-mobile-width": `${config.mobileWidth}px` } as CSSProperties}>
     {drawerOpen && <div className="mobile-backdrop" onClick={() => setDrawerOpen(false)}/>}
     <aside ref={drawer} id="workspace-sidebar" className={`sidebar ${drawerOpen ? "open" : ""}`}
       role={drawerOpen ? "dialog" : undefined} aria-modal={drawerOpen || undefined} aria-label="Workspace sidebar"
@@ -1041,16 +1038,12 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
       }}>
       <button ref={closeMenu} type="button" className="topbar-icon sidebar-close"
         aria-label="Close menu" onClick={() => setDrawerOpen(false)}><X size={18}/></button>
-      <button className="brand brand-button" onClick={() => navigateAndClose("")}><div className="brand-mark"><Command size={21}/></div>
-        <strong>Pyntral</strong></button>
-      <div className="workspace-title" title={schema.title}>{schema.title}</div>
+      <SidebarHeaderRegion {...regionProps}/>
       <SidebarNavigation schema={schema} route={route} navigate={navigateAndClose}/>
-      <div className="sidebar-bottom"><div className="user-card"><div className="user-avatar">{user.username.slice(0, 2).toUpperCase()}</div>
-          <div className="user-name"><strong>{user.display_name || user.username}</strong><span>{user.roles.join(", ") || "Member"}</span></div>
-          </div></div>
+      <SidebarFooterRegion {...regionProps}/>
     </aside>
-    <div className="ra-sidebar-resizer" role="separator" tabIndex={0} aria-label="Resize sidebar"
-      aria-orientation="vertical" aria-controls="workspace-sidebar" aria-valuemin={238}
+    {config.resizable && sidebarMax > config.minWidth && <div className="ra-sidebar-resizer" role="separator" tabIndex={0} aria-label="Resize sidebar"
+      aria-orientation="vertical" aria-controls="workspace-sidebar" aria-valuemin={config.minWidth}
       aria-valuemax={sidebarMax} aria-valuenow={sidebarWidth}
       onPointerDown={event => {
         if (event.button !== 0) return;
@@ -1062,10 +1055,10 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
       }}
       onKeyDown={event => {
         const next = event.key === "ArrowLeft" ? sidebarWidth - 16 : event.key === "ArrowRight" ? sidebarWidth + 16 :
-          event.key === "Home" ? 238 : event.key === "End" ? sidebarMax : null;
+          event.key === "Home" ? config.minWidth : event.key === "End" ? sidebarMax : null;
         if (next === null) return;
         event.preventDefault(); resizeSidebar(next);
-      }}/>
+      }}/>}
     <div className="main-column" inert={drawerOpen}><header className="topbar"><div className="topbar-left">
       <button ref={openMenu} className="mobile-menu" onClick={() => setDrawerOpen(true)} aria-label="Open menu"
         aria-expanded={drawerOpen} aria-controls="workspace-sidebar"><Menu size={21}/></button>

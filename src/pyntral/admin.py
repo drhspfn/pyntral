@@ -34,6 +34,7 @@ from .events import (
 )
 from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
+from .sidebar import SidebarConfig, icon_metadata
 from .hooks import OperationContext
 from .realtime import RealtimeNotifier
 from .jobs import JobManager
@@ -77,6 +78,7 @@ class Admin:
         default_theme: str = "system",  # system | light | dark
         animations: bool = True,
         show_dashboard: bool = True,
+        sidebar: SidebarConfig | None = None,
         role_weights: dict[str, int] | None = None,
         logging_config: LoggingConfig | None = None,
         event_bus: EventTransport | None = None,
@@ -180,6 +182,9 @@ class Admin:
         self.default_theme = default_theme
         self.animations = animations
         self.show_dashboard = show_dashboard
+        if sidebar is not None and not isinstance(sidebar, SidebarConfig):
+            raise TypeError("sidebar must be SidebarConfig")
+        self.sidebar = sidebar if sidebar is not None else SidebarConfig()
         self.role_weights = dict(role_weights or {})
         # The CLI explicitly opts into package-owned console logging. Library use
         # never changes the host application's logging handlers implicitly.
@@ -347,6 +352,7 @@ class Admin:
         if isinstance(resource, type):
             resource = Resource(resource)
         validate_navigation(resource.navigation)
+        icon_metadata(resource.icon)
         if not resource._features_applied:
             for feature in resource.features:
                 if not callable(getattr(feature, "apply", None)):
@@ -355,6 +361,8 @@ class Admin:
             resource._features_applied = True
         if resource._uploads_enabled and self.storage is None:
             raise ValueError("UploadFeature requires Admin(storage=...)")
+        for action in resource.actions:
+            icon_metadata(action.icon)
         adapter = MapperAdapter(resource)
         if resource.access:
             thresholds = [resource.access.read, resource.access.select, resource.access.write,
@@ -378,6 +386,7 @@ class Admin:
 
     def add_page(self, page: Page) -> None:
         validate_navigation(page.navigation)
+        icon_metadata(page.icon)
         if page.min_role and page.min_role not in self.role_weights:
             raise ValueError(f"Unknown page role: {page.min_role}")
         if re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_-]*", page.name) is None:
@@ -389,6 +398,7 @@ class Admin:
 
     def add_group(self, group: NavigationGroup) -> None:
         validate_navigation(group.path)
+        icon_metadata(group.icon)
         if group.path in self.groups:
             raise ValueError("Duplicate navigation group: " + group.path)
         self.groups[group.path] = group
@@ -875,7 +885,7 @@ class Admin:
             visible_paths = [r["navigation"] for r in resources
                              if r["navigation"] and r["navigationState"] != "hidden"]
             pages = [{"name": p.name, "label": p.label, "component": p.component,
-                      "icon": p.icon, "navigation": p.navigation, "navigationOrder": p.navigation_order}
+                      "icon": icon_metadata(p.icon), "navigation": p.navigation, "navigationOrder": p.navigation_order}
                      for p in self.pages.values()
                      if (p.min_role is None or self._role_ok(principal, p.min_role))
                      and await maybe_await(self.auth.authorize(principal, "page:" + p.name, "view"))]
@@ -939,10 +949,10 @@ class Admin:
                     "resources": resources,
                     "localization": {"code": locale, "messages": self.translations.get(locale, {})},
                     "navigation": {"groups": [
-                        {"path": g.path, "icon": g.icon, "order": g.order}
+                        {"path": g.path, "icon": icon_metadata(g.icon), "order": g.order}
                         for g in self.groups.values() if any(
                             path == g.path or path.startswith(g.path + "/") for path in visible_paths
-                        )], "showDashboard": self.show_dashboard},
+                        )], "showDashboard": self.show_dashboard, "sidebar": self.sidebar.metadata(self.title)},
                     "theme": {"default": theme_default,
                               "animations": self.animations,
                               "tokens": theme_tokens},

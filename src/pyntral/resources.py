@@ -15,6 +15,7 @@ from .hooks import ResourceHook
 from .virtual import VirtualField
 from .layout import LayoutSection
 from .jobs import JobAction
+from .sidebar import IconSpec
 
 
 @dataclass(slots=True)
@@ -131,7 +132,7 @@ class Action:
     appearance: str = "button"  # button | badge | menu
     component: str | None = None  # React extension action ID; opens an action page
     dialog: str | None = None  # React extension dialog body, shown before invoking the action
-    icon: str | None = None
+    icon: IconSpec = None
     visible: bool | Callable[..., Any] = True  # (principal, record) -> bool, async supported
     kind: str = "record"  # record | bulk | resource
 
@@ -147,7 +148,7 @@ class Action:
 @dataclass(slots=True)
 class NavigationGroup:
     path: str  # e.g. "Agents" or "Agents/Runtime"
-    icon: str = "folder"
+    icon: IconSpec = "folder"
     order: int = 0
 
 
@@ -189,7 +190,7 @@ class Page:
     name: str
     label: str
     component: str  # registered React component ID
-    icon: str = "layout-dashboard"
+    icon: IconSpec = "layout-dashboard"
     navigation: str | None = None
     navigation_order: int = 0
     min_role: str | None = None
@@ -216,7 +217,7 @@ class Resource(Generic[ModelT]):
     model: type[ModelT]
     name: str | None = None
     label: str | None = None
-    icon: str = "database"
+    icon: IconSpec = "database"
     navigation: str | None = None
     navigation_order: int = 0
     list_fields: list[str] | None = None

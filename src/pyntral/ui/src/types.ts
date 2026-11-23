@@ -1,4 +1,4 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 export type FieldKind = "string" | "number" | "integer" | "boolean" | "date" |
   "datetime" | "time" | "enum" | "json" | "array" | "uuid" | "binary";
 
@@ -45,7 +45,7 @@ export interface ActionDef {
   position: "row" | "detail" | "both";
   kind?: "record" | "resource" | "bulk";
   appearance: "button" | "badge" | "menu";
-  component?: string | null; dialog?: string | null; icon?: string | null;
+  component?: string | null; dialog?: string | null; icon?: IconSpec;
 }
 export interface LayoutSectionDef {
   id: string;
@@ -59,7 +59,7 @@ export interface LayoutSectionDef {
 export interface ResourceDef {
   id: string;
   label: string;
-  icon: string;
+  icon: IconSpec;
   navigationState?: "enabled" | "locked" | "hidden";
   navigation?: string | null;
   navigationOrder?: number;
@@ -84,11 +84,25 @@ export interface ResourceDef {
   capabilities: { list: boolean; select: boolean; create: boolean; edit: boolean; delete: boolean; show: boolean };
 }
 export interface PageDef {
-  name: string; label: string; component: string; icon: string;
+  name: string; label: string; component: string; icon: IconSpec;
   navigation?: string | null; navigationOrder?: number;
 }
 export type ThemeMode = "light" | "dark";
-export interface NavigationConfig { groups: { path: string; icon: string; order: number }[]; showDashboard: boolean }
+export type IconSpec = string | { kind: "svg"; svg: string } |
+  { kind: "image"; src?: string | null; light?: string | null; dark?: string | null } | null;
+export interface SidebarHeaderConfig {
+  title: string; subtitle?: string | null; icon: IconSpec; showIcon: boolean; showTitle: boolean;
+  showSubtitle: boolean; align: "left" | "center" | "right"; direction: "horizontal" | "vertical";
+  divider: boolean; iconSize: number; logoWidth?: number | null; iconBackground: boolean; linkToDashboard: boolean;
+}
+export interface SidebarFooterConfig { showUser: boolean; showAvatar: boolean; showRoles: boolean; divider: boolean }
+export interface SidebarConfig {
+  width: number; minWidth: number; maxWidth: number; mobileWidth: number; resizable: boolean;
+  showIcons: boolean; iconSize: number; indent: number; maxIndentDepth: number; dashboardIcon: IconSpec;
+  header: SidebarHeaderConfig | null; footer: SidebarFooterConfig | null;
+  headerComponent?: string | null; footerComponent?: string | null; itemComponent?: string | null;
+}
+export interface NavigationConfig { groups: { path: string; icon: IconSpec; order: number }[]; showDashboard: boolean; sidebar?: SidebarConfig }
 export interface ThemeConfig {
   default: "light" | "dark" | "system";
   animations: boolean;
@@ -203,3 +217,17 @@ export function viewFields(fields: FieldDef[], mode: FieldContext): FieldDef[] {
       return av - bv;
     });
 }
+
+/** Custom sidebar regions own presentation; navigation callbacks preserve router guards. */
+export interface SidebarRegionProps {
+  schema: Schema; config: SidebarConfig; user: Principal; themeMode: ThemeMode;
+  navigate: (route: string) => void; close: () => void; children: ReactNode;
+}
+export type SidebarRegionComponent = ComponentType<SidebarRegionProps>;
+export interface SidebarItemProps {
+  type: "group" | "resource" | "page" | "dashboard"; id: string; label: string;
+  icon: IconSpec; depth: number; active: boolean; locked: boolean; open?: boolean;
+  /** Render the content inside the built-in accessible navigation button, not another button. */
+  children: ReactNode; schema: Schema;
+}
+export type SidebarItemComponent = ComponentType<SidebarItemProps>;

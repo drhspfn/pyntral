@@ -159,7 +159,7 @@ def configure_editor(project: Path) -> Path:
     components = project / "pyntral.components.json"
     if components.is_file():
         cfg = json.loads(components.read_text(encoding="utf-8"))
-        for group in ("fields", "pages", "actions", "dialogs", "themes", "profile", "access", "auth"):
+        for group in ("fields", "pages", "actions", "dialogs", "themes", "profile", "access", "auth", "sidebarHeaders", "sidebarFooters", "sidebarItems"):
             for name in cfg.get(group, {}).values():
                 source = (project / name).resolve()
                 if not source.is_relative_to(project):

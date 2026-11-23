@@ -34,7 +34,7 @@ function extensions(): Plugin {
       if (id !== resolvedId) return;
       const config = loadConfig();
       const lines: string[] = [];
-      for (const category of ["fields", "pages", "actions", "dialogs", "crud", "themes", "profile", "access", "auth"]) {
+      for (const category of ["fields", "pages", "actions", "dialogs", "crud", "themes", "profile", "access", "auth", "sidebarHeaders", "sidebarFooters", "sidebarItems"]) {
         const entries: string[] = [];
         for (const [key, relative] of Object.entries(config[category] || {})) {
           const absolute = path.resolve(project, relative);
@@ -109,6 +109,7 @@ export default defineConfig(({ command }) => ({
     "@pyntral/mutations": path.resolve("src/mutations.ts"),
     "@pyntral/generated": path.join(project, ".pyntral", "generated", "bridges.ts"),
     }).map(([find, replacement]) => ({ find, replacement })),
+    { find: "lucide-react/dynamic", replacement: path.join(managedUi, "node_modules/lucide-react/dynamic.mjs").replace(/\\/g, "/") },
     ...managedAliases,
   ], dedupe: ["react", "react-dom", "@tanstack/react-query"] },
   server: {
