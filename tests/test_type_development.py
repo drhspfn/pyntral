@@ -67,8 +67,9 @@ def test_release_scripts_and_workflows():
     script = ROOT / "scripts/build_release.py"
     assert script.exists()
     ci = (ROOT / ".github/workflows/ci.yml").read_text()
-    assert "types: [labeled]" in ci
+    assert "types: [labeled, synchronize]" in ci
     assert "github.event.label.name == 'Run checks'" in ci
+    assert "contains(github.event.pull_request.labels.*.name, 'Run checks')" in ci
     assert "pull_request:" in ci and "  push:" not in ci
     assert "build_release.py" in ci
     publish = (ROOT / ".github/workflows/publish-pypi.yml").read_text()
