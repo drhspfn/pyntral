@@ -7,19 +7,21 @@ COPY --from=node:22-bookworm /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:22-bookworm /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 COPY . /app
-RUN uv sync --no-dev
+RUN uv sync --locked --no-dev
 # Runtime credentials are NOT embedded into the image. Only temporary credentials
 # are provided for importing the demo during Pydantic/TypeScript generation.
 RUN ADMIN_USERNAME=build-only \
     ADMIN_PASSWORD_HASH="$(uv run python -c 'from pyntral.auth import hash_password; print(hash_password("build-only"))')" \
     APP_SECRET_KEY='temporary-build-only-secret-not-used-at-runtime' \
-    uv run pyntral build --app examples.shop.app:app --base /admin/ --force
+    uv run --locked pyntral build --app examples.shop.app:app --force
 
 FROM python:3.13-slim-bookworm AS runtime
 WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    PYNTRAL_DIST=/app/.pyntral/dist
+    PYNTRAL_DIST=/app/.pyntral/dist \
+    DATABASE_URL=sqlite:////app/data/shop.db \
+    SHOP_UPLOAD_ROOT=/app/data/uploads
 COPY --from=build /app/.venv /app/.venv
 COPY --from=build /app/src /app/src
 COPY --from=build /app/examples /app/examples

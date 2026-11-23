@@ -15,7 +15,8 @@
 | `pyntral types MODULE:app [--out PATH] [--editor]` | Generate bridges without building the SPA, optionally copy types and configure VS Code. |
 | `pyntral types MODULE:app --watch` | Regenerate types in a fresh Python subprocess as source files change. |
 | `pyntral dev MODULE:app` | Run Uvicorn and Vite in development. |
-| `pyntral build [--force] [--app MODULE:app] [--base /admin/]` | Typecheck and bundle the SPA; use content-based build cache. |
+| `pyntral build [--force] [--app MODULE:app]` | Typecheck and bundle the SPA using a content-based build cache. |
+| `pyntral schema MODULE:app [--out PATH] [--format markdown\|json]` | Generate resource documentation without building the SPA. |
 
 All commands accept `--project PATH` **before the subcommand** to point at another project directory.
 
@@ -57,10 +58,10 @@ Use `pyntral.components.json` at the project root. The CLI checks that extension
 **Customized application:** when adding your own TSX fields, pages or dialogs, run:
 
 ```bash
-uv run pyntral build --force --app examples.shop.app:app --base /admin/
+uv run pyntral build --force --app examples.shop.app:app
 ```
 
-The backend serves `.pyntral/dist/` automatically from the current working directory when built. You can override it with `Admin(dist_dir=...)` or `PYNTRAL_DIST=/absolute/path`. A customized SPA must be built for its actual route base: if you change `Admin(path="/console")`, use `--base /console/`. The generic SPA distributed in the wheel is built for `/admin/`.
+The backend serves `.pyntral/dist/` automatically from the current working directory when built. You can override it with `Admin(dist_dir=...)` or `PYNTRAL_DIST=/absolute/path`. Both production bundles resolve the configured `Admin.path` and ASGI `root_path` at runtime. Use `pyntral dev --base /console/` for Vite development against `Admin(path="/console")`.
 
 **Maintainers:** the PyPI workflow runs `uv run python scripts/build_release.py`, which compiles a generic SPA in an empty temporary host project and then bundles it into Python wheel/sdist. This release script is not part of a consuming application's installation process.
 

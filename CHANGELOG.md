@@ -2,6 +2,31 @@
 
 Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions and use [PEP 440](https://peps.python.org/pep-0440/) version numbers.
 
+## 1.0.0b2 — Second public beta
+
+### Added
+
+- Declarative CRUD and action hooks, calculated and write-only fields, Pydantic validation, dependent selects and optimistic concurrency.
+- Composable password, soft-delete, timestamp, audit and upload features. Authenticated attachments support local storage and an optional S3/MinIO backend.
+- Conditional field and operation policies, CSV/JSON export, configurable form layouts, table preferences and filter presets.
+- Localization, per-admin theme settings and reusable choice, popover, sortable and mock file-picker controls.
+- Optional SSE invalidation, in-process jobs with progress and cancellation, and CLI resource schema documentation.
+
+### Fixed
+
+- Keep the original edit version across realtime refreshes and return HTTP 412 on stale writes.
+- Apply field and selection policies across exports, searches, and relation selectors.
+- Run authorization, validation, setters, hooks and audit through the same transaction for standard and related creation. Encode mutation responses before committing.
+- Detach attachments transactionally and retry storage cleanup. Release job slots on early cancellation and close both Kafka clients after a consumer failure.
+- Preserve FastAPI lifespan state, serve production bundles under custom mounts and proxy prefixes, and bound JSON input and event publication.
+- Support server-side session revocation with an in-memory default and an optional shared store. Fix Unicode usernames and improve keyboard interaction in dialogs, tabs and mobile navigation.
+
+### Upgrade notes
+
+- Sign in again after upgrading. Pyntral stores new sessions in memory by default and requires no session table or migration. Replicated deployments can supply a shared `SessionStore`.
+- Rebuild a custom SPA to pick up the runtime mount path, UI changes and new API contracts. The generic SPA ships in the wheel.
+- Deploy and validate the broker, S3/MinIO, PostgreSQL and multi-worker options in your own environment. The [release readiness guide](docs/deployment.md#release-readiness) lists the beta verification scope.
+
 ## 1.0.0b1 — Initial public beta
 
 ### Features
@@ -24,33 +49,3 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 See [release readiness](docs/deployment.md#release-readiness) for verification requirements.
 
 - PyPI-first release pipeline embeds the generic SPA inside wheel/sdist; custom TSX builds remain optional for consuming applications.
-
-- Add guarded CRUD lifecycle hooks with consistent before/after commit semantics.
-
-- Add offline resource schema reference generation in Markdown/JSON (`pyntral schema`).
-
-- Add secure Bridge-backed dependent Select fields, including a validated Shop shipping location demo.
-
-- Add optional authenticated SSE invalidation of frontend query caches, without record identifiers or values.
-
-- Add opt-in in-process background resource jobs with bounded execution, progress and cancellation, demonstrated in Products.
-
-- Add before/after hooks around record, bulk and resource Actions, including server-side veto support.
-
-- Add reusable accessible Checkbox, CheckboxGroup, Switch, RadioGroup and ToggleGroup controls, a compact table Columns panel and unified bulk-selection checkboxes.
-
-- Add public accessible `SortableList` drag handles; use in table Columns and the Shop component playground.
-
-
-
-### Beta fixes
-
-- Preserve the original edit version across realtime refreshes and manage version columns on the server.
-- Apply contextual read and select policies to searches, exports, and relation pickers.
-- Apply one create transaction to standard and related records, including scope, hooks, validation, and auditing.
-- Retry storage cleanup after attachment or owner deletion.
-- Preserve timestamp field policies, mask password inputs, and release slots when queued jobs are cancelled.
-
-- Preserve host lifespan state and serve installed SPA bundles under custom mount paths and proxy prefixes.
-- Add revocable in-memory sessions with an optional shared store, bounded request bodies and event publication, and an async database deployment check.
-- Restore keyboard focus in confirmation dialogs, record tabs, and the mobile navigation drawer.

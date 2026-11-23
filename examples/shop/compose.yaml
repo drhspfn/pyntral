@@ -6,7 +6,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     env_file:
-      # Raw mode prevents Docker Compose from expanding the $ signs in bcrypt hashes.
+      # Raw mode prevents Docker Compose from expanding the $ signs in scrypt hashes.
       # Requires Docker Compose >=2.30.
       - path: ../../.env
         format: raw

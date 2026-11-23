@@ -8,7 +8,7 @@ Pyntral is a beta library. Prepare and verify the production SPA separately from
 
 ```bash
 uv sync --extra dev
-uv run pyntral build --app your_app.main:app --base /admin/
+uv run pyntral build --app your_app.main:app
 ```
 
 **Standard PyPI installation:** the wheel contains a precompiled generic bundle (`pyntral/web_dist`). No Node/npm or local frontend build is required.
@@ -62,7 +62,15 @@ The application and broker workers should reuse consistent connection and identi
 
 ## Release readiness
 
-Confirmed in the local development workflow: Python integration tests, Python package building and import checks (see release notes for exact results). The frontend has been syntax-checked previously, but full browser acceptance tests and a live RabbitMQ/Kafka test matrix are **not** claimed for this beta.
+The verified beta configuration uses one admin worker with in-memory sessions
+and SQLite. Release checks cover the Python API, Shop build with ESLint and
+TypeScript, and an installed-wheel smoke test at the default mount and a
+proxy-prefixed mount. Chromium checks cover key flows, including keyboard
+navigation and optimistic edit conflicts.
+
+PostgreSQL, live RabbitMQ/Kafka, S3/MinIO and multi-worker SSE are experimental
+integration paths in this beta. Validate those paths, your auth provider and
+proxy limits in your own deployment before relying on them.
 
 Before publishing a stable release, complete:
 

@@ -21,6 +21,6 @@ If a private maintainer contact is available on the eventual repository, use tha
 
 | Version | Security support |
 | --- | --- |
-| `1.0.0b1` | Best-effort beta maintenance; no guaranteed SLA |
+| `1.0.0b2` | Best-effort beta maintenance with no guaranteed SLA |
 
 See [authentication](docs/authentication.md), [authorization](docs/authorization.md) and [deployment](docs/deployment.md).

@@ -9,7 +9,7 @@ Run these commands **from the repository root**:
 uv run pyntral init-env  # only once; creates your local .env
 # Compose 2.30+ is required for env_file: format: raw
 # Password hashes contain '$' and must not be interpolated.
-docker compose -f examples/shop/compose.yaml build --progress=plain
+docker compose --progress plain -f examples/shop/compose.yaml build
 docker compose -f examples/shop/compose.yaml up -d
 docker compose -f examples/shop/compose.yaml ps
 docker compose -f examples/shop/compose.yaml logs -f shop
@@ -19,7 +19,9 @@ Open <http://127.0.0.1:8000/admin/> and sign in with the account from `.env`.
 Direct navigation to `/admin/resources/products` followed by a browser refresh
 must load the SPA; the `/health` endpoint should return `{"status":"ok"}`.
 
-The Docker build runs the same strict TypeScript check as `pyntral build`.
+The image stores SQLite at `/app/data/shop.db` and attachments at
+`/app/data/uploads`, both in the Compose volume. The Docker build runs the same
+strict TypeScript check as `pyntral build`.
 Errors indicate a failed build, not a successful production bundle.
 
 The root `.dockerignore` and `examples/shop/Dockerfile.dockerignore` prevent

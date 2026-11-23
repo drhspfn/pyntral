@@ -1,9 +1,10 @@
 # Minimal Python-only FastAPI integration
 
-This example uses only the published **`pyntral` Python wheel**. The compiled React SPA is embedded in that wheel: **no Node.js, npm, Vite or frontend build is needed**.
+Copy this example into a separate uv project and install the **`pyntral` Python wheel** there. Use a released wheel or one built locally from this checkout. The compiled React SPA is embedded in that wheel: **no Node.js, npm, Vite or frontend build is needed**.
 
 ```bash
-uv add pyntral
+uv add --prerelease allow 'pyntral==1.0.0b2'
+# Or use: uv add /path/to/pyntral-1.0.0b2-py3-none-any.whl
 # set ADMIN_USERNAME, ADMIN_PASSWORD_HASH, APP_SECRET_KEY (at least 32 chars)
 uv run uvicorn examples.basic.app:app --host 127.0.0.1 --port 8000
 ```

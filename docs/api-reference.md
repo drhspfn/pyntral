@@ -9,8 +9,11 @@ This page summarizes the public interfaces available in the current beta. For pr
 ```python
 from pyntral import (
     Admin, Resource, Field, Relationship, Action, Page, NavigationGroup,
-    RoleAccess, Bridge, BridgeContext,
+    RoleAccess, Bridge, BridgeContext, ResourceHook, VirtualField, FieldDependency,
+    FieldView, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature,
+    TimestampFeature, AuditFeature, UploadFeature, LocalStorage, S3Storage,
     Principal, CallbackAuth, LocalAuth, ModelAuth, hash_password, verify_password,
+    SessionStore, SessionIdentity, MemorySessionStore,
     LoggingConfig, EventFormatter, configure_logging, forward_to_loguru, stop_logging,
     AdminEvent, FieldRef, ResourceEvent, ResourceCreated, ResourceUpdated,
     ResourceDeleted, ActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded,
@@ -25,10 +28,15 @@ from pyntral import (
 Admin(
     app,
     *, session_factory, auth, secret_key,
-    path="/admin", secure_cookie=True, dist_dir=None,
+    path="/admin", secure_cookie=True, session_cookie="pyntral_session",
+    session_cookie_path="/", session_max_age=43200, session_store=None,
+    require_async_sessions=False, enable_jobs=True, dist_dir=None,
     title="Pyntral", theme=None, default_theme="system",
     animations=True, show_dashboard=True, role_weights=None,
     logging_config=None, event_bus=None, auto_start_events=True,
+    event_publish_timeout=2.0, max_json_bytes=1048576, storage=None,
+    default_locale="en", translations=None, locale_resolver=None,
+    theme_resolver=None, realtime_updates=False,
 )
 ```
 
@@ -60,7 +68,10 @@ Key methods:
 
 ## HTTP endpoints
 
-All paths below are relative to `Admin.path` (default `/admin`), and the JSON endpoints require an authenticated session unless indicated.
+All paths below are relative to `Admin.path` (default `/admin`). Except for
+session discovery, login, token exchange and static assets, the endpoints
+require an authenticated session. Resource mutations, bridge calls and logout
+require CSRF protection.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -72,11 +83,19 @@ All paths below are relative to `Admin.path` (default `/admin`), and the JSON en
 | GET | `/api/resources/{name}` | List, sort, search and filter records. |
 | POST | `/api/resources/{name}` | Create a record (CSRF protected). |
 | GET | `/api/resources/{name}/options` | Searchable `{value,label}` options, including `ids` lookup. |
+| GET | `/api/resources/{name}/export` | Bounded CSV or JSON export using the resource query and allowed columns. |
 | GET | `/api/resources/{name}/{id}` | Read a record with available actions. |
 | PATCH | `/api/resources/{name}/{id}` | Update a record (CSRF protected). |
 | DELETE | `/api/resources/{name}/{id}` | Delete a record (CSRF protected). |
 | POST | `/api/resources/{name}/{id}/actions/{action}` | Execute a record action (CSRF protected). |
+| POST | `/api/resources/{name}/actions/{action}` | Execute a resource or bulk action. |
 | GET | `/api/resources/{name}/{id}/relationships/{relation}` | Paginated related collection. |
+| POST | `/api/resources/{name}/{id}/relationships/{relation}/{attach\|detach\|create}` | Attach, detach or create a record in an editable many-to-many relationship. |
+| GET, POST | `/api/resources/{name}/{id}/uploads` | List attachments or upload a binary request body. |
+| GET, DELETE | `/api/uploads/{upload_id}` | Download or remove an attachment. |
+| POST | `/api/resources/{name}/jobs/{job_name}` | Start a registered background job when enabled. |
+| GET, DELETE | `/api/jobs/{job_id}` | Read a job's progress or cancel it. |
+| GET | `/api/realtime` | SSE invalidations when enabled. |
 | POST | `/api/bridge/{name}` | Pydantic-validated RPC (CSRF protected). |
 | GET | `/`, `/{asset_path:path}` | Production SPA assets and history fallback. |
 
@@ -97,7 +116,9 @@ The response includes `items`, `total`, and may include `actionsByRecord`; exact
 - `PATCH /api/resources/{name}/{id}`: partial JSON column values; success returns `{ "record": { ... } }`.
 - `DELETE /api/resources/{name}/{id}`: returns `{ "ok": true }`.
 - Actions return a JSON result from the handler wrapped by the API; consult the example and actual route code if building a custom client.
-- Bridges accept a JSON value matching the declared Pydantic input model, return `{ "result": ... }`.
+- Bridges accept a JSON object matching the declared Pydantic input model and return `{ "result": ... }`.
+- Versioned resources require `If-Match` for PATCH and DELETE. A missing version returns HTTP 428 and a stale one returns HTTP 412.
+- Attachment POST accepts a binary body, an optional `X-Filename` header and a content type. See [upload limits and storage](resources.md#secure-resource-uploads).
 
 ### Error handling
 

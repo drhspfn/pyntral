@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { version as uiVersion } from "../package.json";
 import {
   Activity, ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Boxes,
   ChevronLeft, ChevronRight, CircleAlert, Command, Database, ExternalLink, Filter,
@@ -130,7 +131,7 @@ function Login({ onSignedIn }: { onSignedIn: (state: AuthState) => void }) {
         <h1>Everything under<br /><em>your control.</em></h1>
         <p>Manage your data, shape your workflows, and move faster with an admin interface built around your models.</p>
         <div className="login-mini"><ShieldCheck size={17} /> Secure workspace · Powered by Python + React</div>
-      </div><div className="login-side-footer">Pyntral / 0.1.0b1</div>
+      </div><div className="login-side-footer">Pyntral / {uiVersion}</div>
     </div>
     <div className="login-panel"><form className="login-form" onSubmit={(e) => { e.preventDefault(); login.mutate(); }}>
       <div className="login-icon"><LockKeyhole size={24} /></div>

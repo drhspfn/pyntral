@@ -8,7 +8,7 @@ Define your resources in Python. Get a searchable, customizable administration i
 
 **Python 3.11+** · **FastAPI** · **SQLAlchemy 2.x** · **React 19** · **TypeScript** · **MIT**
 
-`1.0.0b1` · **Public beta** · [Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [API reference](docs/api-reference.md)
+`1.0.0b2` · **Second public beta** · [Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [API reference](docs/api-reference.md)
 
 </div>
 
@@ -26,7 +26,7 @@ Pyntral attaches a React single-page administration UI to an existing FastAPI ap
 - **Event-oriented** — metadata-only events with in-process, optional RabbitMQ, or optional Kafka transports.
 - **Developer-friendly** — `uv` workflows, Vite HMR, content-addressed frontend build caching in `.pyntral/`, and structured logging.
 
-> **Release status:** Pyntral is an early beta. The Python API has automated tests; full browser and live-broker integration testing is still required before production adoption. See [limitations](docs/deployment.md#release-readiness).
+> **Release status:** The second beta targets single-worker integrations. Live PostgreSQL, broker and S3/MinIO deployments, along with multi-worker SSE, require validation in your environment. See [release readiness](docs/deployment.md#release-readiness).
 
 ## Quick start
 

@@ -18,7 +18,7 @@ Pyntral is a FastAPI sub-application mounted at `Admin.path` (default `/admin`).
 
 ## Request flow
 
-1. The browser authenticates through `/admin/auth/login` (or a custom token exchange). The server issues a signed session cookie and a CSRF token.
+1. The browser authenticates through `/admin/auth/login` (or a custom token exchange). The server creates a revocable session in the configured store and issues a signed opaque cookie and CSRF token.
 2. The React SPA fetches `/admin/api/schema`, containing resources, allowed capabilities, display fields, navigation and theme settings.
 3. CRUD requests go to registry-backed endpoints. The server resolves the current principal, checks role and callback permissions, validates values, applies the resource scope, and uses SQLAlchemy sessions.
 4. After a successful database commit, metadata-only CRUD events are sent to `admin.events`. Custom actions have separate success events, subject to their own transaction logic.

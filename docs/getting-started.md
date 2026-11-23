@@ -65,7 +65,7 @@ The library can mount multiple resources and pages. Pyntral expects the caller t
 ## Build a customized SPA (optional)
 
 ```bash
-uv run pyntral build --app app.main:app --base /admin/
+uv run pyntral build --app app.main:app
 ```
 
 This step is **not needed for standard PyPI installations**. It creates `.pyntral/dist/` containing your custom frontend extensions; you can then run your normal ASGI server (for example, `uvicorn app.main:app`) from the project directory. If the output lives elsewhere, set `PYNTRAL_DIST=/absolute/path/to/dist` or pass `dist_dir` to `Admin`.
@@ -80,6 +80,6 @@ For custom components use [`pyntral.components.json`](../pyntral.components.json
 
 ## Deployment modes
 
-The published Python wheel serves the **standard SPA** automatically at `/admin/`, so there is no npm, Vite or separate frontend deployment for ordinary integrations.
+The Python wheel serves the **standard SPA** automatically at the configured `Admin.path`, which defaults to `/admin/`. Ordinary integrations require no frontend toolchain.
 
 If you register **custom TSX extensions**, install Node.js in the development or build environment and run `pyntral build --app your.module:app`. Deploy the resulting `.pyntral/dist/` with your application, or configure `Admin(dist_dir=...)`. Production containers can still be Python-only. See [extensions](extensions.md) and [deployment](deployment.md).
