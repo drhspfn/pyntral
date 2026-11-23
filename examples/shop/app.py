@@ -346,12 +346,13 @@ admin = Admin(
                    "light": {"primary": "#346a99"}},
     },
     default_locale=os.environ.get("SHOP_LOCALE", "en"),
-    translations={"ru": {"nav.overview": "Обзор", "nav.sign_out": "Выйти",
-                         "table.filters": "Фильтры", "table.clear_filters": "Очистить фильтры",
-                         "table.columns": "Колонки", "table.sort_by": "Сортировать по",
-                         "actions.new": "Новая запись", "actions.create": "Создать запись",
-                         "actions.save": "Сохранить изменения",
-                         "resources.description": "Просмотр и управление записями."}},
+    # Override only application-specific messages; the core French/German
+    # dictionaries are bundled with the UI and English is the default.
+    translations={
+        "en": {"login.submit": "Sign in"},
+        "fr": {"login.submit": "Se connecter"},
+        "de": {"login.submit": "Anmelden"},
+    },
     animations=True,
     realtime_updates=True,
     storage=LocalStorage(Path(os.environ.get("SHOP_UPLOAD_ROOT", ".pyntral/uploads"))),

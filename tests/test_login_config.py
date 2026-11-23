@@ -25,8 +25,8 @@ def test_public_login_config_never_resolves_private_preferences():
                             form_align="left", max_width=400, footer="Public notice"),
           default_theme="dark", animations=False,
           theme={"dark": {"primary": "#556677", "login-card-radius": "12px"}},
-          theme_resolver=resolve, default_locale="ru",
-          translations={"ru": {"login.submit": "Войти", "private.note": "not public"}})
+          theme_resolver=resolve, default_locale="fr",
+          translations={"fr": {"login.submit": "Se connecter", "private.note": "not public"}})
     with TestClient(app, root_path="/product") as client:
         url = "/product/ops/auth/config"
         response = client.get(url)
@@ -45,7 +45,7 @@ def test_public_login_config_never_resolves_private_preferences():
         assert config["footer"] == "Public notice"
         assert public["theme"] == {"default": "dark", "animations": False,
                                    "tokens": {"light": {}, "dark": {"primary": "#556677", "login-card-radius": "12px"}}}
-        assert public["localization"] == {"code": "ru", "messages": {"login.submit": "Войти"}}
+        assert public["localization"] == {"code": "fr", "messages": {"login.submit": "Se connecter"}}
         assert calls == []
         assert client.get("/product/ops/api/schema").status_code == 401
         auth = client.post("/product/ops/auth/login", json={"username": "admin", "password": "x"})

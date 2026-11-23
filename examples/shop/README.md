@@ -229,7 +229,7 @@ Bulk selections remain available when moving between pages of the same query.
 
 ### Localization
 
-Restart Shop with `SHOP_LOCALE=ru` in the environment to see Russian labels
+Restart Shop with `SHOP_LOCALE=fr` or `SHOP_LOCALE=de` in the environment to see French or German labels
 for key navigation, toolbar, CRUD and table actions; dates follow the resolved
 language. The default is English. Host applications may provide their own
 language dictionaries and per-principal locale resolver. Model field labels

@@ -144,6 +144,8 @@ admin = Admin(
 
 The UI prefixes custom variables with `--ra-` (for example, `primary` → `--ra-primary`). Set variables for `light` and `dark` separately; components should reference CSS custom properties rather than hard-coded colors. `default_theme` is `system`, `light`, or `dark`. `animations=False` applies the shared reduced-motion switch.
 
+When `primary` is overridden, the UI derives missing `primary-hover`, `primary-soft` and `sidebar-active` using the accent and current surface tokens. For opaque CSS colors normalized to hex, it chooses black or white `on-primary` using WCAG contrast. Explicit values for any derived token take precedence, including values inherited from the global theme. For translucent or complex CSS colors, specify `on-primary` explicitly. Both button implementations use the hover color for their fill and border; checked controls share `on-primary` for contrast.
+
 Scrollbar tokens include `scrollbar-width`, `scrollbar-track`, `scrollbar-thumb`, `scrollbar-thumb-hover`, and `scrollbar-radius`; Firefox supports a more limited scrollbar customization than Chromium/WebKit.
 
 Form and detail layout can be `stack` or `grid` on each resource. Custom component classes are free to use these tokens; avoid changing core styles globally when a scoped CSS class suffices.
@@ -160,8 +162,8 @@ Bulk selection can span list pages while the current filters remain unchanged.
 
 ## Localization
 
-Configure `Admin(default_locale="en", translations={"ru": {"nav.overview":
-"Обзор", "table.filters": "Фильтры"}}, locale_resolver=callback)`.
+Configure `Admin(default_locale="en", translations={"fr": {"nav.overview":
+"Vue d\'ensemble"}, "de": {"nav.overview": "Übersicht"}}, locale_resolver=callback)`.
 The verified principal determines the selected locale; the API exposes only
 its code and message dictionary. Core navigation/toolbars/CRUD use translation
 keys with English fallback. Calendars format months, weekdays and dates using
@@ -174,8 +176,8 @@ custom login screens may supply their own strings; the standard sign-in UI uses 
 `Admin(theme_resolver=callback)` supports sync or async callbacks taking a
 verified `Principal`. Return `{"default": "dark", "tokens": {"dark":
 {"primary": "#b2b5ff"}}}` to override the theme for that user.
-Only `light` and `dark` token maps are accepted; unrecognized token names,
-non-string values and invalid mode names fail explicitly. All values are
+Only `light` and `dark` token maps are accepted; invalid token key syntax,
+non-string values and invalid mode names fail explicitly. Derived accent tokens are resolved after merging global and per-user overrides. All values are
 presentation data, never permission/role controls.
 
 ## CSV / JSON resource exports
@@ -188,9 +190,9 @@ This is a bounded, multi-query export rather than a point-in-time database snaps
 
 ## Localized resource labels
 
-Resource, field, action, job, relationship, page and layout-section labels can be **literal strings** or explicit translation references starting with `@` (for example, `Field(label="@fields.title")`). Define translations in `Admin(translations={"en": {"fields.title": "Title"}, "ru": {"fields.title": "Заголовок"}})`. The server resolves references for the authenticated administrator's locale, falls back to the English dictionary, then to the untranslated key. It never interprets arbitrary literals as keys, and translation does not grant permissions. To change the locale for an administrator, use `locale_resolver` and refetch the schema.
+Resource, field, action, job, relationship, page and layout-section labels can be **literal strings** or explicit translation references starting with `@` (for example, `Field(label="@fields.title")`). Define translations in `Admin(translations={"en": {"fields.title": "Title"}, "de": {"fields.title": "Titel"}})`. The server resolves references for the authenticated administrator's locale, falls back to the English dictionary, then to the untranslated key. It never interprets arbitrary literals as keys, and translation does not grant permissions. To change the locale for an administrator, use `locale_resolver` and refetch the schema.
 
-Pyntral bundles basic core UI translations for `ru`, `es`, and `fr`, and uses the caller-provided English fallback for other locales or missing entries. `Admin(translations=...)` overrides bundled messages for matching keys. This initial catalog covers navigation and common list/CRUD commands; other UI strings still require translation-key migration.
+Pyntral ships English source strings plus core French (`fr`) and German (`de`) translations. Other locales remain available through application dictionaries and use English fallback for missing entries. `Admin(translations=...)` overrides bundled messages for matching keys. This initial catalog covers navigation and common list/CRUD commands; other UI strings still require translation-key migration.
 
 ## Theme token audit
 

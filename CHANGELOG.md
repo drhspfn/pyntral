@@ -22,6 +22,7 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 - Run authorization, validation, setters, hooks and audit through the same transaction for standard and related creation. Encode mutation responses before committing.
 - Detach attachments transactionally and retry storage cleanup. Release job slots on early cancellation and close both Kafka clients after a consumer failure.
 - Preserve FastAPI lifespan state, serve production bundles under custom mounts and proxy prefixes, and bound JSON input and event publication.
+- Derive missing accent-dependent theme tokens, keep hover borders consistent, and share primary foreground contrast across controls. Bundle English, French and German UI messages; other locales remain configurable.
 - Improve responsive record layouts, attachment picker/list presentation and nested navigation indentation.
 - Support server-side session revocation with an in-memory default and an optional shared store. Fix Unicode usernames and improve keyboard interaction in dialogs, tabs and mobile navigation.
 

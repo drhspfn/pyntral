@@ -9,27 +9,16 @@ export interface Translator {
 
 /** Bundled core messages; application dictionaries take precedence. */
 const coreMessages: Record<string, Record<string, string>> = {
-  ru: {
-    "login.title": "Вход", "login.subtitle": "Войдите с учётной записью администратора.",
-    "login.username": "Имя пользователя", "login.password": "Пароль", "login.submit": "Продолжить",
-    "login.show_password": "Показать пароль", "login.hide_password": "Скрыть пароль", "login.toggle_theme": "Переключить тему",
-    "nav.overview": "Обзор", "nav.sign_out": "Выйти",
-    "resources.description": "Просмотр и управление записями.",
-    "actions.new": "Новая запись", "actions.create": "Создать запись",
-    "actions.save": "Сохранить изменения",
-    "table.columns": "Столбцы", "table.filters": "Фильтры",
-    "table.clear_filters": "Очистить фильтры", "table.sort_by": "Сортировка",
-  },
-  es: {
-    "login.title": "Iniciar sesión", "login.subtitle": "Usa tu cuenta de administrador para continuar.",
-    "login.username": "Usuario", "login.password": "Contraseña", "login.submit": "Continuar",
-    "login.show_password": "Mostrar contraseña", "login.hide_password": "Ocultar contraseña", "login.toggle_theme": "Cambiar tema",
-    "nav.overview": "Resumen", "nav.sign_out": "Cerrar sesión",
-    "resources.description": "Consulta y administra tus registros.",
-    "actions.new": "Nuevo registro", "actions.create": "Crear registro",
-    "actions.save": "Guardar cambios",
-    "table.columns": "Columnas", "table.filters": "Filtros",
-    "table.clear_filters": "Borrar filtros", "table.sort_by": "Ordenar por",
+  de: {
+    "login.title": "Anmelden", "login.subtitle": "Melden Sie sich mit Ihrem Administratorkonto an.",
+    "login.username": "Benutzername", "login.password": "Passwort", "login.submit": "Weiter",
+    "login.show_password": "Passwort anzeigen", "login.hide_password": "Passwort ausblenden", "login.toggle_theme": "Design wechseln",
+    "nav.overview": "Übersicht", "nav.sign_out": "Abmelden",
+    "resources.description": "Datensätze anzeigen und verwalten.",
+    "actions.new": "Neuer Datensatz", "actions.create": "Datensatz erstellen",
+    "actions.save": "Änderungen speichern",
+    "table.columns": "Spalten", "table.filters": "Filter",
+    "table.clear_filters": "Filter zurücksetzen", "table.sort_by": "Sortieren nach",
   },
   fr: {
     "login.title": "Connexion", "login.subtitle": "Utilisez votre compte administrateur pour continuer.",

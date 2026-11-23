@@ -6,13 +6,13 @@ import pytest
 def test_locale_selected_in_schema_without_client_token():
     app=FastAPI(); panel=Admin(app,session_factory=lambda:None,
         auth=LocalAuth('admin',hash_password('password-1234')),
-        secret_key='x'*64, secure_cookie=False, default_locale='ru',
-        translations={'ru':{'nav.overview':'Обзор'}})
+        secret_key='x'*64, secure_cookie=False, default_locale='de',
+        translations={'de':{'nav.overview':'Übersicht'}})
     with TestClient(app) as c:
         assert c.post('/admin/auth/login',json={'username':'admin','password':'password-1234'}).status_code==200
         schema=c.get('/admin/api/schema').json()
-        assert schema['localization']=={'code':'ru','messages':{'nav.overview':'Обзор'}}
-        assert c.get('/admin/api/schema?locale=admin').json()['localization']['code']=='ru'
+        assert schema['localization']=={'code':'de','messages':{'nav.overview':'Übersicht'}}
+        assert c.get('/admin/api/schema?locale=admin').json()['localization']['code']=='de'
 
 def test_invalid_locale_fails_early():
     with pytest.raises(ValueError, match='default_locale'):
@@ -37,11 +37,11 @@ def test_resource_labels_accept_literal_strings_and_locale_keys():
     app = FastAPI()
     panel = Admin(app, session_factory=lambda: None,
                   auth=LocalAuth("admin", hash_password("password-1234")),
-                  secret_key="x" * 64, secure_cookie=False, default_locale="ru",
+                  secret_key="x" * 64, secure_cookie=False, default_locale="de",
                   translations={
                       "en": {"resources.articles": "Articles", "fields.title": "Title"},
-                      "ru": {"resources.articles": "Статьи", "fields.title": "Заголовок",
-                             "sections.main": "Основное"},
+                      "de": {"resources.articles": "Artikel", "fields.title": "Titel",
+                             "sections.main": "Allgemein"},
                   })
     panel.add_resource(Resource(Article, label="@resources.articles",
                                 fields={"title": Field(label="@fields.title"),
@@ -52,7 +52,7 @@ def test_resource_labels_accept_literal_strings_and_locale_keys():
             "username": "admin", "password": "password-1234"}).status_code == 200
         schema = client.get("/admin/api/schema").json()
         resource = schema["resources"][0]
-        assert resource["label"] == "Статьи"
-        assert next(f for f in resource["fields"] if f["name"] == "title")["label"] == "Заголовок"
+        assert resource["label"] == "Artikel"
+        assert next(f for f in resource["fields"] if f["name"] == "title")["label"] == "Titel"
         assert next(f for f in resource["fields"] if f["name"] == "id")["label"] == "Identifier"
-        assert resource["layouts"]["form"][0]["title"] == "Основное"
+        assert resource["layouts"]["form"][0]["title"] == "Allgemein"
