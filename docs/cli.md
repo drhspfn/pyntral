@@ -16,6 +16,7 @@
 | `pyntral types MODULE:app --watch` | Regenerate types in a fresh Python subprocess as source files change. |
 | `pyntral dev MODULE:app` | Run Uvicorn and Vite in development. |
 | `pyntral build [--force] [--app MODULE:app]` | Typecheck and bundle the SPA using a content-based build cache. |
+| `pyntral export-ui DESTINATION` | Copy a compiled SPA to an absent/empty runtime directory. |
 | `pyntral schema MODULE:app [--out PATH] [--format markdown\|json]` | Generate resource documentation without building the SPA. |
 
 All commands accept `--project PATH` **before the subcommand** to point at another project directory.

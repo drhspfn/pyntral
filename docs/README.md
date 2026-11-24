@@ -36,3 +36,14 @@ Pyntral is an early-stage Python-admin framework with a React frontend. These gu
 The minimal Python-only example is [`examples/basic/`](../examples/basic/README.md). The customizable example is [`examples/shop/app.py`](../examples/shop/app.py), with TSX extensions under [`admin/`](../admin/) and broker worker examples under [`examples/events/`](../examples/events/).
 
 - [Publishing the Python package to PyPI](publishing.md)
+
+## Beta 3 extension APIs
+
+- [Tabs and tables](ui.md#tabs-and-tables)
+- [CRUD slots and default view](extensions.md#compose-standard-crud-views)
+- [Composite primary keys](resources.md#composite-primary-keys)
+- [Custom transactional writes](resources.md#custom-transactional-writes)
+- [Binary bridge uploads](bridges.md#binary-uploads-with-typed-rpc)
+- [Browser branding](ui.md#browser-title-and-favicon)
+- [Public HTTP client](extensions.md#http-client-pyntralapi)
+- [Portable custom UI](deployment.md#custom-ui-in-a-python-only-runtime)

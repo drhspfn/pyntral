@@ -236,8 +236,8 @@ class Resource(Generic[ModelT]):
     crud_views: dict[str, str] = field(default_factory=dict)  # list/create/edit/show -> extension ID
     crud_slots: dict[str, dict[str, str]] = field(default_factory=dict)  # mode -> before/after -> extension ID
     hooks: list[ResourceHook] = field(default_factory=list)
-    create_handler: Callable[[OperationContext], Any] | None = None
-    update_handler: Callable[[OperationContext], Any] | None = None
+    create_handler: Callable[[OperationContext], Any] | None = None  # Return a new mapped instance; no commit.
+    update_handler: Callable[[OperationContext], Any] | None = None  # Mutate ctx.record; no commit.
     virtual_fields: dict[str, VirtualField] = field(default_factory=dict)
     create_schema: type[BaseModel] | None = None
     edit_schema: type[BaseModel] | None = None

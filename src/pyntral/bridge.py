@@ -17,6 +17,7 @@ class BridgeFile:
 
 @dataclass(frozen=True, slots=True)
 class BridgeUpload:
+    """Opt-in one-file binary RPC with bounded in-memory input and MIME allowlist."""
     max_bytes: int = 5 * 1024 * 1024
     content_types: tuple[str, ...] = ("application/octet-stream",)
 

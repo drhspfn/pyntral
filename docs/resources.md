@@ -48,6 +48,10 @@ admin.add_resource(Resource(
 | `allow_create/edit/delete/show` | Capability toggles. |
 | `page_size` | Default page size, from 1 through 200. |
 | `actions` | Record-level server callbacks and optional frontend views/dialogs. |
+| `crud_views` | Map list/create/edit/show to replacement component IDs. |
+| `crud_slots` | Map CRUD mode to before/after extension IDs. |
+| `hooks` | ResourceHook lifecycle callbacks. |
+| `create_handler`, `update_handler` | Sync/async callbacks accepting OperationContext. |
 
 ### Field configuration
 
@@ -488,6 +492,27 @@ against the related resource's scope and select permission. Attachments
 and audit rows use the canonical identifier; their existing database
 columns limit it to 120 and 150 characters respectively.
 
+```python
+from sqlalchemy import ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+class ProductNote(Base):
+    __tablename__ = "product_notes"
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), primary_key=True)
+    locale: Mapped[str] = mapped_column(String(16), primary_key=True)
+    note: Mapped[str] = mapped_column(String(200))
+    product: Mapped[Product] = relationship(viewonly=True)
+
+admin.add_resource(Resource(ProductNote, name="product-notes",
+    list_fields=["product_id", "locale", "note"]))
+```
+
+POST `{"product_id": 1, "locale": "en", "note": "New note"}`; use the returned
+`record.__pyntral_id` for GET, PATCH `{"note": "Edited"}` or DELETE. Sending
+either key field in PATCH is rejected. Duplicate keys return 409.
+The product selector is available on create, and both key components
+are immutable afterward. See [Shop](../examples/shop/app.py).
+
 ## Custom transactional writes
 
 ```python
@@ -503,7 +528,7 @@ Resource(User, create_handler=create_user, update_handler=update_user)
 Handlers receive `OperationContext` after client field authorization,
 before-hooks, Pydantic validation and mapped-value conversion. The create
 handler returns a new mapped instance (transient, pending, or newly flushed in
-the same session). The update handler mutates the supplied record. The before/after hooks and handler share the same OperationContext instance; before hooks receive raw input, while the handler and after hook receive validated, typed fields. Both may
+the same session). The update handler mutates the supplied record; its return value is ignored. The before/after hooks and handler share the same OperationContext instance; before hooks receive raw input, while the handler and after hook receive validated, typed fields. Both may
 perform domain operations in the current session, including flush; neither
 may commit or roll back. Pyntral applies virtual setters and managed timestamp
 defaults, audits, flushes, checks scope, encodes the response and commits.
@@ -512,3 +537,10 @@ server-owned fields directly; it must not treat unvalidated values as trusted
 or bypass tenant/foreign-key policies. Normal client payloads cannot write
 hidden fields. For records with optimistic versioning, mutate mapped objects
 rather than issuing bulk SQL that bypasses SQLAlchemy's version checks.
+
+Handlers may be synchronous or asynchronous. Use `await ctx.session.flush()`
+with AsyncSession and `ctx.session.flush()` with Session. On entry to create,
+`ctx.record` is None; on update it is the current authorized record. Changes
+to ctx.payload inside the handler do not automatically persist new fields.
+Assign trusted server-owned values directly to the mapped record. See
+create_demo_staff and update_demo_staff in [Shop](../examples/shop/app.py).

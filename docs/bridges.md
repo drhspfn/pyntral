@@ -86,12 +86,22 @@ or a multipart dependency. The existing authorization, CSRF and Pydantic
 input/output contracts remain in place.
 
 ```python
-from pyntral import Bridge, BridgeUpload
+from pyntral import Bridge, BridgeContext, BridgeUpload
+from pydantic import BaseModel
+import hashlib
 
-def inspect_image(data, ctx):
-    file = ctx.file  # BridgeFile(filename, content_type, content: bytes)
-    # Validate file signatures, decode with size/dimension limits, then process.
-    return Result(size=len(file.content))
+class Input(BaseModel):
+    label: str
+
+class Result(BaseModel):
+    size: int
+    sha256: str
+
+def inspect_image(data: Input, ctx: BridgeContext) -> Result:
+    file = ctx.file
+    assert file is not None
+    # Hash bytes only; do not decode or persist the image.
+    return Result(size=len(file.content), sha256=hashlib.sha256(file.content).hexdigest())
 
 admin.add_bridge(Bridge("inspect-image", Input, Result, inspect_image,
     upload=BridgeUpload(max_bytes=2_000_000, content_types=("image/png", "image/jpeg"))))
@@ -114,3 +124,12 @@ short-lived scoped upload URL, the browser uploads directly, then a second
 authorized bridge verifies the object and finalizes it. Standard multipart
 FastAPI routes remain an app-owned alternative; the generic HTTP helper
 does not force JSON headers onto FormData.
+
+The default limit is 5 MiB (configurable 1–64 MiB). MIME types default to
+application/octet-stream; exact types and type/* wildcards are allowed.
+Empty input and invalid metadata return 422, oversized uploads 413, and
+unsupported MIME 415. Bytes are buffered in memory within the configured limit.
+The low-level `invokeFileBridge<Input, Output>(name, input, file, signal?)`
+is also public. See inspect-upload in [Shop](../examples/shop/app.py) and
+[Insights](../admin/Insights.tsx). The demo SHA-256 is a display receipt,
+not a persistent object-storage key.

@@ -11,6 +11,9 @@ import {
   Button, Badge, Card, TextInput, Textarea, FormField,
   Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup, SortableList,
   SearchInput, Select, AsyncSelect, DatePicker, Calendar, Dialog,
+  Tabs, TabList, Tab, TabPanel, Table, DataTable,
+  FileUpload, FileRow, Collapsible, OverflowText, Icon, Brand,
+  Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, PopoverClose,
 } from "@pyntral/ui";
 ```
 
@@ -32,6 +35,12 @@ import {
 | `AsyncSelect` | Wrapper for server-loaded searchable options. |
 | `DatePicker`, `Calendar` | Theme-aware date selection with popup placement. |
 | `Dialog` | Reusable dialog primitive; for global actions use `useAdminFeedback().confirm()`. |
+| `Tabs`, `TabList`, `Tab`, `TabPanel` | Compound tabs with controlled/uncontrolled state. |
+| `Table`, `DataTable` | Shared semantic table shell and typed data grid. |
+| `FileUpload`, `FileRow` | Controlled selection, explicit upload callback and file rows. |
+| `Collapsible`, `OverflowText` | Disclosure and truncated labels. |
+| `Icon`, `Brand` | Shared icon and branding primitives. |
+| `Popover` and parts | Compound floating content. |
 
 ### Selection example
 
@@ -364,6 +373,34 @@ import { Tabs, TabList, Tab, TabPanel, DataTable } from "@pyntral/ui";
   <TabPanel value="history">History content</TabPanel>
 </Tabs>
 ```
+
+### Tabs props
+
+| Component | Props |
+| --- | --- |
+| `Tabs` | `children`, `value?`, `defaultValue?`, `onValueChange?`, `className?` |
+| `TabList` | `children`, `label?` (default "Tabs"), `className?` |
+| `Tab` | `value`, `children`, `disabled?` |
+| `TabPanel` | `value`, `children`, `keepMounted?` (false), `className?` |
+
+Each tab and its panel share a unique value within one Tabs group.
+Without a valid initial selection, the first enabled tab is selected.
+In controlled mode, update value in onValueChange. Inactive panels unmount
+by default; keepMounted retains their state.
+
+### Table and DataTable props
+
+| Component | Props |
+| --- | --- |
+| `Table` | `children` (native thead/tbody), `label?`, `compact?`, `className?`, `style?` |
+| `DataTable<Row>` | `rows`, `columns`, `getRowKey`, `label?`, `compact?`, `loading?`, `empty?`, `className?`, `sort?`, `onSortChange?` |
+| `DataColumn<Row>` | `id`, `header`, `cell(row)`, `className?`, `sortable?` |
+
+`DataTableProps<Row>`, `DataColumn<Row>`, and `TabsProps` are public types.
+The sort callback emits `{ column, direction: "asc" | "desc" }`; sort the rows
+or refetch server data and pass the result back. Supply stable row keys and
+unique column IDs. Loading replaces rows; empty defaults to "No records".
+The table scrolls horizontally on narrow screens.
 
 `Table` is the shared semantic table shell for custom thead/tbody markup.
 `DataTable<Row>` accepts rows, typed columns, row keys, loading/empty states,

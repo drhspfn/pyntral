@@ -14,6 +14,7 @@ The published Pyntral Python wheel contains a complete generic SPA that works wi
   "actions": { "customer-profile": "admin/CustomerProfile.tsx" },
   "dialogs": { "archive-notice": "admin/ArchiveNotice.tsx" },
   "themes": {},
+  "crud": { "resource-summary": "admin/ResourceSummary.tsx" },
   "profile": {},
   "access": {},
   "auth": {}
@@ -107,7 +108,7 @@ admin.add_resource(Resource(Person, crud_views={"list": "people-list"}))
 
 A TSX component receives `CustomCrudProps` from `@pyntral/types`, including
 `mode`, `schema`, `resource`, optional `record`, `navigate`, `loadList(params)`,
-`save(data)`, `remove()` and `reload()`. Helpers use the authenticated, CSRF-
+`save(data)`, `remove()`, `reload()` and `defaultView`. Helpers use the authenticated, CSRF-
 protected Pyntral API; custom pages do not bypass resource permissions.
 `remove()` presents the standard destructive confirmation. You may use any
 available Pyntral UI primitive or React component inside the override.
@@ -178,8 +179,8 @@ Register component IDs in the existing `crud` manifest category. Add before
 and after slots without rebuilding the default list, table, or record editor:
 
 ```python
-Resource(Usage, crud_slots={"list": {"before": "usage-metrics"},
-                            "show": {"after": "usage-details"}})
+Resource(Usage, crud_slots={"list": {"before": "resource-summary"},
+                            "show": {"after": "resource-summary"}})
 ```
 
 Slot components receive `CustomCrudProps` (including the authorized record
@@ -198,6 +199,22 @@ export default function Metrics({ resource }: CustomCrudProps) {
 }
 ```
 
+A full CRUD override can also wrap the default view:
+
+```tsx
+import type { CustomCrudProps } from "@pyntral/types";
+import { Card } from "@pyntral/ui";
+export default function WrappedDetail({ defaultView }: CustomCrudProps) {
+  return <><Card title="Additional context">Original controls stay intact.</Card>{defaultView}</>;
+}
+```
+
+Slots accept all four modes and both positions, one extension per position.
+They render around the complete screen, not inside the toolbar. Record routes
+receive the authorized record once loaded. Save is available for create/edit;
+render the default view only once in an override. See the working
+[ResourceSummary](../admin/ResourceSummary.tsx) example.
+
 ## HTTP client: @pyntral/api
 
 Use the public `api<T>(path, options)` for JSON requests that do not need a
@@ -207,10 +224,11 @@ same-origin cookies, attaches the current admin CSRF token to non-safe admin
 requests, and raises `ApiError` with status, code, message and details.
 
 ```tsx
-import { api, buildQuery, ApiError } from "@pyntral/api";
+import { api, buildQuery } from "@pyntral/api";
 const rows = await api<{ items: Record<string, unknown>[] }>(
   "/api/resources/orders" + buildQuery({ limit: 10 })
 );
+// Register this application-owned admin route on the backend first:
 const result = await api<{ ok: boolean }>("/api/custom-operation", {
   method: "POST", body: JSON.stringify({ id: 42 })
 });
@@ -224,3 +242,8 @@ authorization policies. In Vite development they also need an appropriate
 proxy or same-origin server route; the default proxy only forwards the
 admin API/auth prefixes. Use `fetch` for non-JSON responses. FormData and
 binary bodies are supported without forcing the JSON content type.
+
+`ApiOptions` extends RequestInit with `scope?: "admin" | "host"`. The generic
+result type is compile-time only, not runtime validation. Use generated bridges
+for Pydantic DTO validation. `base` exposes the mount; `buildQuery` encodes query
+parameters. See [Insights](../admin/Insights.tsx) for a live admin HTTP call.

@@ -67,3 +67,11 @@ git push origin v1.0.0b3
 Check the workflow outcome and PyPI package files before announcing availability. **No PyPI publication is performed by creating this repository.**
 
 See [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/) and [uv publishing guidance](https://docs.astral.sh/uv/guides/publish/).
+
+## Version consistency before tagging
+
+Update pyproject.toml and uv.lock with uv version / uv lock, and set
+src/pyntral/ui/package.json to the corresponding SemVer version (Python
+1.0.0b3 = frontend 1.0.0-beta.3). No npm install is needed for a version-only
+change. Update README, CHANGELOG, and tests/test_public_release.py.
+Run `uv run --locked --extra dev pytest -q` and wait for PR checks before tagging.
