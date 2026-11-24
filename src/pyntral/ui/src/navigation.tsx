@@ -7,6 +7,8 @@ import { useAdminFeedback } from "./feedback";
 import { useCurrentAdmin } from "./currentAdmin";
 import { useI18n } from "./i18n";
 import { OverflowText } from "./overflow-text";
+import { SearchInput } from "./ui";
+import { categoryRoute, matchesNavigation, navigationMatches, type SearchNode } from "./navigation-state";
 import { access as accessExtensions, sidebarItems } from "virtual:pyntral-extensions";
 
 type Node = { type: "group" | "resource" | "page"; id: string; label: string; icon: IconSpec; order: number; route?: string;
@@ -24,7 +26,7 @@ function makeTree(schema: Schema): Node[] {
       let node = groups.get(current);
       if (!node) {
         const settings = definitions.get(current);
-        node = { type: "group", id: current, label: part, icon: settings ? settings.icon : "folder", order: settings?.order || 0, children: [] };
+        node = { type: "group", id: current, label: part, icon: settings ? settings.icon : "folder", order: settings?.order || 0, route: settings?.component ? categoryRoute(current) : undefined, children: [] };
         parent.push(node);
         groups.set(current, node);
       }
@@ -54,18 +56,19 @@ function ItemContent({ config, schema, type, id, label, icon, depth, active, loc
     {config.showIcons && <Icon icon={icon} size={config.iconSize} fallback={type === "group" ? "folder" : "database"}/>}
     <OverflowText>{label}</OverflowText>
     {locked && <LockKeyhole size={13} aria-label="Locked"/>}
-    {type === "group" && (open ? <ChevronDown size={14}/> : <ChevronRight size={14}/>)}
+    {type === "group" && open !== undefined && (open ? <ChevronDown size={14}/> : <ChevronRight size={14}/>)}
   </>;
   return Custom ? <Custom schema={schema} type={type} id={id} label={label} icon={icon}
     depth={depth} active={active} locked={locked} open={open}>{children}</Custom> : children;
 }
-function Branch({ node, schema, route, go, depth, config }: {
-  node: Node; schema: Schema; route: string; go: (route: string) => void; depth: number; config: SidebarConfig;
+function Branch({ node, schema, route, go, depth, config, matches }: {
+  node: Node; schema: Schema; route: string; go: (route: string) => void; depth: number; config: SidebarConfig; matches: Set<SearchNode> | null;
 }) {
-  const containsRoute = (target: Node): boolean => target.route ? route === target.route || route.startsWith(target.route + "/") : target.children.some(containsRoute);
+  const containsRoute = (target: Node): boolean => (!!target.route && (route === target.route || (target.type !== "group" && route.startsWith(target.route + "/")))) || target.children.some(containsRoute);
   const activeChild = containsRoute(node);
   const [open, setOpen] = useState(activeChild || depth === 0);
   useEffect(() => { if (activeChild) setOpen(true); }, [activeChild]);
+  const expanded = matches !== null || open;
   const { confirm } = useAdminFeedback();
   const currentAdmin = useCurrentAdmin();
   const LockedContent = accessExtensions.denied;
@@ -73,7 +76,8 @@ function Branch({ node, schema, route, go, depth, config }: {
   const paddingLeft = 12 + Math.min(depth, config.maxIndentDepth) * config.indent;
   const content = <ItemContent config={config} schema={schema} type={node.type} id={node.id}
     label={node.label} icon={node.icon} depth={depth} active={activeChild} locked={!!node.locked}
-    open={node.type === "group" ? open : undefined}/>;
+    open={node.type === "group" && !node.route ? expanded : undefined}/>;
+  if (matches && !matches.has(node)) return null;
   if (node.type !== "group") return <button type="button" className={`nav-link ${activeChild ? "active" : ""}`}
     aria-label={node.label} aria-current={activeChild ? "page" : undefined}
     style={{ paddingLeft }} onClick={() => {
@@ -83,23 +87,41 @@ function Branch({ node, schema, route, go, depth, config }: {
       else go(node.route!);
     }}>{content}</button>;
   return <div className="nav-branch">
-    <button className={`nav-link nav-toggle ${activeChild ? "ancestor-active" : ""}`} type="button"
-      aria-label={node.label} aria-expanded={open} style={{ paddingLeft }} onClick={() => setOpen(!open)}>
+    {node.route ? <div className="ra-nav-group-row">
+      <button type="button" className={`nav-link nav-toggle ${route === node.route ? "active" : activeChild ? "ancestor-active" : ""}`}
+        aria-label={node.label} aria-current={route === node.route ? "page" : undefined} style={{ paddingLeft }}
+        onClick={() => { setOpen(true); go(node.route!); }}>{content}</button>
+      {!!node.children.length && <button type="button" className="ra-nav-expand"
+        aria-label={`${expanded ? "Collapse" : "Expand"} ${node.label}`} aria-expanded={expanded}
+        disabled={matches !== null} onClick={() => setOpen(!open)}>
+        {expanded ? <ChevronDown size={14}/> : <ChevronRight size={14}/>}
+      </button>}
+    </div> : <button className={`nav-link nav-toggle ${activeChild ? "ancestor-active" : ""}`} type="button"
+      aria-label={node.label} aria-expanded={expanded} style={{ paddingLeft }} disabled={matches !== null} onClick={() => setOpen(!open)}>
       {content}
-    </button>
-    {open && <div className="nav-children">{node.children.map(child => <Branch key={child.type + child.id}
-      node={child} schema={schema} route={route} go={go} depth={depth + 1} config={config}/>)}</div>}
+    </button>}
+    {expanded && <div className="nav-children">{node.children.map(child => <Branch key={child.type + child.id}
+      node={child} schema={schema} route={route} go={go} depth={depth + 1} config={config} matches={matches}/>)}</div>}
   </div>;
 }
 export function SidebarNavigation({ schema, route, navigate }: { schema: Schema; route: string; navigate: (route: string) => void }) {
   const tree = useMemo(() => makeTree(schema), [schema]);
   const config = sidebarConfig(schema);
   const { t } = useI18n();
-  return <nav aria-label="Admin navigation">
-    {schema.navigation?.showDashboard !== false && <button type="button" className={`nav-link ${!route ? "active" : ""}`}
+  const [query, setQuery] = useState("");
+  const search = config.showSearch ? query.trim() : "";
+  const matches = useMemo(() => search ? navigationMatches(tree, search) : null, [tree, search]);
+  const overview = schema.navigation?.showDashboard !== false && (!search || matchesNavigation(t("nav.overview", "Overview"), "dashboard", search));
+  return <div className="ra-sidebar-navigation">
+    {config.showSearch && <div className="ra-nav-search"><SearchInput value={query} onChange={setQuery}
+      placeholder={config.searchPlaceholder ?? t("nav.search", "Search navigation…")} aria-label={t("nav.search", "Search navigation")}/></div>}
+    <nav aria-label="Admin navigation">
+    {overview && <button type="button" className={`nav-link ${!route ? "active" : ""}`}
       aria-current={!route ? "page" : undefined} aria-label={t("nav.overview", "Overview")} onClick={() => navigate("")}>
       <ItemContent config={config} schema={schema} type="dashboard" id="dashboard" label={t("nav.overview", "Overview")}
         icon={config.dashboardIcon} depth={0} active={!route} locked={false}/></button>}
-    {tree.map(node => <Branch key={node.type + node.id} node={node} schema={schema} route={route} go={navigate} depth={0} config={config}/>)}
-  </nav>;
+    {tree.map(node => <Branch key={node.type + node.id} node={node} schema={schema} route={route} go={navigate} depth={0} config={config} matches={matches}/>)}
+    {matches && !matches.size && !overview && <div className="ra-nav-empty" role="status">{t("nav.no_results", "No matching pages")}</div>}
+    </nav>
+  </div>;
 }

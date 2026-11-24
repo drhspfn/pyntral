@@ -753,3 +753,16 @@ button.ra-brand:hover{background:var(--ra-surface-alt)}
 .ra-table-sort{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
 .data-table .ra-table-empty{text-align:center;white-space:normal;padding:24px;color:var(--ra-muted)}
 .ra-crud-slot{min-width:0;margin-block:0 16px}
+
+/* Navigation search stays above the scrollable, permission-filtered tree. */
+.ra-sidebar-navigation{display:flex;flex:1;min-height:0;min-width:0;flex-direction:column}
+.ra-sidebar-navigation nav{min-height:0}
+.ra-nav-search{padding:2px 0 8px;min-width:0}
+.ra-nav-search .ra-search{width:100%}
+.ra-nav-empty{padding:16px 10px;color:var(--ra-muted);font-size:12px;text-align:center}
+.ra-nav-group-row{display:flex;align-items:center;min-width:0;gap:2px}
+.ra-nav-group-row>.nav-link{flex:1;min-width:0}
+.ra-nav-expand{flex:none;display:grid;place-items:center;width:30px;height:34px;border:0;border-radius:7px;background:transparent;color:var(--ra-sidebar-text)}
+.ra-nav-expand:hover:not(:disabled){background:var(--ra-surface-alt);color:var(--ra-text)}
+.ra-nav-expand:disabled{opacity:.6;cursor:default}
+.ra-sidebar-navigation .nav-toggle:disabled{opacity:1;cursor:default}
