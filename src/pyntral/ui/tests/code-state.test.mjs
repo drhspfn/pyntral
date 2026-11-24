@@ -13,3 +13,9 @@ test("format JSON without changing strings, large numbers or duplicate keys", ()
   assert.equal(jsonSource({ok:true}),'{"ok":true}');
   assert.equal(normalizeLanguage("C#"),"csharp");
 });
+
+test("large/deep JSON is left untouched instead of expanding without bound", () => {
+  assert.equal(formatJson("[".repeat(300) + "0" + "]".repeat(300)),null);
+  assert.equal(formatJson(JSON.stringify("x".repeat(100001))),null);
+  assert.equal(normalizeLanguage("constructor"),"constructor");
+});

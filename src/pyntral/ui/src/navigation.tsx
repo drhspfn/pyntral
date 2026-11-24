@@ -67,7 +67,7 @@ function Branch({ node, schema, route, go, depth, config, matches, expansion, se
 }) {
   const containsRoute = (target: Node): boolean => (!!target.route && (route === target.route || (target.type !== "group" && route.startsWith(target.route + "/")))) || target.children.some(containsRoute);
   const activeChild = containsRoute(node);
-  const open = expansion[node.id] ?? (activeChild || depth === 0);
+  const open = Object.hasOwn(expansion, node.id) ? expansion[node.id] : (activeChild || depth === 0);
   useEffect(() => { if (activeChild && node.type === "group" && matches === null) setExpanded(node.id, true); }, [activeChild, node.id, node.type, setExpanded, matches]);
   const setOpen = (value: boolean) => setExpanded(node.id, value);
   const expanded = matches !== null || open;

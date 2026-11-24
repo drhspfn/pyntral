@@ -1095,7 +1095,7 @@ function AdminApp() {
     if (!route && data.navigation?.showDashboard !== false) {
       const defaultView = <Overview schema={data} navigate={navigate}/>;
       const component = data.navigation.dashboardComponent;
-      const Custom = component ? dashboards[component] : undefined;
+      const Custom = component && Object.hasOwn(dashboards, component) ? dashboards[component] : undefined;
       if (component && !Custom) return <Alert error={new Error(`Dashboard component "${component}" not registered`)}/>;
       return Custom && auth.data?.user ? <Custom schema={data} navigate={navigate} user={auth.data.user} group={null} defaultView={defaultView}/> : defaultView;
     }
@@ -1103,10 +1103,12 @@ function AdminApp() {
       const first = data.resources.find((r) => r.capabilities.list);
        return first ? <ResourceRoute schema={data} resource={first} mode="list" navigate={navigate}/> : <Empty title="No resources"/>;
     }
-    const segments = route.split("/").map(decodeURIComponent);
+    let segments: string[];
+    try { segments = route.replace(/\/$/, "").split("/").map(decodeURIComponent); }
+    catch { return <Empty title="Invalid URL"/>; }
     if (segments[0] === "groups" && segments.length > 1) {
       const group = data.navigation.groups.find(g => g.path === segments.slice(1).join("/"));
-      const Custom = group?.component ? dashboards[group.component] : undefined;
+      const Custom = group?.component && Object.hasOwn(dashboards, group.component) ? dashboards[group.component] : undefined;
       if (group?.component && !Custom) return <Alert error={new Error(`Dashboard component "${group.component}" not registered`)}/>;
       if (group && Custom && auth.data?.user) return <Custom schema={data} navigate={navigate} user={auth.data.user} group={group}
         defaultView={<Overview schema={data} navigate={navigate} groupPath={group.path}/>}/>;

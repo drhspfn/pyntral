@@ -37,6 +37,11 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
             schema = client.get("/admin/api/schema").json()
             resources = {resource["id"]: resource for resource in schema["resources"]}
             sidebar = schema["navigation"]["sidebar"]
+            assert sidebar["showSearch"] is True
+            assert schema["navigation"]["dashboardComponent"] == "shop-home"
+            groups = {g["path"]: g for g in schema["navigation"]["groups"]}
+            assert groups["Commerce"]["component"] == "shop-category"
+            assert groups["Agents/Operations"]["component"] == "shop-category"
             assert sidebar["width"] == 260 and sidebar["resizable"]
             assert sidebar["header"]["title"] == "Shop demo"
             assert sidebar["header"]["subtitle"] == "Commerce workspace"

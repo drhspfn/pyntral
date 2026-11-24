@@ -415,6 +415,8 @@ class Admin:
             raise ValueError("Navigation group path is required")
         if group.component is not None and (not isinstance(group.component, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", group.component)):
             raise ValueError("Invalid group dashboard component ID")
+        if group.component and any(part in (".", "..") for part in group.path.split("/")):
+            raise ValueError("Group dashboard path cannot contain dot segments")
         if group.min_role is not None and (group.component is None or group.min_role not in self.role_weights):
             raise ValueError("Group dashboard min_role requires a component and a known role")
         icon_metadata(group.icon)
