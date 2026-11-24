@@ -64,6 +64,7 @@ export interface ResourceDef {
   navigation?: string | null;
   navigationOrder?: number;
   primaryKey: string;
+  primaryKeys?: string[];
   versionField?: string | null;
   uploads?: boolean;
   uploadMaxBytes?: number | null;

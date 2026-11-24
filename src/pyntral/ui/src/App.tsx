@@ -187,7 +187,7 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
     {columns.map((field) => <th key={field.name} className={preferences?.pinned === field.name ? "ra-column-pinned" : ""}>
       {field.label}</th>)}<th className="actions-head">ACTION</th>
   </tr></thead><tbody>
-    {data.items.map((row) => <tr key={String(row[resource.primaryKey])}>
+    {data.items.map((row, index) => <tr key={String(row[resource.primaryKey] ?? `redacted-${index}`)}>
       {selectable && <td className="ra-select-cell"><Checkbox aria-label={`Select record ${String(row[resource.primaryKey])}`}
         checked={selection.includes(String(row[resource.primaryKey]))} onCheckedChange={(checked) => {
           const key = String(row[resource.primaryKey]);
@@ -195,12 +195,12 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
         }}/></td>}
       {columns.map((field, idx) => <td key={field.name}
         className={`${idx === 0 ? "strong-cell" : ""} ${preferences?.pinned === field.name ? "ra-column-pinned" : ""}`}>
-        {idx === 0 && resource.capabilities.show ? <button className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
+        {idx === 0 && resource.capabilities.show && row[resource.primaryKey] != null ? <button className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
           <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" /></button> :
           <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" />}
       </td>)}
       <td className="actions-cell"><div className="row-actions">
-        {resource.capabilities.show && <button title="View" aria-label="View record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}><ExternalLink size={16}/></button>}
+        {resource.capabilities.show && row[resource.primaryKey] != null && <button title="View" aria-label="View record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}><ExternalLink size={16}/></button>}
         {resource.capabilities.edit && <button title="Edit" aria-label="Edit record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}/edit`)}><Pencil size={15}/></button>}
         {resource.capabilities.delete && <button type="button" title="Delete" aria-label="Delete record"
           onClick={() => { void requestDelete(row[resource.primaryKey], resource.versionField ? row[resource.versionField] : undefined); }}><Trash2 size={15}/></button>}
@@ -305,7 +305,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  const [sort, setSort] = useState(resource.primaryKey);
+  const [sort, setSort] = useState(resource.primaryKeys?.[0] ?? resource.primaryKey);
   const [desc, setDesc] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
@@ -729,14 +729,14 @@ function RelatedRecords({ resource, identifier, relation, target, navigate }: {
       <button className="btn primary" type="submit" disabled={mutateLink.isPending}>Create and link</button>
     </form>}
     {rows.isLoading ? <Loading/> : rows.error ? <Alert error={rows.error}/> : rows.data?.items.length ? <>
-      {relation.layout === "cards" ? <div className="ra-related-cards">{rows.data.items.map((row) => {
-        const id = String(row[target.primaryKey]);
-        return <article className="ra-related-card" key={id}>
-          {selectable && <div className="ra-related-card-check"><Checkbox label="Select" checked={selection.includes(id)}
+      {relation.layout === "cards" ? <div className="ra-related-cards">{rows.data.items.map((row, index) => {
+        const id = row[target.primaryKey] == null ? null : String(row[target.primaryKey]);
+        return <article className="ra-related-card" key={id ?? `redacted-${index}`}>
+          {selectable && id != null && <div className="ra-related-card-check"><Checkbox label="Select" checked={selection.includes(id)}
             onCheckedChange={(checked) => onSelection?.(checked ? [...selection, id] : selection.filter((entry) => entry !== id))}/></div>}
-          <button type="button" onClick={() => navigate(`resources/${target.id}/${encodeURIComponent(id)}`)}>
-            {String(row[target.titleField] ?? id)}</button>
-          <small>#{id}</small>
+          {id != null && target.capabilities.show ? <button type="button" onClick={() => navigate(`resources/${target.id}/${encodeURIComponent(id)}`)}>
+            {String(row[target.titleField] ?? id)}</button> : <strong>{String(row[target.titleField] ?? "Record")}</strong>}
+          {id != null && <small>#{id}</small>}
         </article>;
       })}</div> : <TableContent resource={target} data={rows.data} navigate={navigate} selectable={selectable}
           selection={selection} onSelectionChange={onSelection} />}

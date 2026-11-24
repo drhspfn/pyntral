@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm.attributes import InstrumentedAttribute
 
 from sqlalchemy.orm import DeclarativeBase
-from .hooks import ResourceHook
+from .hooks import ResourceHook, OperationContext
 from .virtual import VirtualField
 from .layout import LayoutSection
 from .jobs import JobAction
@@ -236,6 +236,8 @@ class Resource(Generic[ModelT]):
     crud_views: dict[str, str] = field(default_factory=dict)  # list/create/edit/show -> extension ID
     crud_slots: dict[str, dict[str, str]] = field(default_factory=dict)  # mode -> before/after -> extension ID
     hooks: list[ResourceHook] = field(default_factory=list)
+    create_handler: Callable[[OperationContext], Any] | None = None
+    update_handler: Callable[[OperationContext], Any] | None = None
     virtual_fields: dict[str, VirtualField] = field(default_factory=dict)
     create_schema: type[BaseModel] | None = None
     edit_schema: type[BaseModel] | None = None
@@ -261,6 +263,9 @@ class Resource(Generic[ModelT]):
         action_names = [action.name for action in self.actions] + [action.name for action in self.jobs]
         if len(action_names) != len(set(action_names)):
             raise ValueError("Job and action names must be distinct")
+        for handler in (self.create_handler, self.update_handler):
+            if handler is not None and not callable(handler):
+                raise TypeError("CRUD handlers must be callable")
         for schema in (self.create_schema, self.edit_schema):
             if schema is not None and (not isinstance(schema, type) or not issubclass(schema, BaseModel)):
                 raise TypeError("create_schema and edit_schema must inherit Pydantic BaseModel")

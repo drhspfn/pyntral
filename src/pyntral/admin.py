@@ -427,6 +427,8 @@ class Admin:
     async def _can(self, principal: Principal, name: str, action: str, record: Any = None) -> bool:
         adapter = self._adapter(name)
         resource = adapter.resource
+        if adapter.composite and (action in ("select", "create", "edit", "delete") or action.startswith("action:")):
+            return False
         capability = {"create": "allow_create", "edit": "allow_edit",
                       "delete": "allow_delete", "show": "allow_show"}.get(action)
         if capability and not getattr(resource, capability):
@@ -534,7 +536,7 @@ class Admin:
         if set(ctx.payload) - write_fields:
             raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
         await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
-        record = await adapter._stage_create(session, ctx.payload)
+        record = await adapter._stage_create(session, ctx.payload, principal)
         if members is not None:
             members.append(record)
         await adapter._flush_create(session, record, ctx.payload, principal)
@@ -1440,6 +1442,8 @@ class Admin:
                 async with adapter._transaction_errors(session):
                     await maybe_await(session.flush())
                 await maybe_await(session.refresh(record))
+                if adapter.resource.update_handler is not None and adapter.resource.scope is not None:
+                    await adapter.get(session, identifier, principal)
                 read_fields = await self._allowed_fields(principal, name, view="show", record=record)
                 response = JSONResponse({"record": adapter.serialize(record, read_fields)})
                 await adapter._commit(session)
