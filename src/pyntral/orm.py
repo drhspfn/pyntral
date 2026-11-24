@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import datetime as dt
 import decimal
 import enum
@@ -14,7 +17,7 @@ import re
 from typing import Any
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import String, and_, func, inspect, or_, select
+from sqlalchemy import String, and_, event, func, inspect, or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm.exc import StaleDataError
 from sqlalchemy.orm import RelationshipProperty, selectinload
@@ -27,6 +30,7 @@ from .orm_types import type_name
 
 from .auth import Principal, maybe_await
 from .resources import Resource
+from .hooks import OperationContext
 from .sidebar import icon_metadata
 
 PRIVATE_NAMES = ("password", "secret", "token", "api_key", "private_key", "credential")
@@ -110,10 +114,19 @@ class MapperAdapter:
         self.mapper = inspect(resource.model)
         self.columns = {prop.key: prop.columns[0] for prop in self.mapper.column_attrs}
         keys = list(self.mapper.primary_key)
-        if len(keys) != 1:
-            raise ValueError(f"{resource.model.__name__}: exactly one primary key required")
+        if not keys:
+            raise ValueError(f"{resource.model.__name__}: primary key required")
         self.pk = keys[0]
-        self.pk_name = next((k for k, c in self.columns.items() if c is self.pk), self.pk.key)
+        self.pk_names = tuple(next((k for k, c in self.columns.items() if c is key), key.key) for key in keys)
+        self.pk_name = self.pk_names[0]
+        self.composite = len(keys) > 1
+        self.identity_field = "__pyntral_id" if self.composite else self.pk_name
+        if self.composite:
+            if self.identity_field in self.columns or self.identity_field in resource.virtual_fields:
+                raise ValueError("Reserved composite identity field: __pyntral_id")
+            if any(column_kind(key) not in ("integer", "string", "uuid") for key in keys):
+                raise ValueError("Composite primary key components must be integer, string or UUID")
+
         if resource.version_field is not None:
             col = self.columns.get(resource.version_field)
             if col is None or column_kind(col) != "integer" or self.mapper.version_id_col is not col:
@@ -226,10 +239,13 @@ class MapperAdapter:
         override = self.view_config(name, view)
         return override is None or override.visible is not False
 
-    def writable(self, name: str) -> bool:
+    def writable(self, name: str, *, create: bool = False) -> bool:
         col = self.columns[name]
         opt = self._field(name)
-        return self.visible(name) and name not in (self.pk_name, self.resource.version_field) and not (opt and opt.readonly) and (
+        if name in self.pk_names:
+            if not (self.composite and create) or col.autoincrement is True:
+                return False
+        return self.visible(name) and name != self.resource.version_field and not (opt and opt.readonly) and (
             not col.computed and not col.identity and column_kind(col) != "binary"
         )
 
@@ -242,10 +258,60 @@ class MapperAdapter:
                 if isawaitable(value):
                     raise AdminError(500, "Virtual field getter must be synchronous", "virtual_field_error")
                 values[name] = value
+        if self.composite and all(name in values for name in self.pk_names):
+            values[self.identity_field] = self.record_identifier(record)
         return jsonable_encoder(values)
 
+    def identity_values(self, record: Any) -> tuple[Any, ...]:
+        return tuple(getattr(record, name) for name in self.pk_names)
+
+    def encode_identity(self, values: tuple[Any, ...]) -> str:
+        if not self.composite:
+            return str(values[0])
+        data = json.dumps([str(value) for value in values], ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        identifier = base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
+        if len(identifier) > 8192:
+            raise AdminError(422, "Composite record identifier is too long", "validation_error")
+        return identifier
+
+    def record_identifier(self, record: Any) -> str:
+        return self.encode_identity(self.identity_values(record))
+
+    def persisted_identifier(self, record: Any, max_length: int) -> str:
+        identifier = self.record_identifier(record)
+        if len(identifier) > max_length:
+            raise AdminError(422, "Record identifier exceeds the configured feature storage limit", "validation_error")
+        return identifier
+
     def pk_value(self, raw: str) -> Any:
-        return convert_value(self.pk, raw)
+        if not self.composite:
+            return convert_value(self.pk, raw)
+        try:
+            if len(raw) > 8192 or re.fullmatch(r"[A-Za-z0-9_-]+", raw) is None:
+                raise ValueError("invalid identifier")
+            parts = json.loads(base64.b64decode(raw + "=" * (-len(raw) % 4), altchars=b"-_", validate=True))
+            if not isinstance(parts, list) or len(parts) != len(self.pk_names) or any(not isinstance(p, str) for p in parts):
+                raise ValueError("invalid key components")
+            values = tuple(convert_value(self.columns[name], part) for name, part in zip(self.pk_names, parts))
+            if self.encode_identity(values) != raw:
+                raise ValueError("noncanonical identifier")
+            return values
+        except (ValueError, UnicodeError, binascii.Error, AdminError) as exc:
+            raise AdminError(422, "Invalid composite record identifier", "validation_error") from exc
+
+    def identity_predicate(self, identifier: str) -> Any:
+        value = self.pk_value(identifier)
+        if not self.composite:
+            return getattr(self.resource.model, self.pk_name) == value
+        return and_(*(getattr(self.resource.model, name) == part for name, part in zip(self.pk_names, value)))
+
+    def identities_predicate(self, identifiers: list[str]) -> Any:
+        if not self.composite:
+            return getattr(self.resource.model, self.pk_name).in_([self.pk_value(value) for value in identifiers])
+        return or_(*(self.identity_predicate(value) for value in identifiers)) if identifiers else False
+
+    def identity_order(self) -> list[Any]:
+        return [getattr(self.resource.model, name) for name in self.pk_names]
 
     def _related_resource(self, relationship: RelationshipProperty, registry: dict[str, Any]) -> str | None:
         target = relationship.mapper.class_
@@ -263,6 +329,8 @@ class MapperAdapter:
                     {"resource": self._related_resource(prop, registry), "field": prop.key}
                     for prop in self.relations.values()
                     if prop.direction.name == "MANYTOONE"
+                    and len(prop.local_columns) == 1 and len(prop.mapper.primary_key) == 1
+                    and any(remote is prop.mapper.primary_key[0] for _, remote in prop.local_remote_pairs)
                     and any(column is local for local in prop.local_columns)
                 ),
                 None,
@@ -271,16 +339,16 @@ class MapperAdapter:
                 not column.nullable
                 and column.default is None
                 and column.server_default is None
-                and not column.primary_key
+                and (not column.primary_key or self.writable(name, create=True))
                 and not column.identity
             )
-            writable = self.writable(name)
+            writable = self.writable(name) or self.writable(name, create=True)
             view_configs = {}
             for view in ("list", "create", "edit", "show", "filter"):
                 cfg = self.view_config(name, view)
                 view_configs[view] = {
                     "visible": self.view_visible(name, view),
-                    "readonly": not writable or (cfg is not None and cfg.readonly is True),
+                    "readonly": not self.writable(name, create=view == "create") or (cfg is not None and cfg.readonly is True),
                     "required": (cfg.required if cfg and cfg.required is not None else
                                  options.required if options and options.required is not None else is_required),
                     "component": (cfg.component if cfg and cfg.component is not None else
@@ -294,7 +362,7 @@ class MapperAdapter:
                     "kind": kind,
                     "required": options.required if options and options.required is not None else is_required,
                     "readonly": not writable,
-                    "primaryKey": name == self.pk_name,
+                    "primaryKey": name in self.pk_names,
                     "sortable": True,
                     "nullable": column.nullable,
                     "widget": options.widget if options else None,
@@ -353,7 +421,8 @@ class MapperAdapter:
             "icon": icon_metadata(self.resource.icon),
             "navigation": self.resource.navigation,
             "navigationOrder": self.resource.navigation_order,
-            "primaryKey": self.pk_name,
+            "primaryKey": self.identity_field,
+            "primaryKeys": list(self.pk_names),
             "versionField": self.resource.version_field,
             "uploads": self.resource._uploads_enabled,
             "uploadMaxBytes": self.resource._upload_max_bytes if self.resource._uploads_enabled else None,
@@ -370,6 +439,7 @@ class MapperAdapter:
             "pageSize": self.resource.page_size,
             "showSearch": self.resource.show_search,
             "crudViews": self.resource.crud_views,
+            "crudSlots": self.resource.crud_slots,
             "fields": fields,
             "listFields": [
                 name for name in (self.resource.list_fields or list(self.columns)[:6])
@@ -432,6 +502,8 @@ class MapperAdapter:
                 raise AdminError(500, "label_factory must return a string", "invalid_label")
             return label
         title = self._title_field()
+        if self.composite and (title not in fields or title == self.pk_name):
+            return " / ".join(str(getattr(row, name)) for name in self.pk_names if name in fields)
         return str(getattr(row, title if title in fields else self.pk_name))
 
     def _guess_title(self) -> str:
@@ -444,7 +516,7 @@ class MapperAdapter:
         if not isinstance(payload, dict):
             raise AdminError(422, "Expected JSON object", "validation_error")
         unexpected = set(payload) - set(self.columns) - set(self.resource.virtual_fields)
-        forbidden = [name for name in payload if name in self.columns and not self.writable(name)]
+        forbidden = [name for name in payload if name in self.columns and not self.writable(name, create=create)]
         if unexpected or forbidden:
             raise AdminError(422, "Unknown or read-only fields", "validation_error", {
                 "fields": sorted(unexpected | set(forbidden))
@@ -477,7 +549,7 @@ class MapperAdapter:
                                  {"fields": missing_virtual})
             missing = [
                 name for name, col in self.columns.items()
-                if self.writable(name) and not col.nullable and col.default is None
+                if self.writable(name, create=True) and not col.nullable and col.default is None
                 and col.server_default is None and name not in out
             ]
             missing.extend(
@@ -509,7 +581,12 @@ class MapperAdapter:
             escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             return stmt.where(or_(*(func.lower(getattr(self.resource.model, name)).like(
                 f"%{escaped}%", escape="\\") for name in columns)))
-        if use_title and title == self.pk_name and searchable(title):
+        if use_title and self.composite and all(searchable(name) for name in self.pk_names):
+            try:
+                return stmt.where(self.identity_predicate(query))
+            except AdminError:
+                pass
+        if use_title and not self.composite and title == self.pk_name and searchable(title):
             try:
                 return stmt.where(getattr(self.resource.model, self.pk_name) == self.pk_value(query))
             except AdminError:
@@ -549,7 +626,11 @@ class MapperAdapter:
             key = getattr(self.resource.model, sort)
         else:
             key = getattr(self.resource.model, self.pk_name)
-        stmt = stmt.order_by(key.desc() if desc else key.asc()).limit(limit).offset(offset)
+        order = [key]
+        if self.composite:
+            order.extend(getattr(self.resource.model, name) for name in self.pk_names
+                         if name != (sort or self.pk_name))
+        stmt = stmt.order_by(*(item.desc() if desc else item.asc() for item in order)).limit(limit).offset(offset)
         result = await maybe_await(session.execute(stmt))
         serialized = []
         for row in result.scalars().all():
@@ -560,7 +641,7 @@ class MapperAdapter:
     async def get(self, session: Any, identifier: str, principal: Principal, *,
                   lock: bool | None = None) -> Any:
         stmt = await self._scope(
-            select(self.resource.model).where(getattr(self.resource.model, self.pk_name) == self.pk_value(identifier)),
+            select(self.resource.model).where(self.identity_predicate(identifier)),
             principal,
         )
         if lock is not None:
@@ -577,50 +658,119 @@ class MapperAdapter:
             return
         from .audit import AuditEntry
         session.add(AuditEntry(
-            resource=self.resource.name, record_id=str(getattr(record, self.pk_name)),
+            resource=self.resource.name, record_id=self.persisted_identifier(record, 150),
             actor_id=str(principal.id) if principal is not None else "system",
             operation=operation, field_names=sorted(set(field_names)),
         ))
 
-    async def _stage_create(self, session: Any, payload: dict[str, Any]) -> Any:
+    @asynccontextmanager
+    async def _handler_transaction(self, session: Any):
+        # Application handlers are trusted code, but the framework owns commit.
+        if not session.in_transaction():
+            await maybe_await(session.begin())
+        target = getattr(session, "sync_session", session)
+        def reject_commit(_session):
+            raise AdminError(500, "CRUD handlers must not commit transactions", "handler_transaction_error")
+        created: list[Any] = []
+        rolled_back = False
+        def remember_new(_session, instance):
+            created.append(instance)
+        def remember_rollback(_session):
+            nonlocal rolled_back
+            rolled_back = True
+        event.listen(target, "before_commit", reject_commit)
+        event.listen(target, "pending_to_persistent", remember_new)
+        event.listen(target, "after_rollback", remember_rollback)
+        try:
+            async with self._transaction_errors(session):
+                yield created
+                if rolled_back:
+                    raise AdminError(500, "CRUD handlers must not roll back transactions", "handler_transaction_error")
+        finally:
+            event.remove(target, "before_commit", reject_commit)
+            event.remove(target, "pending_to_persistent", remember_new)
+            event.remove(target, "after_rollback", remember_rollback)
+
+    async def _stage_create(self, session: Any, payload: dict[str, Any],
+                            principal: Principal | None = None, *, context: OperationContext | None = None) -> Any:
         parsed = self.parsed_payload(payload, create=True)
+        if context is not None:
+            context.payload = parsed.copy()
         mapped = {key: value for key, value in parsed.items() if key in self.columns}
         for key, factory in self.resource._server_defaults.items():
             mapped[key] = factory()
-        record = self.resource.model(**mapped)
+        if self.resource.create_handler is not None:
+            ctx = context or OperationContext("create", self.resource.name, principal, session, payload=parsed.copy())
+            async with self._handler_transaction(session) as created:
+                record = await maybe_await(self.resource.create_handler(ctx))
+                if not isinstance(record, self.resource.model):
+                    raise AdminError(500, "create_handler must return a mapped resource instance", "handler_output_error")
+                state = inspect(record)
+                if (state.deleted or state.detached or (state.persistent and not any(row is record for row in created))
+                        or (state.session is not None and state.session is not getattr(session, "sync_session", session))):
+                    raise AdminError(500, "create_handler must return a new instance in the current session", "handler_output_error")
+                for key in self.resource._server_defaults:
+                    setattr(record, key, mapped[key])
+        else:
+            record = self.resource.model(**mapped)
         for key, value in parsed.items():
             if key in self.resource.virtual_fields:
                 await maybe_await(self.resource.virtual_fields[key].setter(record, value))
         session.add(record)
+        if context is not None:
+            context.record = record
+            context.payload = parsed.copy()
         return record
 
     async def _flush_create(self, session: Any, record: Any, payload: dict[str, Any],
                             principal: Principal | None) -> None:
         async with self._transaction_errors(session):
             await maybe_await(session.flush())
+        if self.resource._uploads_enabled:
+            self.persisted_identifier(record, 120)
         await self._audit(session, record, "create", principal, list(payload))
 
     async def create(self, session: Any, payload: dict[str, Any],
                      principal: Principal | None = None) -> dict[str, Any]:
-        record = await self._stage_create(session, payload)
-        if self.resource._audit_enabled:
+        record = await self._stage_create(session, payload, principal)
+        if self.resource._audit_enabled or self.resource._uploads_enabled:
             await self._flush_create(session, record, payload, principal)
         await self._commit(session)
         await maybe_await(session.refresh(record))
         return self.serialize(record)
 
     async def _stage_update(self, session: Any, record: Any, payload: dict[str, Any],
-                            principal: Principal | None) -> set[str]:
-        for name, value in self.parsed_payload(payload, create=False).items():
+                            principal: Principal | None, *, context: OperationContext | None = None) -> set[str]:
+        parsed = self.parsed_payload(payload, create=False)
+        if context is not None:
+            context.payload = parsed.copy()
+        before = None
+        if self.resource.update_handler is not None:
+            from copy import deepcopy
+            before = {name: deepcopy(getattr(record, name)) for name in self.columns}
+            identity = tuple(getattr(record, name) for name in self.pk_names)
+            ctx = context or OperationContext("update", self.resource.name, principal, session, record=record, payload=parsed.copy())
+            async with self._handler_transaction(session):
+                await maybe_await(self.resource.update_handler(ctx))
+                state = inspect(record)
+                if (ctx.record is not record or state.deleted or state.detached or not state.persistent or record in session.deleted
+                        or tuple(getattr(record, name) for name in self.pk_names) != identity):
+                    raise AdminError(500, "update_handler cannot replace or delete the resource identity", "handler_output_error")
+        for name, value in parsed.items():
             if name in self.resource.virtual_fields:
                 await maybe_await(self.resource.virtual_fields[name].setter(record, value))
-            else:
+            elif self.resource.update_handler is None:
                 setattr(record, name, value)
         for key, factory in self.resource._server_onupdate.items():
             setattr(record, key, factory())
+        if context is not None:
+            context.payload = parsed.copy()
         await self._audit(session, record, "update", principal, list(payload))
         state = inspect(record)
-        return {name for name in self.columns if state.attrs[name].history.has_changes()}
+        changed = {name for name in self.columns if state.attrs[name].history.has_changes()}
+        if before is not None:
+            changed.update(name for name in self.columns if getattr(record, name) != before[name])
+        return changed
 
     async def update(self, session: Any, record: Any, payload: dict[str, Any],
                      principal: Principal | None = None) -> dict[str, Any]:
@@ -663,17 +813,16 @@ class MapperAdapter:
     ) -> list[dict[str, Any]]:
         if len(query) > 200:
             raise AdminError(422, "Search text too long", "validation_error")
-        if self.pk_name not in allowed_fields:
+        if not set(self.pk_names).issubset(allowed_fields):
             return []
-        key = getattr(self.resource.model, self.pk_name)
         stmt = select(self.resource.model)
         if ids:
             if len(ids) > 100:
                 raise AdminError(422, "Too many selected IDs", "validation_error")
-            stmt = stmt.where(key.in_([self.pk_value(value) for value in ids]))
+            stmt = stmt.where(self.identities_predicate(ids))
         elif query:
             stmt = self._search(stmt, query, allowed_fields, use_title=True)
-        stmt = (await self._scope(stmt, principal)).order_by(key)
+        stmt = (await self._scope(stmt, principal)).order_by(*self.identity_order())
         options: list[dict[str, Any]] = []
         limit = min(limit, 100)
         offset = 0
@@ -682,9 +831,9 @@ class MapperAdapter:
             rows = (await maybe_await(session.execute(stmt.limit(batch_size).offset(offset)))).scalars().all()
             for row in rows:
                 fields = await per_record_fields(row)
-                if fields is None or self.pk_name not in fields:
+                if fields is None or not set(self.pk_names).issubset(fields):
                     continue
-                options.append({"value": jsonable_encoder(getattr(row, self.pk_name)),
+                options.append({"value": self.record_identifier(row) if self.composite else jsonable_encoder(getattr(row, self.pk_name)),
                                 "label": self._label(row, fields)})
                 if len(options) == limit:
                     break
@@ -718,7 +867,7 @@ class MapperAdapter:
             select(func.count()).select_from(stmt.order_by(None).subquery())
         ))).scalar_one()
         results = await maybe_await(session.execute(
-            stmt.order_by(getattr(target.resource.model, target.pk_name)).offset(offset).limit(min(limit, 100))
+            stmt.order_by(*target.identity_order()).offset(offset).limit(min(limit, 100))
         ))
         items = []
         for row in results.scalars():

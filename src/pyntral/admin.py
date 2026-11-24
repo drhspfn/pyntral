@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from html import escape
 import hmac
 from copy import deepcopy
 from inspect import iscoroutinefunction
@@ -18,7 +19,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -34,7 +35,7 @@ from .events import (
 )
 from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
-from .sidebar import SidebarConfig, icon_metadata
+from .sidebar import SidebarConfig, SvgIcon, icon_metadata
 from .login import LoginConfig
 from .hooks import OperationContext
 from .realtime import RealtimeNotifier
@@ -42,7 +43,7 @@ from .jobs import JobManager
 from .validation import validate_payload
 from .sessions import MemorySessionStore, SessionIdentity, SessionStore
 from .storage import _PENDING_DELETE_RECORD, StorageBackend, UploadEntry, safe_upload_name, normalize_mime
-from .bridge import Bridge, BridgeContext
+from .bridge import Bridge, BridgeContext, BridgeFile
 from .logging import (LoggingConfig, configure_logging, emit as emit_log, request_id_var)
 from pydantic import ValidationError
 
@@ -75,6 +76,7 @@ class Admin:
         enable_jobs: bool = True,
         dist_dir: str | Path | None = None,
         title: str = "Pyntral",
+        favicon: SvgIcon | Path | None = None,
         theme: dict[str, Any] | None = None,
         default_theme: str = "system",  # system | light | dark
         animations: bool = True,
@@ -187,6 +189,8 @@ class Admin:
         if sidebar is not None and not isinstance(sidebar, SidebarConfig):
             raise TypeError("sidebar must be SidebarConfig")
         self.sidebar = sidebar if sidebar is not None else SidebarConfig()
+        inherited_icon = self.sidebar.header.icon if self.sidebar.header else None
+        self.favicon = self._prepare_favicon(favicon if favicon is not None else (inherited_icon if isinstance(inherited_icon, SvgIcon) else None))
         if login is not None and not isinstance(login, LoginConfig):
             raise TypeError("login must be LoginConfig")
         self.login_config = login if login is not None else LoginConfig()
@@ -468,7 +472,7 @@ class Admin:
                 # a hidden row value would otherwise be inferable by a query oracle.
                 if not edit and field.read_when is not None and view in ("filter", "search"):
                     continue
-            if edit and not adapter.writable(field_name):
+            if edit and not adapter.writable(field_name, create=view == "create"):
                 continue
             override = adapter.view_config(field_name, view or ("edit" if edit else "show"))
             if edit and override and override.readonly is True:
@@ -496,25 +500,35 @@ class Admin:
         return allowed
 
     async def _verify_foreign_keys(self, session: Any, principal: Principal,
-                                   adapter: MapperAdapter, payload: dict) -> None:
+                                   adapter: MapperAdapter, payload: dict, *, record: Any = None) -> None:
+        from .orm import convert_value
         for prop in adapter.relations.values():
             if prop.direction.name != "MANYTOONE":
                 continue
-            target = adapter._related_resource(prop, self.resources)
-            for field_name, col in adapter.columns.items():
-                if field_name not in payload or not any(col is c for c in prop.local_columns):
-                    continue
-                if target is None or not await self._can(principal, target, "select"):
-                    raise AdminError(403, "Related resource cannot be selected", "forbidden")
-                if payload[field_name] is not None:
-                    try:
-                        row = await self._adapter(target).get(session, str(payload[field_name]), principal)
-                        if not await self._can(principal, target, "select", row):
-                            raise AdminError(404, "Related record not found", "not_found")
-                    except AdminError as exc:
-                        if exc.status == 404:
-                            raise AdminError(409, "Related record is not selectable", "integrity_error") from None
-                        raise
+            pairs = [(name, remote) for local, remote in prop.local_remote_pairs
+                     for name, column in adapter.columns.items() if column is local and local in prop.local_columns]
+            if not any(name in payload for name, _ in pairs):
+                continue
+            target_name = adapter._related_resource(prop, self.resources)
+            if target_name is None or not await self._can(principal, target_name, "select"):
+                raise AdminError(403, "Related resource cannot be selected", "forbidden")
+            target = self._adapter(target_name)
+            values = [convert_value(adapter.columns[name], payload[name]) if name in payload
+                      else getattr(record, name, None) for name, _ in pairs]
+            if all(value is None for value in values):
+                continue
+            if any(value is None for value in values):
+                raise AdminError(422, "Supply all components of the related key", "validation_error")
+            predicates = []
+            for (_, remote), value in zip(pairs, values):
+                remote_name = next((name for name, column in target.columns.items() if column is remote), None)
+                if remote_name is None:
+                    raise AdminError(409, "Related resource key is not mapped", "integrity_error")
+                predicates.append(getattr(target.resource.model, remote_name) == value)
+            stmt = await target._scope(select(target.resource.model).where(*predicates), principal)
+            rows = (await maybe_await(session.execute(stmt.limit(2)))).scalars().all()
+            if len(rows) != 1 or not await self._can(principal, target_name, "select", rows[0]):
+                raise AdminError(409, "Related record is not selectable", "integrity_error")
 
     async def _create_record(
         self, session: Any, adapter: MapperAdapter, principal: Principal, payload: dict,
@@ -524,7 +538,7 @@ class Admin:
         write_fields = await self._allowed_fields(principal, name, edit=True, view="create")
         rejected = set(payload) - write_fields
         if rejected:
-            if all(field in adapter.columns and not adapter.writable(field) for field in rejected):
+            if all(field in adapter.columns and not adapter.writable(field, create=True) for field in rejected):
                 raise AdminError(422, "Unknown or read-only fields", "validation_error",
                                  {"fields": sorted(rejected)})
             raise AdminError(403, "Cannot write one or more fields", "forbidden")
@@ -534,13 +548,16 @@ class Admin:
         if set(ctx.payload) - write_fields:
             raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
         await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
-        record = await adapter._stage_create(session, ctx.payload)
+        record = await adapter._stage_create(session, ctx.payload, principal, context=ctx)
         if members is not None:
             members.append(record)
         await adapter._flush_create(session, record, ctx.payload, principal)
         await maybe_await(session.refresh(record))
-        record_id = getattr(record, adapter.pk_name)
-        identifier = str(record_id)
+        identifier = adapter.record_identifier(record)
+        record_id = identifier if adapter.composite else getattr(record, adapter.pk_name)
+        if adapter.resource.create_handler is not None:
+            await self._verify_foreign_keys(session, principal, adapter,
+                {field: getattr(record, field) for field in adapter.foreign_key_fields})
         if adapter.resource.scope is not None:
             await adapter.get(session, identifier, principal)
         if members is not None:
@@ -664,6 +681,26 @@ class Admin:
             return local
         return (Path(__file__).parent / "web_dist").resolve()
 
+    @staticmethod
+    def _prepare_favicon(icon: SvgIcon | Path | None) -> tuple[bytes, str] | None:
+        if icon is None:
+            return None
+        if isinstance(icon, SvgIcon):
+            return icon.svg.encode("utf-8"), "image/svg+xml"
+        if not isinstance(icon, Path):
+            raise TypeError("favicon must be SvgIcon, Path or None")
+        if not icon.is_file() or icon.stat().st_size > 256 * 1024:
+            raise ValueError("Favicon must be an existing file no larger than 256 KiB")
+        data = icon.read_bytes()
+        if icon.suffix.lower() == ".svg":
+            svg = SvgIcon(data.decode("utf-8"))
+            return svg.svg.encode("utf-8"), "image/svg+xml"
+        if icon.suffix.lower() == ".png" and data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return data, "image/png"
+        if icon.suffix.lower() == ".ico" and data.startswith(b"\x00\x00\x01\x00"):
+            return data, "image/x-icon"
+        raise ValueError("Favicon must be a valid SVG, PNG or ICO file")
+
     def _register_routes(self) -> None:
         api = self.api
 
@@ -723,7 +760,7 @@ class Admin:
         async def login_config() -> dict:
             # Explicit public presentation contract. Do not expose resource metadata,
             # bridges, principals, credentials or per-principal resolver output here.
-            return {"login": self.login_config.metadata(self.title, self.sidebar.header),
+            return {"title": self.title, "login": self.login_config.metadata(self.title, self.sidebar.header),
                     "theme": {"default": self.default_theme, "animations": self.animations,
                               "tokens": {mode: dict(self.theme.get(mode, {})) for mode in ("light", "dark")}},
                     "localization": {"code": self.default_locale,
@@ -859,26 +896,29 @@ class Admin:
                     "delete": permitted and await self._can(principal, name, "delete"),
                 }
                 if not permitted:
-                    metadata.update(fields=[], listFields=[], searchFields=[], relationships=[], actions=[], jobs=[])
+                    metadata.update(fields=[], listFields=[], searchFields=[], relationships=[], actions=[], jobs=[], crudSlots={})
                 else:
                     read_fields = await self._allowed_fields(principal, name)
-                    edit_fields = await self._allowed_fields(principal, name, edit=True)
+                    edit_fields = await self._allowed_fields(principal, name, edit=True, view="edit")
+                    create_fields = await self._allowed_fields(principal, name, edit=True, view="create")
                     # Write-only virtual fields must remain in create/edit forms,
                     # but never become readable list/show fields or filter targets.
                     # Read and write permissions are independent here.
                     metadata["fields"] = [f for f in metadata["fields"]
-                                          if f["name"] in read_fields or f["name"] in edit_fields]
+                                          if f["name"] in read_fields or f["name"] in edit_fields or f["name"] in create_fields]
                     for field in metadata["fields"]:
                         field["readonly"] = (field["readonly"] or
                             not (metadata["capabilities"]["edit"] or metadata["capabilities"]["create"])
-                            or field["name"] not in edit_fields)
+                            or field["name"] not in (edit_fields | create_fields))
                         if field["relation"] and not can_select.get(field["relation"]["resource"], False):
                             field["relation"] = None
                     for field in metadata["fields"]:
                         for view, option in field["views"].items():
-                            allowed = (field["name"] in edit_fields if view in ("create", "edit")
-                                       else field["name"] in read_fields)
+                            allowed = (field["name"] in create_fields if view == "create" else
+                                       field["name"] in edit_fields if view == "edit" else field["name"] in read_fields)
                             option["visible"] = option["visible"] and allowed
+                            if view in ("create", "edit"):
+                                option["readonly"] = option["readonly"] or not metadata["capabilities"][view] or not allowed
                     metadata["listFields"] = [n for n in metadata["listFields"] if n in read_fields]
                     metadata["searchFields"] = [n for n in metadata["searchFields"] if n in read_fields
                         and (n not in adapter.resource.fields or adapter.resource.fields[n].read_when is None)]
@@ -987,15 +1027,45 @@ class Admin:
                 raise AdminError(404, "Bridge not found", "not_found")
             if (bridge.min_role is not None and not self._role_ok(principal, bridge.min_role)) or not await maybe_await(self.auth.authorize(principal, "bridge:" + name, "invoke")):
                 raise AdminError(403, "Permission denied", "forbidden")
-            payload = await self._body(request)
+            uploaded = None
+            if bridge.upload is None:
+                payload = await self._body(request)
+            else:
+                raw_input = request.headers.get("X-Pyntral-Input", "%7B%7D")
+                if len(raw_input) > 8192:
+                    raise AdminError(413, "Bridge upload metadata too large", "request_too_large")
+                try:
+                    payload = json.loads(unquote(raw_input, errors="strict"))
+                    if not isinstance(payload, dict):
+                        raise ValueError("Expected JSON object")
+                except (ValueError, UnicodeError, RecursionError):
+                    raise AdminError(422, "Invalid bridge upload metadata", "validation_error") from None
+                if not request.headers.get("X-Filename"):
+                    raise AdminError(422, "Expected a file upload", "validation_error")
+                filename = safe_upload_name(unquote(request.headers["X-Filename"]))
+                try:
+                    mime = normalize_mime(request.headers.get("Content-Type", ""), filename)
+                except ValueError:
+                    raise AdminError(422, "Invalid content type", "validation_error") from None
+                if not bridge.upload.accepts(mime):
+                    raise AdminError(415, "Unsupported upload content type", "unsupported_media_type")
             try:
                 parsed = bridge.input_model.model_validate(payload)
             except ValidationError as exc:
                 raise AdminError(422, "Invalid bridge input", "validation_error", exc.errors(
                     include_url=False, include_context=False, include_input=False)) from None
+            if bridge.upload is not None:
+                content = bytearray()
+                async for chunk in request.stream():
+                    if len(content) + len(chunk) > bridge.upload.max_bytes:
+                        raise AdminError(413, "Bridge upload too large", "upload_too_large")
+                    content.extend(chunk)
+                if not content:
+                    raise AdminError(422, "Upload must not be empty", "validation_error")
+                uploaded = BridgeFile(filename, mime, bytes(content))
             session = self.session_factory()
             try:
-                output = await maybe_await(bridge.handler(parsed, BridgeContext(principal, session)))
+                output = await maybe_await(bridge.handler(parsed, BridgeContext(principal, session, uploaded)))
                 try:
                     validated = bridge.output_model.model_validate(output)
                 except ValidationError as exc:
@@ -1024,7 +1094,7 @@ class Admin:
             try:
                 await self._begin_upload_transaction(session, write=False)
                 adapter, record = await _upload_owner(name, identifier, principal, session, lock=False)
-                record_id = str(getattr(record, adapter.pk_name))
+                record_id = adapter.persisted_identifier(record, 120)
                 rows = (await maybe_await(session.execute(select(UploadEntry).where(
                     UploadEntry.resource == name, UploadEntry.record_id == record_id
                 ).order_by(UploadEntry.id).limit(100)))).scalars().all()
@@ -1061,7 +1131,7 @@ class Admin:
                     await self.storage.put(key, bytes(content), mime)
                     await self._begin_upload_transaction(session, write=True)
                     _, record = await _upload_owner(name, identifier, principal, session, edit=True, lock=True)
-                    record_id = str(getattr(record, adapter.pk_name))
+                    record_id = adapter.persisted_identifier(record, 120)
                     session.add(UploadEntry(
                         id=upload_id, resource=name, record_id=record_id, object_key=key,
                         filename=filename, content_type=mime, size_bytes=len(content),
@@ -1090,7 +1160,7 @@ class Admin:
             # Reload the entry while holding the lock and reject legacy noncanonical links.
             live = (await maybe_await(session.execute(select(UploadEntry).where(
                 UploadEntry.id == upload_id, UploadEntry.resource == adapter.resource.name,
-                UploadEntry.record_id == str(getattr(owner, adapter.pk_name)),
+                UploadEntry.record_id == adapter.persisted_identifier(owner, 120),
             )))).scalar_one_or_none()
             if live is None:
                 raise AdminError(404, "Upload not found", "not_found")
@@ -1178,13 +1248,13 @@ class Admin:
                 if adapter.resource.actions:
                     # Evaluated against the actual scoped ORM records; no frontend-only ACL.
                     result["actionsByRecord"] = {}
-                    if result["items"]:
-                        ids = [adapter.pk_value(str(item[adapter.pk_name])) for item in result["items"]]
+                    ids = [str(item[adapter.identity_field]) for item in result["items"] if adapter.identity_field in item]
+                    if ids:
                         stmt = await adapter._scope(select(adapter.resource.model).where(
-                            getattr(adapter.resource.model, adapter.pk_name).in_(ids)), principal)
+                            adapter.identities_predicate(ids)), principal)
                         records = (await maybe_await(session.execute(stmt))).scalars().all()
                         for record in records:
-                            result["actionsByRecord"][str(getattr(record, adapter.pk_name))] = (
+                            result["actionsByRecord"][adapter.record_identifier(record)] = (
                                 await self._visible_actions(principal, name, record)
                             )
                 return result
@@ -1429,17 +1499,26 @@ class Admin:
                         raise AdminError(422, "Unknown or read-only fields", "validation_error",
                                          {"fields": sorted(rejected)})
                     raise AdminError(403, "Cannot write one or more fields", "forbidden")
+                identity = adapter.record_identifier(record)
                 ctx = OperationContext("update", name, principal, session, record=record,
                                        payload=payload.copy())
                 await self._run_hooks(adapter, "before_update", ctx)
                 ctx.payload = validate_payload(adapter.resource.edit_schema, ctx.payload)
                 if set(ctx.payload) - write_fields:
                     raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
-                await self._verify_foreign_keys(session, principal, adapter, ctx.payload)
-                changed = await adapter._stage_update(session, record, ctx.payload, principal)
+                await self._verify_foreign_keys(session, principal, adapter, ctx.payload, record=record)
+                changed = await adapter._stage_update(session, record, ctx.payload, principal, context=ctx)
+                identifier = identity
                 async with adapter._transaction_errors(session):
                     await maybe_await(session.flush())
                 await maybe_await(session.refresh(record))
+                if adapter.record_identifier(record) != identity:
+                    raise AdminError(422, "Primary key components cannot be changed", "validation_error")
+                if adapter.resource.update_handler is not None:
+                    await self._verify_foreign_keys(session, principal, adapter,
+                        {field: getattr(record, field) for field in adapter.foreign_key_fields & changed}, record=record)
+                if adapter.resource.scope is not None:
+                    await adapter.get(session, identity, principal)
                 read_fields = await self._allowed_fields(principal, name, view="show", record=record)
                 response = JSONResponse({"record": adapter.serialize(record, read_fields)})
                 await adapter._commit(session)
@@ -1470,6 +1549,7 @@ class Admin:
                     await self._begin_upload_transaction(session, write=True)
                 record = await adapter.get(session, identifier, principal, lock=True if has_uploads else None)
                 await self._authorize(principal, name, "delete", record)
+                identifier = adapter.record_identifier(record)
                 self._require_version(adapter, record, request)
                 ctx = OperationContext("delete", name, principal, session, record=record)
                 await self._run_hooks(adapter, "before_delete", ctx)
@@ -1477,7 +1557,7 @@ class Admin:
                     async with adapter._transaction_errors(session):
                         await maybe_await(session.execute(update(UploadEntry).where(
                             UploadEntry.resource == name,
-                            UploadEntry.record_id == str(getattr(record, adapter.pk_name)),
+                            UploadEntry.record_id == adapter.persisted_identifier(record, 120),
                         ).values(record_id=_PENDING_DELETE_RECORD)))
                 await adapter.delete(session, record, principal)
                 if has_uploads:
@@ -1508,6 +1588,7 @@ class Admin:
             try:
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "action:" + action_name, record)
+                identifier = adapter.record_identifier(record)
                 if action.kind != "record" or action_name not in await self._visible_actions(principal, name, record):
                     raise AdminError(403, "Action unavailable for this record", "forbidden")
                 payload = await self._body(request)
@@ -1545,7 +1626,7 @@ class Admin:
             relationship_attr = getattr(adapter.resource.model, relation_name)
             statement = await adapter._scope(select(adapter.resource.model).options(
                 selectinload(relationship_attr)).where(
-                    getattr(adapter.resource.model, adapter.pk_name) == adapter.pk_value(identifier)), principal)
+                    adapter.identity_predicate(identifier)), principal)
             parent = (await maybe_await(session.execute(statement))).scalar_one_or_none()
             if parent is None:
                 raise AdminError(404, "Record not found", "not_found")
@@ -1567,7 +1648,7 @@ class Admin:
                 related = await target.get(session, str(payload["id"]), principal)
                 await self._authorize(principal, target.resource.name, "select", related)
                 members = getattr(parent, relation_name)
-                if not any(getattr(row, target.pk_name) == getattr(related, target.pk_name) for row in members):
+                if not any(target.identity_values(row) == target.identity_values(related) for row in members):
                     members.append(related)
                     await parent_adapter._commit(session)
                     await self._publish(ResourceUpdated(
@@ -1592,13 +1673,11 @@ class Admin:
                     name, identifier, relation_name, principal, session)
                 await self._authorize(principal, target.resource.name, "select")
                 members = getattr(parent, relation_name)
-                pk = target.pk_value(str(payload["id"]))
-                match = next((row for row in members if getattr(row, target.pk_name) == pk), None)
-                if match is None:
-                    raise AdminError(404, "Relationship link not found", "not_found")
-                # Target ACL/scope also applies when detaching a link.
                 scoped = await target.get(session, str(payload["id"]), principal)
                 await self._authorize(principal, target.resource.name, "select", scoped)
+                match = next((row for row in members if target.identity_values(row) == target.identity_values(scoped)), None)
+                if match is None:
+                    raise AdminError(404, "Relationship link not found", "not_found")
                 members.remove(match)
                 await parent_adapter._commit(session)
                 await self._publish(ResourceUpdated(
@@ -1664,6 +1743,18 @@ class Admin:
             finally:
                 await maybe_await(session.close())
 
+        @api.get("/auth/favicon", include_in_schema=False)
+        @api.get("/favicon.svg", include_in_schema=False)
+        async def favicon_image() -> Response:
+            headers = {"Cache-Control": "no-store", "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'"}
+            if self.favicon is not None:
+                data, media_type = self.favicon
+                return Response(data, media_type=media_type, headers=headers)
+            for candidate in (self._dist() / "favicon.svg", Path(__file__).parent / "ui" / "public" / "favicon.svg"):
+                if candidate.is_file():
+                    return FileResponse(candidate, media_type="image/svg+xml", headers=headers)
+            raise AdminError(404, "Favicon not found", "not_found")
+
         @api.get("/{asset_path:path}", include_in_schema=False)
         async def spa(asset_path: str, request: Request) -> Any:
             dist = self._dist()
@@ -1673,7 +1764,7 @@ class Admin:
                     content={"error": {"code": "ui_not_built", "message":
                         "Pyntral SPA assets are missing. Install an official wheel or build custom UI with: pyntral build"}},
                 )
-            if asset_path.startswith("assets/") or asset_path in ("favicon.svg",):
+            if asset_path.startswith("assets/"):
                 candidate = (dist / asset_path).resolve()
                 if not candidate.is_relative_to(dist) or not candidate.is_file():
                     raise AdminError(404, "Asset not found", "not_found")
@@ -1683,6 +1774,13 @@ class Admin:
             html = (dist / "index.html").read_text(encoding="utf-8")
             mount = quote(request.scope.get("root_path", self.path).rstrip("/") + "/", safe="/")
             html = html.replace('<base data-pyntral-base href="./"', f'<base data-pyntral-base href="{mount}"', 1)
+            html = re.sub(r"<title>.*?</title>", lambda _: f"<title>{escape(self.title)}</title>",
+                          html, count=1, flags=re.DOTALL | re.IGNORECASE)
+            # Support both old custom bundles and the current template; use
+            # the mount-aware endpoint and let the browser detect image type.
+            html = re.sub(r'<link\b(?=[^>]*\brel=["\']icon["\'])[^>]*>',
+                          lambda _: f'<link rel="icon" href="{mount}auth/favicon" />',
+                          html, count=1, flags=re.IGNORECASE)
             return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
         @api.get("/", include_in_schema=False)

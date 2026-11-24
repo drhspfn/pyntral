@@ -10,7 +10,7 @@ This page summarizes the public interfaces available in the current beta. For pr
 from pyntral import (
     Admin, Resource, Field, Relationship, Action, Page, NavigationGroup,
     SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec, LoginConfig,
-    RoleAccess, Bridge, BridgeContext, ResourceHook, VirtualField, FieldDependency,
+    RoleAccess, Bridge, BridgeContext, BridgeUpload, BridgeFile, ResourceHook, OperationContext, VirtualField, FieldDependency,
     FieldView, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature,
     TimestampFeature, AuditFeature, UploadFeature, LocalStorage, S3Storage,
     Principal, CallbackAuth, LocalAuth, ModelAuth, hash_password, verify_password,
@@ -32,7 +32,7 @@ Admin(
     path="/admin", secure_cookie=True, session_cookie="pyntral_session",
     session_cookie_path="/", session_max_age=43200, session_store=None,
     require_async_sessions=False, enable_jobs=True, dist_dir=None,
-    title="Pyntral", theme=None, default_theme="system",
+    title="Pyntral", favicon=None, theme=None, default_theme="system",
     animations=True, show_dashboard=True, sidebar=None, login=None, role_weights=None,
     logging_config=None, event_bus=None, auto_start_events=True,
     event_publish_timeout=2.0, max_json_bytes=1048576, storage=None,
@@ -55,14 +55,17 @@ Key methods:
 
 ### Configuration types
 
-- `Resource`: model, name, label, icon, navigation/order, list/search fields, field overrides, actions, page size, title/visible label, relationship settings, layouts, scope, access policy and CRUD capability flags. See [resources](resources.md).
+- `Resource`: model, name, label, icon, navigation/order, list/search fields, field overrides, actions, page size, title/visible label, relationship settings, layouts, crud_views, crud_slots, create_handler, update_handler, hooks, scope, access policy and CRUD capability flags. See [resources](resources.md).
 - `Field`: label, visible, readonly, required, widget, help, options, components, span, read/write roles, filter operators and width.
 - `Relationship`: visible, label, selectable, layout (`table`/`cards`).
 - `Action`: name, handler, label, variant, confirmation, position, appearance, component, dialog, icon, visible.
 - `Page`: name, label, component, icon, navigation, order, min_role.
 - `NavigationGroup`: path, icon, order.
 - `RoleAccess`: read/select/write/create/edit/delete thresholds and navigation state.
-- `Bridge`: name, input_model, output_model, handler, description, min_role.
+- `Bridge`: name, input_model, output_model, handler, description, min_role, optional upload.
+- `BridgeUpload`: max_bytes (default 5 MiB, range 1–64 MiB), content_types (default application/octet-stream; exact types or type/*).
+- `BridgeFile`: filename, content_type, content (bytes). BridgeContext.file is None for JSON bridges.
+- `OperationContext`: operation, resource, principal, session, record, payload, action, records.
 - `Principal`: id, username, roles, display_name, email, attributes; `as_dict()` includes `name`/`role`.
 - `LoggingConfig`: level, channels, events, http, slow_request_ms and optional principal/record identifiers.
 - Event classes: immutable metadata-only Pydantic envelopes; buses implement `EventTransport` lifecycle and publication.
@@ -180,7 +183,7 @@ require CSRF protection.
 ### Public GET /auth/config
 
 This endpoint is intentionally unauthenticated and returns only presentation
-metadata: `login`, `theme`, and `localization`. It uses the same theme shape as
+metadata: `title`, `login`, `theme`, and `localization`. It uses the same theme shape as
 the authenticated schema (`default`, `animations`, `tokens.light`,
 `tokens.dark`) but does not evaluate per-principal resolvers. Login metadata
 uses camelCase versions of the parameters above, with the brand resolved to
@@ -240,7 +243,7 @@ The response includes `items`, `total`, and may include `actionsByRecord`; exact
 - `PATCH /api/resources/{name}/{id}`: partial JSON column values; success returns `{ "record": { ... } }`.
 - `DELETE /api/resources/{name}/{id}`: returns `{ "ok": true }`.
 - Actions return a JSON result from the handler wrapped by the API; consult the example and actual route code if building a custom client.
-- Bridges accept a JSON object matching the declared Pydantic input model and return `{ "result": ... }`.
+- JSON bridges accept a Pydantic input object; binary bridges accept raw bytes with X-Filename and X-Pyntral-Input headers. Both return `{ "result": ... }`. See [binary RPC](bridges.md#binary-uploads-with-typed-rpc).
 - Versioned resources require `If-Match` for PATCH and DELETE. A missing version returns HTTP 428 and a stale one returns HTTP 412.
 - Attachment POST accepts a binary body, an optional `X-Filename` header and a content type. See [upload limits and storage](resources.md#secure-resource-uploads).
 
@@ -255,3 +258,22 @@ The bundle's `@pyntral/api` helper attaches same-origin cookies and the CSRF tok
 Events include a stable event ID, UTC timestamp, optional correlation and actor IDs, resource and record identifiers, and fields containing only field names and schema kinds. They are versioned for broker transport in [`transports/base.py`](../src/pyntral/transports/base.py).
 
 See [events](events.md) for the delivery/ACK contract and [bridges](bridges.md) for automatically generated TypeScript DTO bindings.
+
+## Consumer extension APIs
+
+- `Resource(crud_slots={"list": {"before": "component"}, "show": {"after": "component"}})`: additive CRUD extensions, alongside the existing `crud_views`; see [composition](extensions.md#compose-standard-crud-views).
+- `Resource(create_handler=callback, update_handler=callback)`: transactional domain handlers receiving `OperationContext`; see [custom writes](resources.md#custom-transactional-writes).
+- Composite-key resources expose `primaryKeys: string[]`, `primaryKey: "__pyntral_id"` and opaque row IDs for CRUD operations; see [composite keys](resources.md#composite-primary-keys).
+- `Bridge(upload=BridgeUpload(max_bytes=..., content_types=(...)))`: opt-in raw binary input with typed metadata; `BridgeContext.file` is a `BridgeFile` or None. See [binary uploads](bridges.md#binary-uploads-with-typed-rpc).
+- Public React components: `Tabs`, `TabList`, `Tab`, `TabPanel`, `Table`, `DataTable`. See [UI reference](ui.md#tabs-and-tables).
+
+### Browser branding and HTTP client
+
+`Admin(favicon=SvgIcon | Path | None)` accepts a configured SVG or SVG/PNG/ICO
+file and inherits the sidebar SVG if omitted. `GET /auth/config` also exposes
+the public application `title`. `GET /auth/favicon` serves the image; the
+legacy `/favicon.svg` route remains available. See [browser branding](ui.md#browser-title-and-favicon).
+
+`@pyntral/api` exports `api<T>`, `ApiError`, `buildQuery`, `base`, and the `ApiOptions` type.
+See [HTTP client](extensions.md#http-client-pyntralapi) for admin and host
+scope and security details.

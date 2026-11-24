@@ -31,6 +31,7 @@ def describe_resources(admin: Admin) -> dict[str, Any]:
         resources.append({
             "id": data["id"], "label": data["label"],
             "primary_key": data["primaryKey"],
+            "primary_keys": data.get("primaryKeys", [data["primaryKey"]]),
             "fields": fields,
             "relationships": [{"name": x["name"], "target": x["resource"],
                                "many": x["many"], "editable": x.get("editable", False)}
@@ -52,7 +53,7 @@ def render_markdown(data: dict[str, Any]) -> str:
              "Generated from Python registrations. Authorization and record scope are evaluated at request time.", ""]
     for resource in data["resources"]:
         lines.extend([f"## {cell(resource['id'])}", "",
-                      f"Display name: {cell(resource['label'])}; primary key: `{cell(resource['primary_key'])}`.",
+                      f"Display name: {cell(resource['label'])}; primary key: `{cell(', '.join(resource.get('primary_keys', [resource['primary_key']])))}`.",
                       "", "### Fields", "", "| Name | Type | Required | Readonly | Views |",
                       "| --- | --- | --- | --- | --- |"])
         for field in resource["fields"]:

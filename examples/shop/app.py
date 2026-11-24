@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 
 import os
 import random
@@ -20,7 +21,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, JSON, Numeric, String, Tabl
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 from pyntral import (
-    Action, Admin, Bridge, CallbackAuth, Field, FileUploadConfig, FieldDependency, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
+    Action, Admin, Bridge, BridgeUpload, CallbackAuth, Field, FileUploadConfig, FieldDependency, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
     SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, LoginConfig,
     ResourceUpdated, ResourceHook, VirtualField, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase, UploadFeature, LocalStorage, UploadBase,
 )
@@ -54,6 +55,13 @@ product_tags = Table(
 )
 
 
+class ProductTagLink(Base):
+    """Administrative projection of the existing association table."""
+    __table__ = product_tags
+    product: Mapped["Product"] = relationship(viewonly=True)
+    tag: Mapped["Tag"] = relationship(viewonly=True)
+
+
 class Tag(Base):
     __tablename__ = "tags"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -79,6 +87,15 @@ class Product(Base):
     active: Mapped[bool] = mapped_column(default=True)
     items: Mapped[list[OrderItem]] = relationship(back_populates="product")
     tags: Mapped[list[Tag]] = relationship(secondary=product_tags, back_populates="products")
+
+
+class ProductNote(Base):
+    """Editable composite-key example; the identity is fixed after creation."""
+    __tablename__ = "product_notes"
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), primary_key=True)
+    locale: Mapped[str] = mapped_column(String(16), primary_key=True)
+    note: Mapped[str] = mapped_column(String(200))
+    product: Mapped[Product] = relationship(viewonly=True)
 
 
 class Order(Base):
@@ -236,6 +253,12 @@ def seed() -> None:
     seed_agents()
     seed_tags()
     with SessionLocal() as session:
+        if session.scalar(select(ProductNote.product_id).limit(1)) is None:
+            product_id = session.scalar(select(Product.id).order_by(Product.id).limit(1))
+            if product_id is not None:
+                session.add(ProductNote(product_id=product_id, locale="en", note="Edit this note; the two keys stay fixed."))
+                session.commit()
+    with SessionLocal() as session:
         if session.scalar(select(ShippingLocation.id).limit(1)) is None:
             session.add_all([ShippingLocation(country="Moldova", city="Bălți"),
                              ShippingLocation(country="Ukraine", city="Kyiv")])
@@ -314,6 +337,8 @@ admin = Admin(
     path="/admin",
     secure_cookie=os.environ.get("ADMIN_SECURE_COOKIE", "true").lower() == "true",
     title="Shop demo",
+    # The browser favicon inherits the SVG header logo. Override with
+    # favicon=Path(__file__).with_name("logo.svg") for independent branding.
     sidebar=SidebarConfig(
         width=260, min_width=238, max_width=440, mobile_width=260,
         resizable=True, icon_size=18, indent=9, max_indent_depth=5,
@@ -534,6 +559,7 @@ async def prepare_inventory_report(ctx):
 
 admin.add_resource(Resource(
     Product, icon="package", navigation="Commerce",
+    crud_slots={"list": {"before": "resource-summary"}, "show": {"after": "resource-summary"}},
     jobs=[JobAction("inventory-report", prepare_inventory_report,
                     label="Rebuild inventory report", confirmation="Rebuild demo report?")],
     list_fields=["id", "name", "sku", "price", "stock", "active", "display_label"],
@@ -560,12 +586,36 @@ admin.add_resource(Resource(
     crud_views={"list": "tags-list"},
     relationships={"products": Relationship(label="Tagged products")},
 ))
+admin.add_resource(Resource(
+    ProductTagLink, name="product-tag-links", label="Product tag links", icon="link",
+    navigation="Commerce", allow_edit=False,
+    list_fields=["product_id", "tag_id"],
+))
+
+
+admin.add_resource(Resource(
+    ProductNote, name="product-notes", label="Product notes", icon="notebook-pen", navigation="Commerce",
+    title_field="note", list_fields=["product_id", "locale", "note"], search_fields=["note"],
+    crud_views={"show": "wrapped-detail"},
+))
+
+
+def create_demo_staff(ctx):
+    return DemoStaffAccount(username=ctx.payload["username"].strip())
+
+
+def update_demo_staff(ctx):
+    if "username" in ctx.payload:
+        ctx.record.username = ctx.payload["username"].strip()
+
+
 # Feature composition: create a demo staff account with a write-only password,
 # then Archive/Restore it. These are sample records, not actual login identities.
 admin.add_resource(Resource(
     DemoStaffAccount, name="demo-staff", navigation="Security", label="Demo staff",
     list_fields=["id", "username", "deleted_at"],
     features=[PasswordFeature(), SoftDeleteFeature()],
+    create_handler=create_demo_staff, update_handler=update_demo_staff,
 ))
 admin.add_resource(Resource(
     EditorialDraft, icon="file-text", navigation="Commerce", name="editorial-drafts",
@@ -628,6 +678,27 @@ admin.add_resource(Resource(FileAsset, name="file-assets", navigation="Agents/Op
                             fields={"svg": Field(visible=False)}))
 admin.add_bridge(Bridge("resolve-asset", AssetInput, AssetOutput, resolve_asset,
                         description="Resolve an asset to its display URL"))
+class InspectUploadInput(BaseModel):
+    label: str
+
+
+class InspectUploadOutput(BaseModel):
+    name: str
+    size: int
+    sha256: str
+
+
+def inspect_upload(_data, ctx):
+    # This demo hashes opaque bytes; it does not decode images or persist them.
+    file = ctx.file
+    return InspectUploadOutput(name=file.filename, size=len(file.content),
+                               sha256=hashlib.sha256(file.content).hexdigest())
+
+
+admin.add_bridge(Bridge("inspect-upload", InspectUploadInput, InspectUploadOutput,
+                        inspect_upload, upload=BridgeUpload(max_bytes=2_000_000,
+                            content_types=("image/png", "image/jpeg")),
+                        description="Inspect uploaded bytes without persisting them"))
 admin.add_page(Page("insights", label="Insights", component="insights", icon="chart-column",
                     navigation="Agents"))
 

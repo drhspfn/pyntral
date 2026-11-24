@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Boxes,
@@ -10,6 +10,8 @@ import { fields as customFields, pages as customPages, actions as customActions,
 import { SidebarNavigation } from "./navigation";
 import { sidebarConfig, SidebarHeaderRegion, SidebarFooterRegion } from "./sidebar";
 import { Icon } from "./icon";
+import { Tabs, TabList, Tab, TabPanel } from "./tabs";
+import { Table } from "./data-table";
 import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
@@ -175,10 +177,9 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
   const columns = viewFields(resource.fields, "list").filter((field) => names.includes(field.name))
     .sort((a, b) => names.indexOf(a.name) - names.indexOf(b.name));
   const { requestDelete } = useDeleteRecord(resource);
-  const keys = data.items.map((row) => String(row[resource.primaryKey]));
-  return <div className={preferences?.density === "compact" ? "ra-table-compact" : ""}
-    style={{ "--ra-pin-left": selectable ? "46px" : "0px" } as CSSProperties}>
-    <div className="table-scroll"><table className="data-table"><thead><tr>
+  const keys = data.items.filter(row => row[resource.primaryKey] != null).map((row) => String(row[resource.primaryKey]));
+  return <Table compact={preferences?.density === "compact"} label={resource.label}
+    style={{ "--ra-pin-left": selectable ? "46px" : "0px" } as CSSProperties}><thead><tr>
     {selectable && <th className="ra-select-cell"><Checkbox aria-label="Select all visible records"
       checked={keys.length > 0 && keys.every((key) => selection.includes(key))}
       indeterminate={keys.some((key) => selection.includes(key)) && !keys.every((key) => selection.includes(key))}
@@ -186,28 +187,28 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
     {columns.map((field) => <th key={field.name} className={preferences?.pinned === field.name ? "ra-column-pinned" : ""}>
       {field.label}</th>)}<th className="actions-head">ACTION</th>
   </tr></thead><tbody>
-    {data.items.map((row) => <tr key={String(row[resource.primaryKey])}>
-      {selectable && <td className="ra-select-cell"><Checkbox aria-label={`Select record ${String(row[resource.primaryKey])}`}
+    {data.items.map((row, index) => <tr key={String(row[resource.primaryKey] ?? `redacted-${index}`)}>
+      {selectable && <td className="ra-select-cell">{row[resource.primaryKey] != null && <Checkbox aria-label={`Select record ${String(row[resource.primaryKey])}`}
         checked={selection.includes(String(row[resource.primaryKey]))} onCheckedChange={(checked) => {
           const key = String(row[resource.primaryKey]);
           onSelectionChange?.(checked ? Array.from(new Set([...selection, key])) : selection.filter((value) => value !== key));
-        }}/></td>}
+        }}/>}</td>}
       {columns.map((field, idx) => <td key={field.name}
         className={`${idx === 0 ? "strong-cell" : ""} ${preferences?.pinned === field.name ? "ra-column-pinned" : ""}`}>
-        {idx === 0 && resource.capabilities.show ? <button className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
+        {idx === 0 && resource.capabilities.show && row[resource.primaryKey] != null ? <button className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
           <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" /></button> :
           <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" />}
       </td>)}
       <td className="actions-cell"><div className="row-actions">
-        {resource.capabilities.show && <button title="View" aria-label="View record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}><ExternalLink size={16}/></button>}
-        {resource.capabilities.edit && <button title="Edit" aria-label="Edit record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}/edit`)}><Pencil size={15}/></button>}
-        {resource.capabilities.delete && <button type="button" title="Delete" aria-label="Delete record"
+        {resource.capabilities.show && row[resource.primaryKey] != null && <button title="View" aria-label="View record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}><ExternalLink size={16}/></button>}
+        {resource.capabilities.edit && row[resource.primaryKey] != null && <button title="Edit" aria-label="Edit record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}/edit`)}><Pencil size={15}/></button>}
+        {resource.capabilities.delete && row[resource.primaryKey] != null && <button type="button" title="Delete" aria-label="Delete record"
           onClick={() => { void requestDelete(row[resource.primaryKey], resource.versionField ? row[resource.versionField] : undefined); }}><Trash2 size={15}/></button>}
         {resource.actions.filter((a) => (a.kind ?? "record") === "record" && a.position !== "detail" && (data.actionsByRecord?.[String(row[resource.primaryKey])] || []).includes(a.name))
           .map((action) => <RecordAction key={action.name} resource={resource} record={row} action={action} navigate={navigate}/>)}
       </div></td>
     </tr>)}
-  </tbody></table></div></div>;
+  </tbody></Table>;
 }
 function Pager({ offset, total, limit, onOffset }: { offset: number; total: number; limit: number; onOffset: (n: number) => void }) {
   return <div className="pager"><span>Showing <strong>{total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)}</strong> of <strong>{total}</strong> records</span>
@@ -304,7 +305,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  const [sort, setSort] = useState(resource.primaryKey);
+  const [sort, setSort] = useState(resource.fields.find(field => field.name === (resource.primaryKeys?.[0] ?? resource.primaryKey) && field.sortable !== false)?.name ?? "");
   const [desc, setDesc] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
@@ -495,8 +496,6 @@ function StructuredFields({ resource, mode, fields, values, render }: {
   const visible = (section: typeof sections[number]) =>
     !section.visibleIf || values[section.visibleIf.field] === section.visibleIf.equals;
   const tabs = sections.filter((section) => section.kind === "tab" && visible(section));
-  const tabGroup = useId();
-  const tabButtons = useRef(new Map<string, HTMLButtonElement>());
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
   const [accordionOpen, setAccordionOpen] = useState<Record<string, boolean>>({});
   const current = tabs.find((section) => section.id === selectedTab) ?? tabs[0];
@@ -507,32 +506,10 @@ function StructuredFields({ resource, mode, fields, values, render }: {
   if (!sections.length) return content(fields.map((field) => field.name));
   const trailing = fields.filter((field) => !assigned.has(field.name));
   return <div className="ra-layout-sections">
-    {tabs.length > 0 && <div className="ra-layout-tabs" role="tablist" aria-label="Record sections">
-      {tabs.map((section, index) => <button key={section.id} type="button" role="tab"
-        id={`${tabGroup}-tab-${section.id}`} aria-controls={`${tabGroup}-panel-${section.id}`}
-        aria-selected={current?.id === section.id} tabIndex={current?.id === section.id ? 0 : -1}
-        ref={(button) => {
-          if (button) tabButtons.current.set(section.id, button);
-          else tabButtons.current.delete(section.id);
-        }}
-        onClick={() => setSelectedTab(section.id)}
-        onKeyDown={(event) => {
-          const positions: Record<string, number> = {
-            ArrowLeft: (index + tabs.length - 1) % tabs.length,
-            ArrowRight: (index + 1) % tabs.length, Home: 0, End: tabs.length - 1,
-          };
-          const next = tabs[positions[event.key]];
-          if (!next) return;
-          event.preventDefault();
-          setSelectedTab(next.id);
-          tabButtons.current.get(next.id)?.focus();
-        }}>
-        {section.title}</button>)}
-    </div>}
-    {tabs.map((section) => <section key={section.id} id={`${tabGroup}-panel-${section.id}`} role="tabpanel"
-      className="ra-layout-panel" hidden={current?.id !== section.id}
-      aria-labelledby={`${tabGroup}-tab-${section.id}`} tabIndex={mode === "detail" ? 0 : undefined}>
-      {current?.id === section.id && content(section.fields, section.columns)}</section>)}
+    {tabs.length > 0 && <Tabs value={current?.id} onValueChange={setSelectedTab}>
+      <TabList label="Record sections">{tabs.map(section => <Tab key={section.id} value={section.id}>{section.title}</Tab>)}</TabList>
+      {tabs.map(section => <TabPanel key={section.id} value={section.id}>{content(section.fields, section.columns)}</TabPanel>)}
+    </Tabs>}
     {sections.filter((section) => section.kind !== "tab" && visible(section)).map((section) =>
       section.kind === "accordion" ? <Collapsible className="ra-layout-group" key={section.id}
         header={section.title} open={accordionOpen[section.id] ?? section.defaultOpen}
@@ -607,7 +584,9 @@ function RecordEditor({ resource, id, navigate, notify }: {
           try { value = JSON.parse(value); }
           catch { throw new Error(`${field.label}: invalid JSON`); }
         }
-        if (typeof value === "string" && ["integer", "number"].includes(field.kind) && value !== "") {
+        if (typeof value === "string" && field.primaryKey && field.kind === "integer" && value !== "") {
+          if (!/^-?\d+$/.test(value)) throw new Error(`${field.label}: an integer is required`);
+        } else if (typeof value === "string" && ["integer", "number"].includes(field.kind) && value !== "") {
           value = Number(value);
           if (!Number.isFinite(value)) throw new Error(`${field.label}: invalid number`);
         }
@@ -626,7 +605,7 @@ function RecordEditor({ resource, id, navigate, notify }: {
       skipGuard.current = true;
       setDirty(false);
       notify(isNew ? "Record created successfully" : "Changes saved successfully");
-      navigate(`resources/${resource.id}/${encodeURIComponent(String(result.record[resource.primaryKey]))}`);
+      navigate(result.record[resource.primaryKey] == null || !resource.capabilities.show ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(String(result.record[resource.primaryKey]))}`);
     },
     onError: (error: unknown) => feedback.toast(error instanceof Error ? error.message : "Could not save record", { kind: "error" }),
   });
@@ -752,14 +731,14 @@ function RelatedRecords({ resource, identifier, relation, target, navigate }: {
       <button className="btn primary" type="submit" disabled={mutateLink.isPending}>Create and link</button>
     </form>}
     {rows.isLoading ? <Loading/> : rows.error ? <Alert error={rows.error}/> : rows.data?.items.length ? <>
-      {relation.layout === "cards" ? <div className="ra-related-cards">{rows.data.items.map((row) => {
-        const id = String(row[target.primaryKey]);
-        return <article className="ra-related-card" key={id}>
-          {selectable && <div className="ra-related-card-check"><Checkbox label="Select" checked={selection.includes(id)}
+      {relation.layout === "cards" ? <div className="ra-related-cards">{rows.data.items.map((row, index) => {
+        const id = row[target.primaryKey] == null ? null : String(row[target.primaryKey]);
+        return <article className="ra-related-card" key={id ?? `redacted-${index}`}>
+          {selectable && id != null && <div className="ra-related-card-check"><Checkbox label="Select" checked={selection.includes(id)}
             onCheckedChange={(checked) => onSelection?.(checked ? [...selection, id] : selection.filter((entry) => entry !== id))}/></div>}
-          <button type="button" onClick={() => navigate(`resources/${target.id}/${encodeURIComponent(id)}`)}>
-            {String(row[target.titleField] ?? id)}</button>
-          <small>#{id}</small>
+          {id != null && target.capabilities.show ? <button type="button" onClick={() => navigate(`resources/${target.id}/${encodeURIComponent(id)}`)}>
+            {String(row[target.titleField] ?? id)}</button> : <strong>{String(row[target.titleField] ?? "Record")}</strong>}
+          {id != null && <small>#{id}</small>}
         </article>;
       })}</div> : <TableContent resource={target} data={rows.data} navigate={navigate} selectable={selectable}
           selection={selection} onSelectionChange={onSelection} />}
@@ -896,22 +875,24 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
   const feedback = useAdminFeedback();
   const customId = resource.crudViews?.[mode];
   const Custom = customId ? customCrud[customId] : undefined;
+  const slots = resource.crudSlots?.[mode];
+  const Before = slots?.before ? customCrud[slots.before] : undefined;
+  const After = slots?.after ? customCrud[slots.after] : undefined;
   const record = useQuery({ queryKey: ["record", resource.id, id],
-    enabled: !!Custom && !!id,
+    enabled: !!(Custom || Before || After) && !!id,
     queryFn: () => api<{ record: RecordData }>(`/api/resources/${resource.id}/${encodeURIComponent(id!)}`),
   });
-  const versionedEdit = !!Custom && mode === "edit" && !!resource.versionField;
+  const versionedEdit = !!(Custom || Before || After) && mode === "edit" && !!resource.versionField;
   const [editRecord, setEditRecord] = useState<RecordData>();
   useEffect(() => {
     const fresh = record.data?.record;
     if (versionedEdit && fresh) setEditRecord((current) => current ?? fresh);
   }, [versionedEdit, record.data]);
   const displayedRecord = versionedEdit ? editRecord : record.data?.record;
-  if (!Custom) {
-    if (mode === "list") return <ResourceList resource={resource} schema={schema} navigate={navigate}/>;
-    if (mode === "show") return <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate}/>;
-    return <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)}/>;
-  }
+  const defaultView = mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate}/> :
+    mode === "show" ? <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate}/> :
+    <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)}/>;
+  if (!Custom && !Before && !After) return defaultView;
   const loadList: CustomCrudProps["loadList"] = async (params = {}) =>
     api<{ items: RecordData[]; total: number; offset: number; limit: number }>(
       `/api/resources/${resource.id}${buildQuery(params)}`);
@@ -938,15 +919,17 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
   };
   if (record.error && !displayedRecord) return <Alert error={record.error}/>;
   if (id && !displayedRecord) return <Loading/>;
-  return <Custom schema={schema} resource={resource} mode={mode} record={displayedRecord}
-    navigate={navigate} loadList={loadList} save={save} remove={remove}
-    reload={async () => {
+  const props: CustomCrudProps = { schema, resource, mode, record: displayedRecord, defaultView,
+    navigate, loadList, save, remove, reload: async () => {
       await invalidateResource(client, resource.id);
       if (versionedEdit) {
         const fresh = await record.refetch({ throwOnError: true });
         setEditRecord(fresh.data?.record);
       }
-    }}/>
+    } };
+  return <>{Before && <div className="ra-crud-slot"><Before {...props}/></div>}
+    {Custom ? <Custom {...props}/> : defaultView}
+    {After && <div className="ra-crud-slot"><After {...props}/></div>}</>;
 }
 
 function MainLayout({ schema, user, onLogout, navigate, route, children, themeMode, toggleTheme }: {
@@ -1081,6 +1064,10 @@ function AdminApp() {
   });
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   const loginConfig = publicLogin.data ?? defaultLoginConfig;
+  useEffect(() => {
+    const title = publicLogin.data?.title ?? schema.data?.title;
+    if (title !== undefined) document.title = title;
+  }, [publicLogin.data?.title, schema.data?.title]);
   const theme = (auth.data?.user ? schema.data?.theme : undefined) ?? loginConfig.theme;
   const themeSelection = preferredTheme === "system" ? theme.default : preferredTheme;
   const themeMode: ThemeMode = themeSelection === "system" ? (systemDark ? "dark" : "light") : resolveMode(themeSelection);

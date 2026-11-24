@@ -11,6 +11,9 @@ import {
   Button, Badge, Card, TextInput, Textarea, FormField,
   Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup, SortableList,
   SearchInput, Select, AsyncSelect, DatePicker, Calendar, Dialog,
+  Tabs, TabList, Tab, TabPanel, Table, DataTable,
+  FileUpload, FileRow, Collapsible, OverflowText, Icon, Brand,
+  Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, PopoverClose,
 } from "@pyntral/ui";
 ```
 
@@ -32,6 +35,12 @@ import {
 | `AsyncSelect` | Wrapper for server-loaded searchable options. |
 | `DatePicker`, `Calendar` | Theme-aware date selection with popup placement. |
 | `Dialog` | Reusable dialog primitive; for global actions use `useAdminFeedback().confirm()`. |
+| `Tabs`, `TabList`, `Tab`, `TabPanel` | Compound tabs with controlled/uncontrolled state. |
+| `Table`, `DataTable` | Shared semantic table shell and typed data grid. |
+| `FileUpload`, `FileRow` | Controlled selection, explicit upload callback and file rows. |
+| `Collapsible`, `OverflowText` | Disclosure and truncated labels. |
+| `Icon`, `Brand` | Shared icon and branding primitives. |
+| `Popover` and parts | Compound floating content. |
 
 ### Selection example
 
@@ -342,3 +351,72 @@ Standard form labels support `login.title`, `login.subtitle`,
 non-default label strings take precedence. The default locale is used before
 sign-in. Custom `auth.login` extensions receive the public config and theme
 controls; see [extensions](extensions.md).
+
+## Tabs and tables
+
+`@pyntral/ui` exports controlled/uncontrolled compound tabs. The standard CRUD
+layout also uses these primitives. Arrow Left/Right, Home/End and disabled
+tabs are supported; panels have linked ARIA IDs. Use `keepMounted` to retain
+inactive component state.
+
+```tsx
+import { Tabs, TabList, Tab, TabPanel, DataTable } from "@pyntral/ui";
+
+<Tabs defaultValue="jobs">
+  <TabList label="Operations"><Tab value="jobs">Jobs</Tab><Tab value="history">History</Tab></TabList>
+  <TabPanel value="jobs">
+    <DataTable rows={jobs} getRowKey={row => row.id} columns={[
+      { id: "name", header: "Name", cell: row => row.name },
+      { id: "status", header: "Status", cell: row => row.status },
+    ]}/>
+  </TabPanel>
+  <TabPanel value="history">History content</TabPanel>
+</Tabs>
+```
+
+### Tabs props
+
+| Component | Props |
+| --- | --- |
+| `Tabs` | `children`, `value?`, `defaultValue?`, `onValueChange?`, `className?` |
+| `TabList` | `children`, `label?` (default "Tabs"), `className?` |
+| `Tab` | `value`, `children`, `disabled?` |
+| `TabPanel` | `value`, `children`, `keepMounted?` (false), `className?` |
+
+Each tab and its panel share a unique value within one Tabs group.
+Without a valid initial selection, the first enabled tab is selected.
+In controlled mode, update value in onValueChange. Inactive panels unmount
+by default; keepMounted retains their state.
+
+### Table and DataTable props
+
+| Component | Props |
+| --- | --- |
+| `Table` | `children` (native thead/tbody), `label?`, `compact?`, `className?`, `style?` |
+| `DataTable<Row>` | `rows`, `columns`, `getRowKey`, `label?`, `compact?`, `loading?`, `empty?`, `className?`, `sort?`, `onSortChange?` |
+| `DataColumn<Row>` | `id`, `header`, `cell(row)`, `className?`, `sortable?` |
+
+`DataTableProps<Row>`, `DataColumn<Row>`, and `TabsProps` are public types.
+The sort callback emits `{ column, direction: "asc" | "desc" }`; sort the rows
+or refetch server data and pass the result back. Supply stable row keys and
+unique column IDs. Loading replaces rows; empty defaults to "No records".
+The table scrolls horizontally on narrow screens.
+
+`Table` is the shared semantic table shell for custom thead/tbody markup.
+`DataTable<Row>` accepts rows, typed columns, row keys, loading/empty states,
+compact density and controlled sorting. It does not fetch or paginate data
+automatically; use application query state and your bridge/API.
+
+## Browser title and favicon
+
+`Admin(title="Solaris Atlas · Admin", favicon=SvgIcon.from_file("logo.svg"))`
+sets the browser title and favicon as well as the application title. When
+favicon is omitted, a sidebar header SvgIcon is inherited; otherwise the
+standard bundled favicon is used. Explicit `Path("logo.svg")`,
+`Path("logo.png")` or `Path("logo.ico")` are supported. Files are read at
+configuration time and bounded in size. The mount-relative public
+`/auth/favicon` route and `/favicon.svg` compatibility route work without
+authentication, including under ASGI proxy prefixes. The development client
+sets document.title when public login configuration arrives; the production
+HTML title is escaped and rendered by the server. No custom middleware or
+frontend rebuild is needed to change branding.

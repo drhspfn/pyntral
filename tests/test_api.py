@@ -223,7 +223,7 @@ def test_hashes_and_static_safety(harness, tmp_path, monkeypatch):
     assert not verify_password("wrong", hash_password("abc"))
     assert not verify_password("abc", "not-a-hash")
     assert client.get("/admin/").status_code == 503
-    assert client.get("/admin/favicon.svg").status_code == 503
+    assert client.get("/admin/favicon.svg").status_code == 200
     assert client.get("/admin/assets/not-found.js").status_code == 503
 
 
@@ -240,7 +240,7 @@ def test_served_spa_and_unknown_assets(db, tmp_path):
     assert client.get("/admin/resources/teams/1").status_code == 200
     assert client.get("/admin/assets/app.js").status_code == 200
     assert client.get("/admin/assets/not-found.js").status_code == 404
-    assert client.get("/admin/favicon.svg").status_code == 404
+    assert client.get("/admin/favicon.svg").status_code == 200
 
 
 def test_unicode_local_auth_and_streaming_json_limit():

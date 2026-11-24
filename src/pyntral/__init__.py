@@ -14,7 +14,7 @@ from .storage import StorageBackend, LocalStorage, S3Storage, UploadBase, Upload
 from .sessions import MemorySessionStore, SessionIdentity, SessionStore
 from .auth import CallbackAuth, LocalAuth, ModelAuth, Principal, hash_password, verify_password
 from .resources import Action, Field, FieldDependency, FileUploadConfig, FieldView, Page, Resource, NavigationGroup, Relationship, RoleAccess
-from .bridge import Bridge, BridgeContext
+from .bridge import Bridge, BridgeContext, BridgeUpload, BridgeFile
 from .events import (AdminEvent, FieldRef, ResourceEvent, ResourceCreated, ResourceUpdated, ResourceDeleted,
                      ActionExecuted, CollectionActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded, CustomEvent,
                      InMemoryEventBus, EventBus, EventTransport, DeliveryReport)
@@ -38,7 +38,7 @@ __all__ = [
     "stop_logging",
     "Action",
     "Bridge",
-    "BridgeContext",
+    "BridgeContext", "BridgeUpload", "BridgeFile",
     "NavigationGroup",
     "CallbackAuth",
     "Field", "FieldDependency", "FileUploadConfig", "FieldView",

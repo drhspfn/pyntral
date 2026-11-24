@@ -2,6 +2,17 @@
 
 Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions and use [PEP 440](https://peps.python.org/pep-0440/) version numbers.
 
+## 1.0.0b3 — Third public beta
+
+- Add public Tabs and table primitives reused by built-in CRUD.
+- Add before/after CRUD slots and default view composition.
+- Support composite primary key CRUD with canonical record identities, scoped relations, actions, audit and uploads.
+- Add custom transactional create/update handlers and bounded binary RPC bridges.
+- Add portable custom SPA export and a Python-only Docker deployment recipe.
+- Render configured browser title and favicon, including reverse-proxy mounts.
+- Document the public HTTP client with explicit same-origin host scope.
+- Share CRUD operation context across hooks and handlers; retain update events after flush.
+
 ## 1.0.0b2 — Second public beta
 
 ### Added
@@ -57,3 +68,4 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 See [release readiness](docs/deployment.md#release-readiness) for verification requirements.
 
 - PyPI-first release pipeline embeds the generic SPA inside wheel/sdist; custom TSX builds remain optional for consuming applications.
+

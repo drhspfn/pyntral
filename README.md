@@ -8,7 +8,7 @@ Define your resources in Python. Get a searchable, customizable administration i
 
 **Python 3.11+** · **FastAPI** · **SQLAlchemy 2.x** · **React 19** · **TypeScript** · **MIT**
 
-`1.0.0b2` · **Second public beta** · [Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [API reference](docs/api-reference.md)
+`1.0.0b3` · **Third public beta** · [Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [API reference](docs/api-reference.md)
 
 </div>
 
@@ -205,3 +205,7 @@ Add the `Run checks` label to start PR CI. It reruns on pushes while the label i
 The sign-in screen also accepts `Admin(login=LoginConfig(...))`, inherits
 the same application branding, and applies global theme tokens before
 authentication. See [login customization](docs/ui.md#login-screen-customization).
+
+## Consumer extension APIs
+
+Beta 3 includes [compound tabs and table primitives](docs/ui.md#tabs-and-tables), [additive CRUD slots](docs/extensions.md#compose-standard-crud-views), [composite-key CRUD and transactional handlers](docs/resources.md#composite-primary-keys), [binary RPC uploads](docs/bridges.md#binary-uploads-with-typed-rpc), and [portable custom SPA deployment](docs/deployment.md#custom-ui-in-a-python-only-runtime).

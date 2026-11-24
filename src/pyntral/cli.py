@@ -200,6 +200,20 @@ def build(project: Path, *, force: bool = False, base: str = "/admin/", app: str
     return dist
 
 
+def export_ui(project: Path, destination: Path) -> Path:
+    """Copy a previously compiled custom SPA to a runtime-only directory."""
+    source = (_cache(project.resolve()) / "dist").resolve()
+    destination = destination.resolve()
+    if not (source / "index.html").is_file() or not (source / "assets").is_dir() or not any((source / "assets").glob("*.js")):
+        raise RuntimeError("Custom SPA is missing; run pyntral build first")
+    if destination.is_relative_to(source) or source.is_relative_to(destination):
+        raise ValueError("Export destination must be separate from the build cache")
+    if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
+        raise ValueError("Export destination must be absent or empty")
+    shutil.copytree(source, destination, dirs_exist_ok=True)
+    return destination
+
+
 def dev(project: Path, app: str, *, backend_port: int, frontend_port: int, base: str,
         access_log: bool = False, log_level: str = "INFO",
         uvicorn_log_level: str = "WARNING",
@@ -505,6 +519,8 @@ def main() -> None:
     build_parser.add_argument("--force", action="store_true")
     build_parser.add_argument("--base", default="/admin/")
     build_parser.add_argument("--app", help="Generate typed Pydantic bridge client from module:app")
+    export_parser = commands.add_parser("export-ui", help="Copy a compiled SPA to a runtime directory")
+    export_parser.add_argument("destination", type=Path)
     dev_parser = commands.add_parser("dev", help="Start uvicorn + Vite HMR")
     dev_parser.add_argument("app", help="Import path, e.g. examples.shop.app:app")
     dev_parser.add_argument("--backend-port", type=int, default=8000)
@@ -546,6 +562,8 @@ def main() -> None:
     try:
         if args.command == "build":
             build(args.project, force=args.force, base=args.base, app=args.app)
+        elif args.command == "export-ui":
+            print(f"[pyntral] Exported UI: {export_ui(args.project, args.destination)}")
         elif args.command == "dev":
             sys.exit(dev(args.project, args.app, backend_port=args.backend_port,
                          frontend_port=args.frontend_port, base=args.base,

@@ -33,7 +33,8 @@ def test_public_login_config_never_resolves_private_preferences():
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
         public = response.json()
-        assert set(public) == {"login", "theme", "localization"}
+        assert set(public) == {"title", "login", "theme", "localization"}
+        assert public["title"] == "Workspace"
         config = public["login"]
         assert config["layout"] == "split" and config["sidePosition"] == "right"
         assert config["brandPosition"] == "side"

@@ -64,6 +64,7 @@ export interface ResourceDef {
   navigation?: string | null;
   navigationOrder?: number;
   primaryKey: string;
+  primaryKeys?: string[];
   versionField?: string | null;
   uploads?: boolean;
   uploadMaxBytes?: number | null;
@@ -71,6 +72,7 @@ export interface ResourceDef {
   pageSize: number;
   showSearch?: boolean;
   crudViews?: Partial<Record<"list" | "create" | "edit" | "show", string>>;
+  crudSlots?: Partial<Record<"list" | "create" | "edit" | "show", { before?: string; after?: string }>>;
   layouts?: { form: LayoutSectionDef[]; detail: LayoutSectionDef[] };
   formLayout?: "stack" | "grid";
   detailLayout?: "stack" | "grid";
@@ -118,13 +120,13 @@ export interface LoginConfig {
   sideTitle?: string | null; sideDescription?: string | null; sideFooter?: string | null;
   showThemeToggle: boolean; showPasswordToggle: boolean;
 }
-export interface PublicLoginConfig { login: LoginConfig; theme: ThemeConfig; localization?: LocalizationConfig }
+export interface PublicLoginConfig { title?: string; login: LoginConfig; theme: ThemeConfig; localization?: LocalizationConfig }
 export interface Schema {
   realtime?: boolean;
   localization?: LocalizationConfig;
   title: string; resources: ResourceDef[]; pages: PageDef[];
   navigation: NavigationConfig; theme: ThemeConfig;
-  bridges: { name: string; description: string; inputSchema: unknown; outputSchema: unknown }[];
+  bridges: { name: string; description: string; inputSchema: unknown; outputSchema: unknown; upload?: { maxBytes: number; contentTypes: string[] } }[];
 }
 export interface Principal {
   id: string; username: string; roles: string[]; display_name: string | null;
@@ -202,6 +204,8 @@ export interface CustomCrudProps {
   mode: "list" | "create" | "edit" | "show";
   record?: RecordData;
   navigate: (route: string) => void;
+  /** Built-in view; render once when wrapping a CRUD replacement. */
+  defaultView: ReactNode;
   /** List queries are validated and scoped by the server. */
   loadList: (params?: Record<string, string | number | boolean>) => Promise<{
     items: RecordData[]; total: number; offset: number; limit: number;

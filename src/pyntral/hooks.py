@@ -9,8 +9,10 @@ from typing import Any, Callable
 class OperationContext:
     """The validated operation environment for user-defined lifecycle hooks.
 
-    ``payload`` is mutable during before-hooks. Added keys are revalidated
-    against field-level authorization before a database write. After-hooks run
+    Before-hooks receive raw input and may change ``payload``; added keys are
+    revalidated against field-level authorization. For CRUD, the same context
+    reaches the custom handler with converted values and the after-hook with
+    the committed record. After-hooks run
     after commit and must not be relied upon for durable event delivery.
     """
 
