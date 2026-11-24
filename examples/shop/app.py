@@ -56,7 +56,7 @@ product_tags = Table(
 
 
 class ProductTagLink(Base):
-    """Read-only administrative projection of the existing association table."""
+    """Administrative projection of the existing association table."""
     __table__ = product_tags
 
 
@@ -569,7 +569,7 @@ admin.add_resource(Resource(
 ))
 admin.add_resource(Resource(
     ProductTagLink, name="product-tag-links", label="Product tag links", icon="link",
-    navigation="Commerce", allow_create=False, allow_edit=False, allow_delete=False,
+    navigation="Commerce", allow_edit=False,
     list_fields=["product_id", "tag_id"],
 ))
 

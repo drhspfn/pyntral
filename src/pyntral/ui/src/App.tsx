@@ -177,7 +177,7 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
   const columns = viewFields(resource.fields, "list").filter((field) => names.includes(field.name))
     .sort((a, b) => names.indexOf(a.name) - names.indexOf(b.name));
   const { requestDelete } = useDeleteRecord(resource);
-  const keys = data.items.map((row) => String(row[resource.primaryKey]));
+  const keys = data.items.filter(row => row[resource.primaryKey] != null).map((row) => String(row[resource.primaryKey]));
   return <Table compact={preferences?.density === "compact"} label={resource.label}
     style={{ "--ra-pin-left": selectable ? "46px" : "0px" } as CSSProperties}><thead><tr>
     {selectable && <th className="ra-select-cell"><Checkbox aria-label="Select all visible records"
@@ -188,11 +188,11 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
       {field.label}</th>)}<th className="actions-head">ACTION</th>
   </tr></thead><tbody>
     {data.items.map((row, index) => <tr key={String(row[resource.primaryKey] ?? `redacted-${index}`)}>
-      {selectable && <td className="ra-select-cell"><Checkbox aria-label={`Select record ${String(row[resource.primaryKey])}`}
+      {selectable && <td className="ra-select-cell">{row[resource.primaryKey] != null && <Checkbox aria-label={`Select record ${String(row[resource.primaryKey])}`}
         checked={selection.includes(String(row[resource.primaryKey]))} onCheckedChange={(checked) => {
           const key = String(row[resource.primaryKey]);
           onSelectionChange?.(checked ? Array.from(new Set([...selection, key])) : selection.filter((value) => value !== key));
-        }}/></td>}
+        }}/>}</td>}
       {columns.map((field, idx) => <td key={field.name}
         className={`${idx === 0 ? "strong-cell" : ""} ${preferences?.pinned === field.name ? "ra-column-pinned" : ""}`}>
         {idx === 0 && resource.capabilities.show && row[resource.primaryKey] != null ? <button className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
@@ -201,8 +201,8 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
       </td>)}
       <td className="actions-cell"><div className="row-actions">
         {resource.capabilities.show && row[resource.primaryKey] != null && <button title="View" aria-label="View record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}><ExternalLink size={16}/></button>}
-        {resource.capabilities.edit && <button title="Edit" aria-label="Edit record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}/edit`)}><Pencil size={15}/></button>}
-        {resource.capabilities.delete && <button type="button" title="Delete" aria-label="Delete record"
+        {resource.capabilities.edit && row[resource.primaryKey] != null && <button title="Edit" aria-label="Edit record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}/edit`)}><Pencil size={15}/></button>}
+        {resource.capabilities.delete && row[resource.primaryKey] != null && <button type="button" title="Delete" aria-label="Delete record"
           onClick={() => { void requestDelete(row[resource.primaryKey], resource.versionField ? row[resource.versionField] : undefined); }}><Trash2 size={15}/></button>}
         {resource.actions.filter((a) => (a.kind ?? "record") === "record" && a.position !== "detail" && (data.actionsByRecord?.[String(row[resource.primaryKey])] || []).includes(a.name))
           .map((action) => <RecordAction key={action.name} resource={resource} record={row} action={action} navigate={navigate}/>)}
@@ -603,7 +603,7 @@ function RecordEditor({ resource, id, navigate, notify }: {
       skipGuard.current = true;
       setDirty(false);
       notify(isNew ? "Record created successfully" : "Changes saved successfully");
-      navigate(`resources/${resource.id}/${encodeURIComponent(String(result.record[resource.primaryKey]))}`);
+      navigate(result.record[resource.primaryKey] == null || !resource.capabilities.show ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(String(result.record[resource.primaryKey]))}`);
     },
     onError: (error: unknown) => feedback.toast(error instanceof Error ? error.message : "Could not save record", { kind: "error" }),
   });

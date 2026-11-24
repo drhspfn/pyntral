@@ -468,18 +468,25 @@ This first version is explicitly mock-only: the browser holds native `File` obje
 
 All four accept a Lucide name (for example `"shopping-cart"`), `SvgIcon`, `ImageIcon`, or `None`. Names are resolved by the shared UI `Icon` primitive, including in Overview and action buttons. A null icon explicitly hides the glyph. See [Sidebar branding and navigation icons](ui.md#sidebar-branding-and-navigation-icons) for the icon formats and appearance configuration.
 
-## Read-only composite primary keys
+## Composite primary keys
 
-Register a SQLAlchemy model with multiple primary key columns using
-`allow_create=False, allow_edit=False, allow_delete=False`. The initial
-implementation supports integer, text and UUID key components. List, detail,
-filters, export, and read-only relationship browsing are supported.
-`primaryKeys` contains the mapped key names; `primaryKey` is
-`__pyntral_id`, a server-generated opaque URL-safe identifier in rows.
-Do not construct it yourself; follow the returned value. If any key field
-is redacted, the identifier is omitted. Sorting adds key tie-breakers.
-Select/options, relationship mutations targeting composite records, actions,
-jobs, uploads, and writes on these resources are deliberately unsupported.
+SQLAlchemy models with multiple integer, string or UUID primary key columns
+support normal CRUD, list/detail, filters, exports, actions, options, jobs,
+and relationships. Explicit non-generated key components are writable on
+create only; update modifies non-key fields. Primary key changes are not
+ordinary PATCH operations, because they would change record identity and
+dependent references. Set allow_create/allow_edit/allow_delete as needed.
+
+`primaryKeys` lists the mapped key names, while `primaryKey` identifies the
+server-generated URL-safe `__pyntral_id` field in composite rows. Treat that
+value as opaque (it is encoding, not encryption); never reconstruct it in
+extensions. If any key component is redacted, the identifier is omitted.
+The server validates every key component and uses the complete tuple in
+queries, relation selectors and identity-based actions. Multi-column
+foreign keys use individual typed inputs and are validated as a group
+against the related resource's scope and select permission. Attachments
+and audit rows use the canonical identifier; their existing database
+columns limit it to 120 and 150 characters respectively.
 
 ## Custom transactional writes
 

@@ -55,8 +55,6 @@ def authenticated(client):
 
 def test_composite_read_only_and_scope(setup):
     app, admin, sessions = setup
-    with pytest.raises(ValueError, match="read-only"):
-        admin.add_resource(Resource(Link))
     admin.add_resource(Resource(Link, name="links", allow_create=False, allow_edit=False, allow_delete=False,
                                 scope=lambda principal, stmt: stmt.where(Link.speaker == 1),
                                 fields={"entity": Field(read_when=lambda principal, row: row.note != "private")},
@@ -72,7 +70,7 @@ def test_composite_read_only_and_scope(setup):
         assert schema["primaryKeys"] == ["speaker", "entity"]
         assert schema["primaryKey"] == "__pyntral_id"
         assert schema["crudSlots"] == {"list": {"before": "summary"}}
-        assert not any(schema["capabilities"][k] for k in ("create", "edit", "delete", "select"))
+        assert not any(schema["capabilities"][k] for k in ("create", "edit", "delete"))
         path = "/admin/api/resources/links"
         result = client.get(path).json()
         assert result["total"] == 2
@@ -86,7 +84,7 @@ def test_composite_read_only_and_scope(setup):
         assert client.post(path, json={}, headers=headers).status_code == 403
         assert client.patch(path + "/" + identifier, json={}, headers=headers).status_code == 403
         assert client.delete(path + "/" + identifier, headers=headers).status_code == 403
-        assert client.get(path + "/options").status_code == 403
+        assert len(client.get(path + "/options").json()["items"]) == 1
         exported = client.get(path + "/export?format=json").json()
         assert all("__pyntral_id" not in row for row in exported)
 
