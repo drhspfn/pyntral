@@ -32,7 +32,7 @@ Admin(
     path="/admin", secure_cookie=True, session_cookie="pyntral_session",
     session_cookie_path="/", session_max_age=43200, session_store=None,
     require_async_sessions=False, enable_jobs=True, dist_dir=None,
-    title="Pyntral", theme=None, default_theme="system",
+    title="Pyntral", favicon=None, theme=None, default_theme="system",
     animations=True, show_dashboard=True, sidebar=None, login=None, role_weights=None,
     logging_config=None, event_bus=None, auto_start_events=True,
     event_publish_timeout=2.0, max_json_bytes=1048576, storage=None,
@@ -180,7 +180,7 @@ require CSRF protection.
 ### Public GET /auth/config
 
 This endpoint is intentionally unauthenticated and returns only presentation
-metadata: `login`, `theme`, and `localization`. It uses the same theme shape as
+metadata: `title`, `login`, `theme`, and `localization`. It uses the same theme shape as
 the authenticated schema (`default`, `animations`, `tokens.light`,
 `tokens.dark`) but does not evaluate per-principal resolvers. Login metadata
 uses camelCase versions of the parameters above, with the brand resolved to

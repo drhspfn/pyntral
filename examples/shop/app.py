@@ -58,6 +58,8 @@ product_tags = Table(
 class ProductTagLink(Base):
     """Administrative projection of the existing association table."""
     __table__ = product_tags
+    product: Mapped["Product"] = relationship(viewonly=True)
+    tag: Mapped["Tag"] = relationship(viewonly=True)
 
 
 class Tag(Base):

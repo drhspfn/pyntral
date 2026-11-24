@@ -296,3 +296,55 @@ def test_composite_foreign_keys_and_many_to_many(setup):
         assert client.get(relation).json()["total"] == 2
         assert client.post(relation + "/detach", json={"id": keys["a"]}, headers=headers).status_code == 200
         assert client.get(relation).json()["items"][0]["__pyntral_id"] == keys["b"]
+
+
+@pytest.mark.asyncio
+async def test_async_composite_versioned_handler(tmp_path):
+    pytest.importorskip("greenlet")
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    class VersionedBase(DeclarativeBase):
+        pass
+
+    class Draft(VersionedBase):
+        __tablename__ = "async_composite_drafts"
+        tenant: Mapped[int] = mapped_column(primary_key=True)
+        key: Mapped[str] = mapped_column(String(80), primary_key=True)
+        title: Mapped[str] = mapped_column(String(80))
+        version: Mapped[int] = mapped_column(default=1, nullable=False)
+        __mapper_args__ = {"version_id_col": version}
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{(tmp_path / 'async-composite.db').as_posix()}")
+    try:
+        async with engine.begin() as connection:
+            await connection.run_sync(VersionedBase.metadata.create_all)
+        sessions = async_sessionmaker(engine)
+        app = FastAPI()
+        admin = Admin(app, session_factory=sessions,
+                      auth=CallbackAuth(lambda *_: Principal(id="operator", username="operator")),
+                      secret_key="s" * 64, secure_cookie=False, require_async_sessions=True)
+        async def edit(ctx):
+            ctx.record.title = ctx.payload["title"].upper()
+            await ctx.session.flush()
+        admin.add_resource(Resource(Draft, name="drafts", update_handler=edit, version_field="version"))
+        async with app.router.lifespan_context(app):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://fixture") as client:
+                auth = await client.post("/admin/auth/login", json={"username": "operator", "password": "fixture"})
+                headers = {"X-CSRF-Token": auth.json()["csrf"]}
+                path = "/admin/api/resources/drafts"
+                created = await client.post(path, json={"tenant": 1, "key": "α/β", "title": "old"}, headers=headers)
+                assert created.status_code == 201, created.text
+                row = created.json()["record"]
+                assert row["version"] == 1
+                detail = path + "/" + row["__pyntral_id"]
+                edited = await client.patch(detail, json={"title": "new"}, headers={**headers, "If-Match": "1"})
+                assert edited.status_code == 200, edited.text
+                assert edited.json()["record"]["version"] == 2
+                assert edited.json()["record"]["title"] == "NEW"
+                stale = await client.patch(detail, json={"title": "stale"}, headers={**headers, "If-Match": "1"})
+                assert stale.status_code == 412
+                deleted = await client.delete(detail, headers={**headers, "If-Match": "2"})
+                assert deleted.status_code == 200, deleted.text
+    finally:
+        await engine.dispose()
