@@ -73,8 +73,10 @@ def test_installed_wheel_smoke_ignores_checkout_bundle(tmp_path, monkeypatch):
     assets = package / "web_dist" / "assets"
     assets.mkdir(parents=True)
     (package / "web_dist" / "index.html").write_text(
-        '<html><head><base data-pyntral-base href="./"></head><body>generic wheel</body></html>', encoding="utf-8",
+        '<html><head><base data-pyntral-base href="./"><title>Pyntral</title>'
+        '<link rel="icon" href="./auth/favicon" /></head><body>generic wheel</body></html>', encoding="utf-8",
     )
+    (package / "web_dist" / "favicon.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
     (assets / "generic.js").write_text("console.log('wheel')")
     monkeypatch.setattr(pyntral, "__file__", str(package / "__init__.py"))
     monkeypatch.setattr(admin_module, "__file__", str(package / "admin.py"))
