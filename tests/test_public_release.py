@@ -13,9 +13,9 @@ def test_public_identity():
     from json import loads
 
     version = metadata["project"]["version"]
-    assert version == "1.0.0b2"
+    assert version == "1.0.0b3"
     assert loads((ROOT / "src/pyntral/ui/package.json").read_text(encoding="utf-8"))["version"] == version.replace("b", "-beta.")
-    assert f"## {version} — Second public beta" in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"## {version} — Third public beta" in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert metadata["project"]["scripts"]["pyntral"] == "pyntral.cli:main"
     assert (ROOT / "src/pyntral/__init__.py").is_file()
     assert (ROOT / "pyntral.components.json").is_file()
