@@ -584,7 +584,9 @@ function RecordEditor({ resource, id, navigate, notify }: {
           try { value = JSON.parse(value); }
           catch { throw new Error(`${field.label}: invalid JSON`); }
         }
-        if (typeof value === "string" && ["integer", "number"].includes(field.kind) && value !== "") {
+        if (typeof value === "string" && field.primaryKey && field.kind === "integer" && value !== "") {
+          if (!/^-?\d+$/.test(value)) throw new Error(`${field.label}: an integer is required`);
+        } else if (typeof value === "string" && ["integer", "number"].includes(field.kind) && value !== "") {
           value = Number(value);
           if (!Number.isFinite(value)) throw new Error(`${field.label}: invalid number`);
         }

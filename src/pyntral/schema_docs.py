@@ -53,7 +53,7 @@ def render_markdown(data: dict[str, Any]) -> str:
              "Generated from Python registrations. Authorization and record scope are evaluated at request time.", ""]
     for resource in data["resources"]:
         lines.extend([f"## {cell(resource['id'])}", "",
-                      f"Display name: {cell(resource['label'])}; primary key: `{cell(resource['primary_key'])}`.",
+                      f"Display name: {cell(resource['label'])}; primary key: `{cell(', '.join(resource.get('primary_keys', [resource['primary_key']])))}`.",
                       "", "### Fields", "", "| Name | Type | Required | Readonly | Views |",
                       "| --- | --- | --- | --- | --- |"])
         for field in resource["fields"]:

@@ -1499,6 +1499,7 @@ class Admin:
                         raise AdminError(422, "Unknown or read-only fields", "validation_error",
                                          {"fields": sorted(rejected)})
                     raise AdminError(403, "Cannot write one or more fields", "forbidden")
+                identity = adapter.record_identifier(record)
                 ctx = OperationContext("update", name, principal, session, record=record,
                                        payload=payload.copy())
                 await self._run_hooks(adapter, "before_update", ctx)
@@ -1506,8 +1507,8 @@ class Admin:
                 if set(ctx.payload) - write_fields:
                     raise AdminError(403, "Hook supplied unauthorized fields", "forbidden")
                 await self._verify_foreign_keys(session, principal, adapter, ctx.payload, record=record)
-                identity = adapter.record_identifier(record)
                 changed = await adapter._stage_update(session, record, ctx.payload, principal, context=ctx)
+                identifier = identity
                 async with adapter._transaction_errors(session):
                     await maybe_await(session.flush())
                 await maybe_await(session.refresh(record))
@@ -1516,8 +1517,8 @@ class Admin:
                 if adapter.resource.update_handler is not None:
                     await self._verify_foreign_keys(session, principal, adapter,
                         {field: getattr(record, field) for field in adapter.foreign_key_fields & changed}, record=record)
-                    if adapter.resource.scope is not None:
-                        await adapter.get(session, identity, principal)
+                if adapter.resource.scope is not None:
+                    await adapter.get(session, identity, principal)
                 read_fields = await self._allowed_fields(principal, name, view="show", record=record)
                 response = JSONResponse({"record": adapter.serialize(record, read_fields)})
                 await adapter._commit(session)
@@ -1548,6 +1549,7 @@ class Admin:
                     await self._begin_upload_transaction(session, write=True)
                 record = await adapter.get(session, identifier, principal, lock=True if has_uploads else None)
                 await self._authorize(principal, name, "delete", record)
+                identifier = adapter.record_identifier(record)
                 self._require_version(adapter, record, request)
                 ctx = OperationContext("delete", name, principal, session, record=record)
                 await self._run_hooks(adapter, "before_delete", ctx)
@@ -1586,6 +1588,7 @@ class Admin:
             try:
                 record = await adapter.get(session, identifier, principal)
                 await self._authorize(principal, name, "action:" + action_name, record)
+                identifier = adapter.record_identifier(record)
                 if action.kind != "record" or action_name not in await self._visible_actions(principal, name, record):
                     raise AdminError(403, "Action unavailable for this record", "forbidden")
                 payload = await self._body(request)

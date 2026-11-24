@@ -19,7 +19,7 @@ export interface ApiOptions extends RequestInit {
 
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { scope = "admin", ...request } = options;
-  if (!path.startsWith("/") || path.startsWith("//") || /[\\\\\u0000-\u001f]/.test(path)) throw new ApiError(0, "invalid_path", "Expected a same-origin absolute path");
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\") || [...path].some(char => char.charCodeAt(0) < 32)) throw new ApiError(0, "invalid_path", "Expected a same-origin absolute path");
   const url = new URL(scope === "host" ? path : base + path, window.location.origin);
   if (url.origin !== window.location.origin || (scope === "admin" && !url.pathname.startsWith(base + "/"))) throw new ApiError(0, "invalid_path", "Path escapes the configured API scope");
   const method = (options.method || "GET").toUpperCase();

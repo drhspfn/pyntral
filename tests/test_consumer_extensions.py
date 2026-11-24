@@ -6,11 +6,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-from sqlalchemy import String, create_engine, select
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+from sqlalchemy import String, ForeignKeyConstraint, ForeignKey, Table, Column, create_engine, select, event
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker, relationship
 from sqlalchemy.pool import StaticPool
 
-from pyntral import Admin, CallbackAuth, Principal, Resource, Field, Bridge, BridgeUpload, AuditBase, AuditEntry, AuditFeature
+from pyntral import Admin, CallbackAuth, Principal, Resource, Field, Bridge, BridgeUpload, AuditBase, AuditEntry, AuditFeature, Action, ResourceHook, ResourceUpdated, ResourceCreated, ResourceDeleted, UploadFeature, UploadBase, LocalStorage
 from pyntral.orm import AdminError
 from pyntral.typegen import render_bridge_types
 
@@ -33,17 +33,45 @@ class Item(Base):
     password_hash: Mapped[str] = mapped_column(String(80))
 
 
+class Child(Base):
+    __tablename__ = "consumer_children"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    speaker: Mapped[int]
+    entity: Mapped[str] = mapped_column(String(100))
+    __table_args__ = (ForeignKeyConstraint(["speaker", "entity"], ["consumer_links.speaker", "consumer_links.entity"]),)
+    link: Mapped[Link] = relationship()
+
+
+group_links = Table("consumer_group_links", Base.metadata,
+                    Column("group_id", ForeignKey("consumer_groups.id"), primary_key=True),
+                    Column("speaker", primary_key=True, type_=Link.__table__.c.speaker.type),
+                    Column("entity", primary_key=True, type_=String(100)),
+                    ForeignKeyConstraint(["speaker", "entity"], ["consumer_links.speaker", "consumer_links.entity"]))
+
+
+class Group(Base):
+    __tablename__ = "consumer_groups"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40))
+    links: Mapped[list[Link]] = relationship(secondary=group_links)
+
+
 @pytest.fixture
-def setup():
+def setup(tmp_path):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    @event.listens_for(engine, "connect")
+    def foreign_keys(connection, _):
+        connection.execute("PRAGMA foreign_keys=ON")
     Base.metadata.create_all(engine)
     AuditBase.metadata.create_all(engine)
+    UploadBase.metadata.create_all(engine)
     sessions = sessionmaker(engine, expire_on_commit=False)
     async def login(username, password):
         return Principal(id=username, username=username, roles=["admin"])
     app = FastAPI()
     admin = Admin(app, session_factory=sessions, auth=CallbackAuth(login),
-                  secret_key="consumer-extension-test-secret" * 2, secure_cookie=False)
+                  secret_key="consumer-extension-test-secret" * 2, secure_cookie=False,
+                  storage=LocalStorage(tmp_path / "objects"))
     yield app, admin, sessions
     engine.dispose()
 
@@ -159,3 +187,112 @@ def test_binary_bridge_auth_limits_and_generated_types(setup):
         assert calls == [b"file"]
         schema = client.get("/admin/api/schema").json()["bridges"][0]
         assert schema["upload"] == {"maxBytes": 8, "contentTypes": ["image/png"]}
+
+
+def test_composite_crud_handlers_actions_and_uploads(setup):
+    app, admin, sessions = setup
+    seen = []
+    contexts = []
+    def before(ctx):
+        contexts.append(ctx)
+        ctx.payload["note"] = ctx.payload["note"].strip()
+        seen.append("before")
+    def handler(ctx):
+        assert ctx is contexts[-1]
+        ctx.record.note = ctx.payload["note"].upper()
+        ctx.session.flush()
+        seen.append("handler")
+    def after(ctx):
+        assert ctx is contexts[-1]
+        assert ctx.payload == {"note": "changed"}
+        seen.append("after")
+    def action(record, session, principal, payload):
+        return {"entity": record.entity}
+    def bulk(records, session, principal, payload):
+        return {"entities": sorted(row.entity for row in records)}
+    admin.add_resource(Resource(Link, name="links", scope=lambda principal, stmt: stmt.where(Link.speaker == 1),
+                                update_handler=handler,
+                                hooks=[ResourceHook(before_update=before, after_update=after)],
+                                actions=[Action("inspect", action), Action("inspect-many", bulk, kind="bulk")],
+                                features=[AuditFeature(), UploadFeature(max_bytes=32)]))
+    events = []
+    admin.events.subscribe("resource.*", events.append, resource="links")
+    with TestClient(app) as client:
+        headers = authenticated(client)
+        path = "/admin/api/resources/links"
+        schema = client.get("/admin/api/schema").json()["resources"][0]
+        key_fields = [field for field in schema["fields"] if field["primaryKey"]]
+        assert len(key_fields) == 2
+        assert all(field["views"]["create"]["visible"] and not field["views"]["create"]["readonly"] for field in key_fields)
+        assert all(field["views"]["edit"]["readonly"] for field in key_fields)
+        assert client.post(path, json={"speaker": 1, "note": "x"}, headers=headers).status_code == 422
+        one = client.post(path, json={"speaker": 1, "entity": "a/b?ü", "note": "first"}, headers=headers)
+        assert one.status_code == 201, one.text
+        two = client.post(path, json={"speaker": 1, "entity": "second", "note": "second"}, headers=headers)
+        assert two.status_code == 201, two.text
+        first_id = one.json()["record"]["__pyntral_id"]
+        second_id = two.json()["record"]["__pyntral_id"]
+        assert first_id != second_id
+        assert client.post(path, json={"speaker": 1, "entity": "second", "note": "duplicate"}, headers=headers).status_code == 409
+        assert client.post(path, json={"speaker": 2, "entity": "outside", "note": "x"}, headers=headers).status_code == 404
+        assert [item["value"] for item in client.get(path + "/options?ids=" + first_id).json()["items"]] == [first_id]
+        actions = client.get(path).json()["actionsByRecord"]
+        assert actions == {first_id: ["inspect"], second_id: ["inspect"]}
+        detail = path + "/" + first_id
+        assert client.post(detail + "/actions/inspect", json={}, headers=headers).json()["result"] == {"entity": "a/b?ü"}
+        bulk_result = client.post(path + "/actions/inspect-many", json={"ids": [first_id, second_id]}, headers=headers)
+        assert bulk_result.status_code == 200, bulk_result.text
+        assert bulk_result.json()["result"]["entities"] == ["a/b?ü", "second"]
+        assert client.patch(detail, json={"entity": "new"}, headers=headers).status_code == 422
+        edited = client.patch(detail, json={"note": " changed "}, headers=headers)
+        assert edited.status_code == 200, edited.text
+        assert edited.json()["record"]["note"] == "CHANGED"
+        assert edited.json()["record"]["__pyntral_id"] == first_id
+        assert seen == ["before", "handler", "after"]
+        assert client.get(path + "/" + second_id).json()["record"]["note"] == "second"
+        assert isinstance(events[-1], ResourceUpdated)
+        assert events[-1].record_id == first_id
+        assert [field.name for field in events[-1].fields] == ["note"]
+        upload = client.post(detail + "/uploads", content=b"abc", headers={**headers, "X-Filename": "sample.bin"})
+        assert upload.status_code == 201, upload.text
+        upload_id = upload.json()["id"]
+        assert client.get(detail + "/uploads").json()["items"][0]["id"] == upload_id
+        assert client.get("/admin/api/uploads/" + upload_id).content == b"abc"
+        assert client.delete(detail, headers=headers).status_code == 200
+        assert client.get(detail).status_code == 404
+        assert client.get("/admin/api/uploads/" + upload_id).status_code == 404
+        assert isinstance(events[-1], ResourceDeleted) and events[-1].record_id == first_id
+        with sessions() as session:
+            assert session.get(Link, (1, "second")) is not None
+            rows = session.scalars(select(AuditEntry).where(AuditEntry.record_id == first_id)).all()
+            assert [row.operation for row in rows] == ["create", "update", "delete"]
+
+
+def test_composite_foreign_keys_and_many_to_many(setup):
+    app, admin, sessions = setup
+    admin.add_resource(Resource(Link, name="links", scope=lambda principal, stmt: stmt.where(Link.speaker == 1)))
+    admin.add_resource(Resource(Child, name="children"))
+    admin.add_resource(Resource(Group, name="groups"))
+    with sessions() as session:
+        session.add_all([Link(speaker=1, entity="a", note="a"), Link(speaker=1, entity="b", note="b"),
+                         Link(speaker=2, entity="a", note="outside"), Group(name="demo")])
+        session.commit()
+    with TestClient(app) as client:
+        headers = authenticated(client)
+        path = "/admin/api/resources"
+        keys = {item["entity"]: item["__pyntral_id"] for item in client.get(path + "/links").json()["items"]}
+        assert client.post(path + "/children", json={"speaker": 2, "entity": "a"}, headers=headers).status_code == 409
+        assert client.post(path + "/children", json={"speaker": 1}, headers=headers).status_code == 422
+        response = client.post(path + "/children", json={"speaker": 1, "entity": "a"}, headers=headers)
+        assert response.status_code == 201, response.text
+        detail = path + "/children/" + str(response.json()["record"]["id"])
+        assert client.patch(detail, json={"entity": "b"}, headers=headers).status_code == 200
+        assert client.patch(detail, json={"speaker": 2}, headers=headers).status_code == 409
+        assert client.get(detail + "/relationships/link").json()["items"][0]["__pyntral_id"] == keys["b"]
+        relation = path + "/groups/1/relationships/links"
+        for identifier in keys.values():
+            response = client.post(relation + "/attach", json={"id": identifier}, headers=headers)
+            assert response.status_code == 200, response.text
+        assert client.get(relation).json()["total"] == 2
+        assert client.post(relation + "/detach", json={"id": keys["a"]}, headers=headers).status_code == 200
+        assert client.get(relation).json()["items"][0]["__pyntral_id"] == keys["b"]

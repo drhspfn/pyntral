@@ -733,7 +733,7 @@ class MapperAdapter:
     async def create(self, session: Any, payload: dict[str, Any],
                      principal: Principal | None = None) -> dict[str, Any]:
         record = await self._stage_create(session, payload, principal)
-        if self.resource._audit_enabled:
+        if self.resource._audit_enabled or self.resource._uploads_enabled:
             await self._flush_create(session, record, payload, principal)
         await self._commit(session)
         await maybe_await(session.refresh(record))
@@ -753,7 +753,7 @@ class MapperAdapter:
             async with self._handler_transaction(session):
                 await maybe_await(self.resource.update_handler(ctx))
                 state = inspect(record)
-                if (state.deleted or state.detached or not state.persistent or record in session.deleted
+                if (ctx.record is not record or state.deleted or state.detached or not state.persistent or record in session.deleted
                         or tuple(getattr(record, name) for name in self.pk_names) != identity):
                     raise AdminError(500, "update_handler cannot replace or delete the resource identity", "handler_output_error")
         for name, value in parsed.items():
