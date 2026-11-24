@@ -120,3 +120,17 @@ def test_python_release_embeds_only_generic_assets(tmp_path):
             if file.is_file():
                 z.add(file, "pyntral-1.0.0b1/src/pyntral/web_dist/" + str(file.relative_to(source)))
     module.verify_artifacts(artifacts)
+
+
+def test_dashboard_manifest_in_editor_and_fingerprint(tmp_path):
+    from pyntral import cli
+    (tmp_path / "admin").mkdir()
+    source = tmp_path / "admin" / "Home.tsx"
+    source.write_text("export default function Home() { return null; }")
+    (tmp_path / "pyntral.components.json").write_text(json.dumps({"dashboards": {"home": "admin/Home.tsx"}}))
+    configure_editor(tmp_path)
+    config = json.loads((tmp_path / ".pyntral/tsconfig.editor.json").read_text())
+    assert "../admin/Home.tsx" in config["include"]
+    before = cli._component_fingerprint(tmp_path)
+    source.write_text("export default function Home() { return 1; }")
+    assert cli._component_fingerprint(tmp_path) != before

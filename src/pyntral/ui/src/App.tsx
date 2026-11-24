@@ -1101,7 +1101,7 @@ function AdminApp() {
     }
     if (!route) {
       const first = data.resources.find((r) => r.capabilities.list);
-       return first ? <ResourceList schema={data} resource={first} navigate={navigate}/> : <Empty title="No resources"/>;
+       return first ? <ResourceRoute schema={data} resource={first} mode="list" navigate={navigate}/> : <Empty title="No resources"/>;
     }
     const segments = route.split("/").map(decodeURIComponent);
     if (segments[0] === "groups" && segments.length > 1) {

@@ -2,11 +2,13 @@
  * validate with JSON.parse, then only adjust insignificant whitespace outside strings.
  */
 export function formatJson(source: string, indent = 2): string | null {
+  if (source.length > 100000) return null;
   try { JSON.parse(source); } catch { return null; }
   const width = Math.max(0, Math.min(8, Number.isFinite(indent) ? Math.floor(indent) : 2));
   let depth = 0, quoted = false, escaped = false, out = "";
   const newline = () => "\n" + " ".repeat(depth * width);
   for (let i = 0; i < source.length; i++) {
+    if (depth > 256 || out.length > 1000000) return null;
     const c = source[i];
     if (quoted) {
       out += c;
@@ -20,8 +22,9 @@ export function formatJson(source: string, indent = 2): string | null {
     if (c === "{" || c === "[") {
       const close = c === "{" ? "}" : "]";
       out += c;
-      const next = source.slice(i + 1).match(/^\s*/)?.[0].length ?? 0;
-      if (source[i + 1 + next] === close) { out += close; i += next + 1; continue; }
+      let next = i + 1;
+      while (next < source.length && /\s/.test(source[next])) next++;
+      if (source[next] === close) { out += close; i = next; continue; }
       depth++; out += newline();
     } else if (c === "}" || c === "]") {
       depth--; out += newline() + c;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { LockKeyhole, ChevronDown, ChevronRight } from "lucide-react";
 import type { Schema, SidebarConfig, IconSpec, SidebarItemProps } from "./types";
 import { Icon } from "./icon";
@@ -61,13 +61,15 @@ function ItemContent({ config, schema, type, id, label, icon, depth, active, loc
   return Custom ? <Custom schema={schema} type={type} id={id} label={label} icon={icon}
     depth={depth} active={active} locked={locked} open={open}>{children}</Custom> : children;
 }
-function Branch({ node, schema, route, go, depth, config, matches }: {
+function Branch({ node, schema, route, go, depth, config, matches, expansion, setExpanded }: {
   node: Node; schema: Schema; route: string; go: (route: string) => void; depth: number; config: SidebarConfig; matches: Set<SearchNode> | null;
+  expansion: Record<string, boolean>; setExpanded: (path: string, open: boolean) => void;
 }) {
   const containsRoute = (target: Node): boolean => (!!target.route && (route === target.route || (target.type !== "group" && route.startsWith(target.route + "/")))) || target.children.some(containsRoute);
   const activeChild = containsRoute(node);
-  const [open, setOpen] = useState(activeChild || depth === 0);
-  useEffect(() => { if (activeChild) setOpen(true); }, [activeChild]);
+  const open = expansion[node.id] ?? (activeChild || depth === 0);
+  useEffect(() => { if (activeChild && node.type === "group" && matches === null) setExpanded(node.id, true); }, [activeChild, node.id, node.type, setExpanded, matches]);
+  const setOpen = (value: boolean) => setExpanded(node.id, value);
   const expanded = matches !== null || open;
   const { confirm } = useAdminFeedback();
   const currentAdmin = useCurrentAdmin();
@@ -101,7 +103,7 @@ function Branch({ node, schema, route, go, depth, config, matches }: {
       {content}
     </button>}
     {expanded && <div className="nav-children">{node.children.map(child => <Branch key={child.type + child.id}
-      node={child} schema={schema} route={route} go={go} depth={depth + 1} config={config} matches={matches}/>)}</div>}
+      node={child} schema={schema} route={route} go={go} depth={depth + 1} config={config} matches={matches} expansion={expansion} setExpanded={setExpanded}/>)}</div>}
   </div>;
 }
 export function SidebarNavigation({ schema, route, navigate }: { schema: Schema; route: string; navigate: (route: string) => void }) {
@@ -109,6 +111,8 @@ export function SidebarNavigation({ schema, route, navigate }: { schema: Schema;
   const config = sidebarConfig(schema);
   const { t } = useI18n();
   const [query, setQuery] = useState("");
+  const [expansion, setExpansion] = useState<Record<string, boolean>>({});
+  const setExpanded = useCallback((path: string, open: boolean) => setExpansion(old => old[path] === open ? old : {...old, [path]: open}), []);
   const search = config.showSearch ? query.trim() : "";
   const matches = useMemo(() => search ? navigationMatches(tree, search) : null, [tree, search]);
   const overview = schema.navigation?.showDashboard !== false && (!search || matchesNavigation(t("nav.overview", "Overview"), "dashboard", search));
@@ -120,7 +124,7 @@ export function SidebarNavigation({ schema, route, navigate }: { schema: Schema;
       aria-current={!route ? "page" : undefined} aria-label={t("nav.overview", "Overview")} onClick={() => navigate("")}>
       <ItemContent config={config} schema={schema} type="dashboard" id="dashboard" label={t("nav.overview", "Overview")}
         icon={config.dashboardIcon} depth={0} active={!route} locked={false}/></button>}
-    {tree.map(node => <Branch key={node.type + node.id} node={node} schema={schema} route={route} go={navigate} depth={0} config={config} matches={matches}/>)}
+    {tree.map(node => <Branch key={node.type + node.id} node={node} schema={schema} route={route} go={navigate} depth={0} config={config} matches={matches} expansion={expansion} setExpanded={setExpanded}/>)}
     {matches && !matches.size && !overview && <div className="ra-nav-empty" role="status">{t("nav.no_results", "No matching pages")}</div>}
     </nav>
   </div>;

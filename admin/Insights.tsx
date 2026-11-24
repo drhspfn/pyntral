@@ -7,7 +7,7 @@ import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, Collapsible,
 
 import { api } from "@pyntral/api";
 import { inspectUpload } from "@pyntral/generated";
-import { Tabs, TabList, Tab, TabPanel, DataTable, Table, type DataTableProps } from "@pyntral/ui";
+import { Tabs, TabList, Tab, TabPanel, DataTable, Table, CodeBlock, JsonView, type DataTableProps } from "@pyntral/ui";
 
 /** Demonstrates that extensions use the same UI primitives/theme/feedback as the core. */
 export default function Insights({ schema, navigate }: CustomPageProps) {
@@ -66,6 +66,14 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
       </Tabs>
     </Card>
     <div className="resource-grid" style={{ marginTop: 20, marginBottom: 20 }}>
+      <Card title="Code and JSON viewers" description="Read-only, copyable, collapsible and theme-aware">
+        <div style={{display:"grid",gap:12,padding:12,minWidth:0}}>
+          <CodeBlock title="C# example" code={'using System;\npublic class Demo {\n    public static void Main() { Console.WriteLine("Hello"); }\n}'} collapsible maxHeight={180}/>
+          <JsonView title="Request payload" value={{ status: "ok", count: 12, data: { active: true, tags: ["demo", "shop"] } }} collapsible maxHeight={200}/>
+          <CodeBlock code="SELECT * FROM products" language="sql" inline/>
+          <CodeBlock title="Plain log" code="Processing complete\nNo errors" language="plaintext" highlight={false} formatToggle={false} wrap maxHeight={120}/>
+        </div>
+      </Card>
       <Card title="Uncontrolled tabs" description="Local selection owned by Tabs">
         <Tabs defaultValue="first"><TabList label="Local tabs"><Tab value="first">First</Tab><Tab value="second">Second</Tab></TabList>
           <TabPanel value="first">No external state required.</TabPanel><TabPanel value="second">Keyboard navigation is shared.</TabPanel></Tabs>

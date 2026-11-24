@@ -337,11 +337,13 @@ admin = Admin(
     path="/admin",
     secure_cookie=os.environ.get("ADMIN_SECURE_COOKIE", "true").lower() == "true",
     title="Shop demo",
+    dashboard_component="shop-home",
     # The browser favicon inherits the SVG header logo. Override with
     # favicon=Path(__file__).with_name("logo.svg") for independent branding.
     sidebar=SidebarConfig(
         width=260, min_width=238, max_width=440, mobile_width=260,
         resizable=True, icon_size=18, indent=9, max_indent_depth=5,
+        show_search=True,
         dashboard_icon="house",
         header=SidebarHeader(
             title="Shop demo", subtitle="Commerce workspace",
@@ -424,12 +426,12 @@ def reactivate_all_customers(session, _principal, _payload):
     return {"reactivated": len(inactive)}
 
 
-admin.add_group(NavigationGroup("Commerce", icon="boxes", order=10))
+admin.add_group(NavigationGroup("Commerce", icon="boxes", order=10, component="shop-category"))
 admin.add_group(NavigationGroup("Commerce/Orders", icon="shopping-basket", order=20))
 admin.add_group(NavigationGroup("Commerce/Shipping", icon="truck", order=25))
 admin.add_group(NavigationGroup("Security", icon="shield-check", order=40))
-admin.add_group(NavigationGroup("Agents", icon="bot", order=30))
-admin.add_group(NavigationGroup("Agents/Operations", icon="cpu", order=10))
+admin.add_group(NavigationGroup("Agents", icon="bot", order=30, component="shop-category"))
+admin.add_group(NavigationGroup("Agents/Operations", icon="cpu", order=10, component="shop-category"))
 
 # Demonstrate server-side validation on a normal CRUD resource. SQLAlchemy
 # String(length) and NOT NULL do not validate email syntax by themselves.

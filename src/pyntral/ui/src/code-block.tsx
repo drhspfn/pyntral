@@ -39,7 +39,7 @@ export function CodeBlock({
   const id = useId();
   const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
   const [formatOverride, setFormatOverride] = useState<boolean | null>(null);
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const [copyResult, setCopyResult] = useState<{ text: string; status: "copied" | "failed" } | null>(null);
   const isCollapsed = !inline && collapsible && (collapsed ?? internalCollapsed);
   // Avoid excessive work on very large logs; raw text remains fully available.
   const formatted = useMemo(() => code.length <= 100000 ? formatJson(code, indent) : null, [code, indent]);
@@ -49,9 +49,10 @@ export function CodeBlock({
   const displayed = pretty ? formatted! : code;
   const html = useMemo(() => highlight && !isCollapsed ? highlightedCode(displayed, resolved) : null,
     [displayed, resolved, highlight, isCollapsed]);
+  const copyState = copyResult?.text === displayed ? copyResult.status : "idle";
   const copy = async () => {
-    try { await navigator.clipboard.writeText(displayed); setCopyState("copied"); }
-    catch { setCopyState("failed"); }
+    try { await navigator.clipboard.writeText(displayed); setCopyResult({text: displayed, status: "copied"}); }
+    catch { setCopyResult({text: displayed, status: "failed"}); }
   };
   const toggle = () => {
     const next = !isCollapsed;
@@ -71,7 +72,7 @@ export function CodeBlock({
       </div>
       <div className="ra-code-actions">
         {isJson && formatToggle && <button type="button" className="ra-code-control" aria-pressed={pretty}
-          onClick={() => { setFormatOverride(!pretty); setCopyState("idle"); }}>{t("code.format", "Format")}</button>}
+          onClick={() => { setFormatOverride(!pretty); setCopyResult(null); }}>{t("code.format", "Format")}</button>}
         {copyable && <button type="button" className="ra-code-control" onClick={() => { void copy(); }}
           aria-label={t("code.copy", "Copy code")}>{copyState === "copied" ? <Check size={14}/> : <Copy size={14}/>}
           <span>{copyState === "copied" ? t("code.copied", "Copied") : t("code.copy", "Copy")}</span></button>}
