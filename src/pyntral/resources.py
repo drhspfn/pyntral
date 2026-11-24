@@ -150,6 +150,8 @@ class NavigationGroup:
     path: str  # e.g. "Agents" or "Agents/Runtime"
     icon: IconSpec = "folder"
     order: int = 0
+    component: str | None = None  # Dashboard registry ID for the category landing page.
+    min_role: str | None = None  # Landing page only; child resources retain their own ACL.
 
 
 @dataclass(slots=True)

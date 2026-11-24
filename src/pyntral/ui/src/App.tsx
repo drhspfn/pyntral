@@ -6,7 +6,7 @@ import {
   LoaderCircle, LockKeyhole, LogOut, Menu, MoreHorizontal, Pencil,
   Plus, RefreshCw, Trash2, Sun, Moon, X,
 } from "lucide-react";
-import { fields as customFields, pages as customPages, actions as customActions, dialogs as customDialogs, crud as customCrud, themes as customThemes, profile as customProfile, auth as customAuth } from "virtual:pyntral-extensions";
+import { fields as customFields, pages as customPages, actions as customActions, dialogs as customDialogs, crud as customCrud, themes as customThemes, profile as customProfile, auth as customAuth, dashboards } from "virtual:pyntral-extensions";
 import { SidebarNavigation } from "./navigation";
 import { sidebarConfig, SidebarHeaderRegion, SidebarFooterRegion } from "./sidebar";
 import { Icon } from "./icon";
@@ -115,13 +115,14 @@ function FieldValue({ resource, field, value, record, mode }: {
   return <>{pretty(value, field.kind)}</>;
 }
 
-function Overview({ schema, navigate }: { schema: Schema; navigate: (route: string) => void }) {
+function Overview({ schema, navigate, groupPath }: { schema: Schema; navigate: (route: string) => void; groupPath?: string }) {
   const { t } = useI18n();
+  const resources = schema.resources.filter(r => r.capabilities.list && (!groupPath || r.navigation === groupPath || r.navigation?.startsWith(groupPath + "/")));
   return <>
-    <div className="page-heading"><div><h1>{t("nav.overview", "Overview")}</h1><p>{schema.title}</p></div></div>
+    <div className="page-heading"><div><h1>{groupPath?.split("/").at(-1) ?? t("nav.overview", "Overview")}</h1><p>{schema.title}</p></div></div>
     <div className="section-head"><h2>Resources</h2></div>
-    {schema.resources.some((r) => r.capabilities.list) ? <div className="resource-grid">
-      {schema.resources.filter((r) => r.capabilities.list).map((resource) => {
+    {resources.length ? <div className="resource-grid">
+      {resources.map((resource) => {
         return <button key={resource.id} className="resource-card" onClick={() => navigate(`resources/${resource.id}`)}>
           {resource.icon != null && <div className="resource-icon"><Icon icon={resource.icon} size={18} fallback="database"/></div>}<strong>{resource.label}</strong>
           <ArrowRight size={15}/>
@@ -1088,12 +1089,25 @@ function AdminApp() {
   const content = useMemo(() => {
     const data = schema.data;
     if (!data) return null;
-    if (!route && data.navigation?.showDashboard !== false) return <Overview schema={data} navigate={navigate}/>;
+    if (!route && data.navigation?.showDashboard !== false) {
+      const defaultView = <Overview schema={data} navigate={navigate}/>;
+      const component = data.navigation.dashboardComponent;
+      const Custom = component ? dashboards[component] : undefined;
+      if (component && !Custom) return <Alert error={new Error(`Dashboard component "${component}" not registered`)}/>;
+      return Custom && auth.data?.user ? <Custom schema={data} navigate={navigate} user={auth.data.user} group={null} defaultView={defaultView}/> : defaultView;
+    }
     if (!route) {
       const first = data.resources.find((r) => r.capabilities.list);
        return first ? <ResourceList schema={data} resource={first} navigate={navigate}/> : <Empty title="No resources"/>;
     }
     const segments = route.split("/").map(decodeURIComponent);
+    if (segments[0] === "groups" && segments.length > 1) {
+      const group = data.navigation.groups.find(g => g.path === segments.slice(1).join("/"));
+      const Custom = group?.component ? dashboards[group.component] : undefined;
+      if (group?.component && !Custom) return <Alert error={new Error(`Dashboard component "${group.component}" not registered`)}/>;
+      if (group && Custom && auth.data?.user) return <Custom schema={data} navigate={navigate} user={auth.data.user} group={group}
+        defaultView={<Overview schema={data} navigate={navigate} groupPath={group.path}/>}/>;
+    }
     if (segments[0] === "resources") {
       const resource = data.resources.find((r) => r.id === segments[1]);
       if (!resource) return <Empty title="Resource not found" description="This resource isn't available to your account."/>;
@@ -1116,7 +1130,7 @@ function AdminApp() {
       if (page) return <Alert error={new Error(`Custom page component "${page.component}" not registered`)}/>;
     }
     return <Empty title="Page not found" description="Check the URL or choose a resource in the sidebar."/>;
-  }, [route, schema.data, navigate]);
+  }, [route, schema.data, navigate, auth.data?.user, setNotice]);
 
   if (auth.isPending) return <div className="fullscreen-loading"><Loading label="Starting workspace…"/></div>;
   if (auth.error) return <div className="fullscreen-loading"><Alert error={auth.error}/><button className="btn subtle" onClick={() => auth.refetch()}>Retry</button></div>;

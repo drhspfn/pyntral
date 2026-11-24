@@ -134,6 +134,8 @@ class SidebarConfig:
     header_component: str | None = None
     footer_component: str | None = None
     item_component: str | None = None
+    show_search: bool = False
+    search_placeholder: str | None = None
 
     def __post_init__(self) -> None:
         if any(type(v) is not int for v in (self.width, self.min_width, self.max_width, self.mobile_width,
@@ -145,6 +147,8 @@ class SidebarConfig:
             raise ValueError("Invalid mobile width or navigation icon size")
         if not 0 <= self.indent <= 24 or not 0 <= self.max_indent_depth <= 8:
             raise ValueError("Invalid navigation indentation")
+        if type(self.show_search) is not bool or (self.search_placeholder is not None and not isinstance(self.search_placeholder, str)):
+            raise ValueError("Invalid sidebar search configuration")
         icon_metadata(self.dashboard_icon)
         if self.header is not None and not isinstance(self.header, SidebarHeader):
             raise TypeError("header must be SidebarHeader or None")
@@ -157,6 +161,7 @@ class SidebarConfig:
     def metadata(self, title: str) -> dict:
         return {"width": self.width, "minWidth": self.min_width, "maxWidth": self.max_width,
                 "mobileWidth": self.mobile_width, "resizable": self.resizable, "showIcons": self.show_icons,
+                "showSearch": self.show_search, "searchPlaceholder": self.search_placeholder,
                 "iconSize": self.icon_size, "indent": self.indent, "maxIndentDepth": self.max_indent_depth,
                 "dashboardIcon": icon_metadata(self.dashboard_icon),
                 "header": self.header.metadata(title) if self.header else None,

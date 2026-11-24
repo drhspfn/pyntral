@@ -81,6 +81,7 @@ class Admin:
         default_theme: str = "system",  # system | light | dark
         animations: bool = True,
         show_dashboard: bool = True,
+        dashboard_component: str | None = None,
         sidebar: SidebarConfig | None = None,
         login: LoginConfig | None = None,
         role_weights: dict[str, int] | None = None,
@@ -185,7 +186,10 @@ class Admin:
         self.theme = theme or {}
         self.default_theme = default_theme
         self.animations = animations
+        if dashboard_component is not None and (not isinstance(dashboard_component, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", dashboard_component)):
+            raise ValueError("Invalid dashboard component ID")
         self.show_dashboard = show_dashboard
+        self.dashboard_component = dashboard_component
         if sidebar is not None and not isinstance(sidebar, SidebarConfig):
             raise TypeError("sidebar must be SidebarConfig")
         self.sidebar = sidebar if sidebar is not None else SidebarConfig()
@@ -407,6 +411,12 @@ class Admin:
 
     def add_group(self, group: NavigationGroup) -> None:
         validate_navigation(group.path)
+        if not group.path:
+            raise ValueError("Navigation group path is required")
+        if group.component is not None and (not isinstance(group.component, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", group.component)):
+            raise ValueError("Invalid group dashboard component ID")
+        if group.min_role is not None and (group.component is None or group.min_role not in self.role_weights):
+            raise ValueError("Group dashboard min_role requires a component and a known role")
         icon_metadata(group.icon)
         if group.path in self.groups:
             raise ValueError("Duplicate navigation group: " + group.path)
@@ -946,6 +956,12 @@ class Admin:
                      if (p.min_role is None or self._role_ok(principal, p.min_role))
                      and await maybe_await(self.auth.authorize(principal, "page:" + p.name, "view"))]
             visible_paths.extend(p["navigation"] for p in pages if p["navigation"])
+            group_pages = {g.path: g.component for g in self.groups.values() if g.component is not None
+                           and (g.min_role is None or self._role_ok(principal, g.min_role))
+                           and await maybe_await(self.auth.authorize(principal, "group:" + g.path, "view"))}
+            visible_paths.extend(group_pages)
+            dashboard = self.dashboard_component if self.show_dashboard and self.dashboard_component and await maybe_await(
+                self.auth.authorize(principal, "dashboard:" + self.dashboard_component, "view")) else None
             locale = self.default_locale
             if self.locale_resolver is not None:
                 resolved = await maybe_await(self.locale_resolver(principal))
@@ -1005,10 +1021,11 @@ class Admin:
                     "resources": resources,
                     "localization": {"code": locale, "messages": self.translations.get(locale, {})},
                     "navigation": {"groups": [
-                        {"path": g.path, "icon": icon_metadata(g.icon), "order": g.order}
+                        {"path": g.path, "icon": icon_metadata(g.icon), "order": g.order,
+                         **({"component": group_pages[g.path]} if g.path in group_pages else {})}
                         for g in self.groups.values() if any(
                             path == g.path or path.startswith(g.path + "/") for path in visible_paths
-                        )], "showDashboard": self.show_dashboard, "sidebar": self.sidebar.metadata(self.title)},
+                        )], "showDashboard": self.show_dashboard, "dashboardComponent": dashboard, "sidebar": self.sidebar.metadata(self.title)},
                     "theme": {"default": theme_default,
                               "animations": self.animations,
                               "tokens": theme_tokens},
