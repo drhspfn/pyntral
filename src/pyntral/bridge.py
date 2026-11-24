@@ -24,9 +24,7 @@ class BridgeUpload:
         if type(self.max_bytes) is not int or not 1 <= self.max_bytes <= 64 * 1024 * 1024:
             raise ValueError("BridgeUpload max_bytes must be 1–64 MiB")
         if not isinstance(self.content_types, tuple) or not self.content_types or any(
-            not isinstance(mime, str) or not re.fullmatch(r"[a-z0-9][a-z0-9!#@dataclass(slots=True)
-class Bridge:^_.+-]*/(?:[a-z0-9][a-z0-9!#@dataclass(slots=True)
-class Bridge:^_.+-]*|\*)", mime)
+            not isinstance(mime, str) or not re.fullmatch(r"[a-z0-9][a-z0-9!#$&^_.+-]*/(?:[a-z0-9][a-z0-9!#$&^_.+-]*|\*)", mime)
             for mime in self.content_types
         ):
             raise ValueError("BridgeUpload content_types must be explicit lowercase MIME types or type/*")

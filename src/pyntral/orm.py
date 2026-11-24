@@ -634,6 +634,8 @@ class MapperAdapter:
     @asynccontextmanager
     async def _handler_transaction(self, session: Any):
         # Application handlers are trusted code, but the framework owns commit.
+        if not session.in_transaction():
+            await maybe_await(session.begin())
         target = getattr(session, "sync_session", session)
         def reject_commit(_session):
             raise AdminError(500, "CRUD handlers must not commit transactions", "handler_transaction_error")
