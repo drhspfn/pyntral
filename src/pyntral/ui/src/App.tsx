@@ -12,6 +12,7 @@ import { sidebarConfig, SidebarHeaderRegion, SidebarFooterRegion } from "./sideb
 import { Icon } from "./icon";
 import { Tabs, TabList, Tab, TabPanel } from "./tabs";
 import { Table } from "./data-table";
+import { JsonView } from "./code-block";
 import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
@@ -112,6 +113,8 @@ function FieldValue({ resource, field, value, record, mode }: {
   const custom = field.components[mode];
   const Comp = custom ? customFields[custom] : undefined;
   if (Comp) return <Comp field={field} value={value} record={record} resource={resource} mode={mode} />;
+  if (mode === "show" && value !== null && value !== undefined && (field.kind === "json" || field.kind === "array"))
+    return <JsonView value={value} collapsible maxHeight={320}/>;
   return <>{pretty(value, field.kind)}</>;
 }
 
