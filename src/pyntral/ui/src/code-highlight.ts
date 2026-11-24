@@ -24,7 +24,7 @@ export function codeLanguage(source: string, requested: string, validJson: boole
     return result.language && result.relevance >= 3 ? result.language : "plaintext";
   } catch { return "plaintext"; }
 }
-export function languageLabel(language: string): string { return names[language] ?? language; }
+export function languageLabel(language: string): string { return Object.hasOwn(names, language) ? names[language] : language; }
 export function highlightedCode(source: string, language: string): string | null {
   if (source.length > 40000 || language === "plaintext" || !hljs.getLanguage(language)) return null;
   try { return hljs.highlight(source, { language, ignoreIllegals: true }).value; }

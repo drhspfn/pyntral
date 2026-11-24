@@ -47,3 +47,9 @@ The minimal Python-only example is [`examples/basic/`](../examples/basic/README.
 - [Browser branding](ui.md#browser-title-and-favicon)
 - [Public HTTP client](extensions.md#http-client-pyntralapi)
 - [Portable custom UI](deployment.md#custom-ui-in-a-python-only-runtime)
+
+## Navigation and code presentation
+
+- [Sidebar search](ui.md#sidebar-search)
+- [Home and category dashboards](extensions.md#home-and-category-dashboards)
+- [CodeBlock and JsonView](ui.md#codeblock-and-jsonview)

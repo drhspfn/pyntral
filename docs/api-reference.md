@@ -33,7 +33,7 @@ Admin(
     session_cookie_path="/", session_max_age=43200, session_store=None,
     require_async_sessions=False, enable_jobs=True, dist_dir=None,
     title="Pyntral", favicon=None, theme=None, default_theme="system",
-    animations=True, show_dashboard=True, sidebar=None, login=None, role_weights=None,
+    animations=True, show_dashboard=True, dashboard_component=None, sidebar=None, login=None, role_weights=None,
     logging_config=None, event_bus=None, auto_start_events=True,
     event_publish_timeout=2.0, max_json_bytes=1048576, storage=None,
     default_locale="en", translations=None, locale_resolver=None,
@@ -60,7 +60,7 @@ Key methods:
 - `Relationship`: visible, label, selectable, layout (`table`/`cards`).
 - `Action`: name, handler, label, variant, confirmation, position, appearance, component, dialog, icon, visible.
 - `Page`: name, label, component, icon, navigation, order, min_role.
-- `NavigationGroup`: path, icon, order.
+- `NavigationGroup`: path, icon, order, optional component (dashboard registry ID) and min_role (landing page only).
 - `RoleAccess`: read/select/write/create/edit/delete thresholds and navigation state.
 - `Bridge`: name, input_model, output_model, handler, description, min_role, optional upload.
 - `BridgeUpload`: max_bytes (default 5 MiB, range 1–64 MiB), content_types (default application/octet-stream; exact types or type/*).
@@ -277,3 +277,15 @@ legacy `/favicon.svg` route remains available. See [browser branding](ui.md#brow
 `@pyntral/api` exports `api<T>`, `ApiError`, `buildQuery`, `base`, and the `ApiOptions` type.
 See [HTTP client](extensions.md#http-client-pyntralapi) for admin and host
 scope and security details.
+
+### Navigation and dashboard metadata
+
+`Admin(dashboard_component="home")` references a TSX ID in the
+`dashboards` manifest category. `NavigationGroup(component="category",
+min_role=None)` configures an authorized category landing page.
+`SidebarConfig(show_search=False, search_placeholder=None)` controls
+navigation filtering. Authenticated schema exposes navigation.dashboardComponent
+and per-group component IDs only when permitted; sidebar.showSearch and
+sidebar.searchPlaceholder configure the search. React DashboardProps and
+CodeBlockProps / JsonViewProps are public. See [dashboards](extensions.md#home-and-category-dashboards)
+and [code viewers](ui.md#codeblock-and-jsonview).

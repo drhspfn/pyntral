@@ -15,6 +15,7 @@ The published Pyntral Python wheel contains a complete generic SPA that works wi
   "dialogs": { "archive-notice": "admin/ArchiveNotice.tsx" },
   "themes": {},
   "crud": { "resource-summary": "admin/ResourceSummary.tsx" },
+  "dashboards": { "home": "admin/ShopDashboard.tsx", "category": "admin/ShopDashboard.tsx" },
   "profile": {},
   "access": {},
   "auth": {}
@@ -247,3 +248,50 @@ binary bodies are supported without forcing the JSON content type.
 result type is compile-time only, not runtime validation. Use generated bridges
 for Pydantic DTO validation. `base` exposes the mount; `buildQuery` encodes query
 parameters. See [Insights](../admin/Insights.tsx) for a live admin HTTP call.
+
+## Home and category dashboards
+
+Register an extension ID in the `dashboards` manifest category, and
+select it in Python. Existing apps retain the built-in Overview.
+
+```python
+admin = Admin(app, session_factory=SessionLocal, auth=auth, secret_key=secret,
+    dashboard_component="home", sidebar=SidebarConfig(show_search=True))
+admin.add_group(NavigationGroup("Avatars", icon="users", component="category"))
+admin.add_group(NavigationGroup("Avatars/Generation", component="category", min_role="admin"))
+```
+
+```tsx
+import type { DashboardProps } from "@pyntral/types";
+import { Card, Badge } from "@pyntral/ui";
+
+export default function Dashboard({ user, group, defaultView }: DashboardProps) {
+  return <>
+    <Card title={group?.path ?? "Workspace"}>
+      {user.roles.map(role => <Badge key={role}>{role}</Badge>)}
+    </Card>
+    {defaultView}
+  </>;
+}
+```
+
+`DashboardProps` contains schema, navigate(route), user (Principal),
+group (null on the root dashboard or NavigationGroupDef on a category),
+and defaultView (the built-in Overview, restricted to category resources
+for a group dashboard). Render defaultView only when desired. The standard
+`useCurrentAdmin()` hook is also available. Use API/bridge calls for scoped
+metrics. The home dashboard is at the admin root; `show_dashboard=False`
+takes precedence. Category names navigate to `groups/<encoded path>`,
+with a separate disclosure arrow for subcategories and child resources.
+A category without a component still behaves as an ordinary disclosure.
+Authorized standalone category dashboards are visible even with no children.
+
+Server-side authorization checks `dashboard:<component-id>` and
+`group:<full/path>` with operation `view`. Groups can additionally specify
+a known minimum role. Denied home extensions fall back to Overview; denied
+category components are omitted from the authenticated schema, while
+accessible descendants remain navigable. Dashboard authorization is not
+a replacement for resource/bridge authorization. Missing registered TSX
+components produce a configuration error rather than a silent fallback.
+The registry participates in Vite, lint, editor configuration and build
+fingerprinting. See [ShopDashboard](../admin/ShopDashboard.tsx).

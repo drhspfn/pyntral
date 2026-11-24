@@ -328,3 +328,9 @@ the public `@pyntral/ui` API for custom React components. See
 - The Shop Docker build uses `pyntral export-ui` and copies the runtime-only
   bundle into `/app/admin-dist`, selected explicitly with `PYNTRAL_DIST`.
 - **Browser tab:** the title is `Shop demo` and the favicon inherits [logo.svg](logo.svg); test before login and after signing in. The public HTTP client is used by the Insights agent selector; `scope: "host"` is documented in [Extensions](../../docs/extensions.md#http-client-pyntralapi).
+
+### Search, dashboards and code viewers
+
+- Search for "draft", "orders" or "Agents" in the sidebar; clear the search to restore the tree.
+- Overview renders ShopDashboard with signed-in user context and scoped live counts. Click Commerce, Agents or Agents/Operations to open its category dashboard; the separate arrow expands the children.
+- Agents → Insights → Code and JSON viewers shows C# detection, JSON pretty/raw toggling, copy, collapsing, inline SQL and plain wrapped logs. Record details also use JsonView for JSON/array fields.

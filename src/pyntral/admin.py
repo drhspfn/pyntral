@@ -1786,7 +1786,7 @@ class Admin:
                 if not candidate.is_relative_to(dist) or not candidate.is_file():
                     raise AdminError(404, "Asset not found", "not_found")
                 return FileResponse(candidate)
-            if "." in Path(asset_path).name:
+            if "." in Path(asset_path).name and not asset_path.startswith("groups/"):
                 raise AdminError(404, "Asset not found", "not_found")
             html = (dist / "index.html").read_text(encoding="utf-8")
             mount = quote(request.scope.get("root_path", self.path).rstrip("/") + "/", safe="/")

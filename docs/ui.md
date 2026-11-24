@@ -11,7 +11,7 @@ import {
   Button, Badge, Card, TextInput, Textarea, FormField,
   Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup, SortableList,
   SearchInput, Select, AsyncSelect, DatePicker, Calendar, Dialog,
-  Tabs, TabList, Tab, TabPanel, Table, DataTable,
+  Tabs, TabList, Tab, TabPanel, Table, DataTable, CodeBlock, JsonView,
   FileUpload, FileRow, Collapsible, OverflowText, Icon, Brand,
   Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, PopoverClose,
 } from "@pyntral/ui";
@@ -37,6 +37,7 @@ import {
 | `Dialog` | Reusable dialog primitive; for global actions use `useAdminFeedback().confirm()`. |
 | `Tabs`, `TabList`, `Tab`, `TabPanel` | Compound tabs with controlled/uncontrolled state. |
 | `Table`, `DataTable` | Shared semantic table shell and typed data grid. |
+| `CodeBlock`, `JsonView` | Read-only inline or multiline source and JSON viewers; copy, collapse, format and highlight. |
 | `FileUpload`, `FileRow` | Controlled selection, explicit upload callback and file rows. |
 | `Collapsible`, `OverflowText` | Disclosure and truncated labels. |
 | `Icon`, `Brand` | Shared icon and branding primitives. |
@@ -420,3 +421,66 @@ authentication, including under ASGI proxy prefixes. The development client
 sets document.title when public login configuration arrives; the production
 HTML title is escaped and rendered by the server. No custom middleware or
 frontend rebuild is needed to change branding.
+
+## Sidebar search
+
+```python
+sidebar = SidebarConfig(show_search=True, search_placeholder="Find a resource or page")
+```
+
+Search is disabled by default. When enabled, the field stays above the
+scrolling navigation tree. It matches authorized resource/page labels and
+IDs and category paths, case-insensitively; matching categories include
+their descendants and matching leaves retain their ancestors. Search
+temporarily expands matching branches and does not alter manual expansion
+state. Locked entries remain locked. Clearing the search restores the
+tree. It works in the mobile drawer as well. When omitted, the placeholder
+uses the current UI locale.
+
+## CodeBlock and JsonView
+
+```tsx
+import { CodeBlock, JsonView } from "@pyntral/ui";
+
+<CodeBlock code={source} language="auto" title="Source"
+  highlight collapsible copyable maxHeight={320}/>
+
+<JsonView value={response.payload} title="Request payload"
+  format formatToggle highlightToggle defaultCollapsed collapsible
+  minHeight={80} maxHeight={280} wrap/>
+
+<CodeBlock code="SELECT * FROM products" language="sql" inline/>
+```
+
+| Prop | Contract / default |
+| --- | --- |
+| `code` / `value` | CodeBlock takes source text; JsonView takes an object or serialized JSON string. |
+| `language` | auto (default), explicit name/alias or plaintext; JsonView always uses JSON. |
+| `title`, `showLanguage` | Optional title, language label visible by default. |
+| `inline` | False; true renders a compact code span without toolbar. |
+| `highlight`, `highlightToggle` | True / false; optional user-facing toggle. |
+| `format`, `formatToggle` | True / true; formatting and toggle only apply to valid JSON. |
+| `indent` | 2 spaces; clamped to 0–8. |
+| `copyable` | True; copies exactly the displayed text, with clipboard success/error feedback. |
+| `collapsible`, `defaultCollapsed` | False / false. |
+| `collapsed`, `onCollapsedChange` | Optional controlled collapse state. |
+| `wrap` | False; use true for wrapped lines instead of horizontal scrolling. |
+| `minHeight`, `maxHeight` | Code body size (px or CSS length); max defaults to 360px. |
+| `minWidth`, `maxWidth`, `fontSize`, `className`, `style` | Layout and visual overrides; width defaults to max 100%. |
+
+Both props types are exported. The viewers use the inherited light/dark
+palette with optional CSS overrides for `--ra-code-keyword`,
+`--ra-code-string`, `--ra-code-number`, `--ra-code-name`, and
+`--ra-code-comment`. Highlight.js uses a bounded grammar set (JSON, C#,
+JavaScript, TypeScript, Python, SQL, Bash, XML/HTML, CSS, YAML). Auto
+detection is heuristic; specify the language for ambiguous snippets.
+Raw input is never treated as HTML. JSON formatting preserves numeric
+lexemes, duplicate keys and string contents; invalid JSON is displayed
+unchanged. Formatting is limited to 100,000 input characters, depth 256
+and roughly 1 MiB of formatted output; language detection and highlighting
+are skipped above 12,000 and 40,000 characters respectively. Large logs
+remain visible and copyable. This is a viewer, not an editor or a general
+language formatter. Clipboard copying requires a browser secure context
+or localhost. The built-in record detail renderer uses JsonView for JSON
+and array fields, while lists keep compact previews. See the
+[Insights playground](../admin/Insights.tsx).

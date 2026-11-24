@@ -544,3 +544,9 @@ with AsyncSession and `ctx.session.flush()` with Session. On entry to create,
 to ctx.payload inside the handler do not automatically persist new fields.
 Assign trusted server-owned values directly to the mapped record. See
 create_demo_staff and update_demo_staff in [Shop](../examples/shop/app.py).
+
+### Category landing pages
+
+Use `NavigationGroup("Commerce", component="commerce-home")` to attach an
+optional dashboard to a navigation category. It does not replace or restrict
+the child resources. See [dashboard registry and authorization](extensions.md#home-and-category-dashboards).

@@ -45,5 +45,5 @@ export const languageAliases: Record<string, string> = {
 };
 export function normalizeLanguage(language: string): string {
   const normalized = language.trim().toLowerCase();
-  return languageAliases[normalized] ?? normalized;
+  return Object.hasOwn(languageAliases, normalized) ? languageAliases[normalized] : normalized;
 }

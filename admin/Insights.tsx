@@ -68,10 +68,10 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
     <div className="resource-grid" style={{ marginTop: 20, marginBottom: 20 }}>
       <Card title="Code and JSON viewers" description="Read-only, copyable, collapsible and theme-aware">
         <div style={{display:"grid",gap:12,padding:12,minWidth:0}}>
-          <CodeBlock title="C# example" code={'using System;\npublic class Demo {\n    public static void Main() { Console.WriteLine("Hello"); }\n}'} collapsible maxHeight={180}/>
+          <CodeBlock title="C# example" highlightToggle code={'using System;\npublic class Demo {\n    public static void Main() { Console.WriteLine("Hello"); }\n}'} collapsible maxHeight={180}/>
           <JsonView title="Request payload" value={{ status: "ok", count: 12, data: { active: true, tags: ["demo", "shop"] } }} collapsible maxHeight={200}/>
           <CodeBlock code="SELECT * FROM products" language="sql" inline/>
-          <CodeBlock title="Plain log" code="Processing complete\nNo errors" language="plaintext" highlight={false} formatToggle={false} wrap maxHeight={120}/>
+          <CodeBlock title="Plain log" code={"Processing complete\nNo errors"} language="plaintext" highlight={false} formatToggle={false} wrap maxHeight={120}/>
         </div>
       </Card>
       <Card title="Uncontrolled tabs" description="Local selection owned by Tabs">

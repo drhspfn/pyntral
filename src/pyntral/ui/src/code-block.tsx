@@ -10,6 +10,7 @@ export interface CodeBlockProps {
   title?: string;
   inline?: boolean;
   highlight?: boolean;
+  highlightToggle?: boolean;
   format?: boolean;
   formatToggle?: boolean;
   indent?: number;
@@ -30,7 +31,7 @@ export interface CodeBlockProps {
 }
 /** Read-only source viewer. Copy copies the displayed text, never markup. */
 export function CodeBlock({
-  code, language = "auto", title, inline = false, highlight = true, format = true,
+  code, language = "auto", title, inline = false, highlight = true, highlightToggle = false, format = true,
   formatToggle = true, indent = 2, copyable = true, collapsible = false, collapsed,
   defaultCollapsed = false, onCollapsedChange, showLanguage = true, wrap = false,
   minHeight, maxHeight = 360, minWidth, maxWidth = "100%", fontSize, className = "", style,
@@ -39,6 +40,8 @@ export function CodeBlock({
   const id = useId();
   const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
   const [formatOverride, setFormatOverride] = useState<boolean | null>(null);
+  const [highlightOverride, setHighlightOverride] = useState<boolean | null>(null);
+  const highlighting = highlightOverride ?? highlight;
   const [copyResult, setCopyResult] = useState<{ text: string; status: "copied" | "failed" } | null>(null);
   const isCollapsed = !inline && collapsible && (collapsed ?? internalCollapsed);
   // Avoid excessive work on very large logs; raw text remains fully available.
@@ -47,8 +50,8 @@ export function CodeBlock({
   const isJson = resolved === "json" && formatted !== null;
   const pretty = (formatOverride ?? format) && isJson;
   const displayed = pretty ? formatted! : code;
-  const html = useMemo(() => highlight && !isCollapsed ? highlightedCode(displayed, resolved) : null,
-    [displayed, resolved, highlight, isCollapsed]);
+  const html = useMemo(() => highlighting && !isCollapsed ? highlightedCode(displayed, resolved) : null,
+    [displayed, resolved, highlighting, isCollapsed]);
   const copyState = copyResult?.text === displayed ? copyResult.status : "idle";
   const copy = async () => {
     try { await navigator.clipboard.writeText(displayed); setCopyResult({text: displayed, status: "copied"}); }
@@ -63,7 +66,7 @@ export function CodeBlock({
   const content = html === null ? <code>{displayed}</code> : <code dangerouslySetInnerHTML={{ __html: html }}/>;
   if (inline) return <span className={`ra-code-inline ${className}`} style={{ minWidth, maxWidth, fontSize, ...style }}>{content}</span>;
   return <div className={`ra-code-block ${className}`} style={{ minWidth, maxWidth, ...style }}>
-    {(title || showLanguage || copyable || collapsible || (isJson && formatToggle)) && <div className="ra-code-header">
+    {(title || showLanguage || copyable || collapsible || highlightToggle || (isJson && formatToggle)) && <div className="ra-code-header">
       <div className="ra-code-heading">
         {collapsible && <button type="button" className="ra-code-control" aria-label={isCollapsed ? t("code.expand", "Expand code") : t("code.collapse", "Collapse code")}
           aria-expanded={!isCollapsed} aria-controls={id} onClick={toggle}>{isCollapsed ? <ChevronRight size={15}/> : <ChevronDown size={15}/>}</button>}
@@ -71,6 +74,8 @@ export function CodeBlock({
         {showLanguage && <span className="ra-code-language">{languageLabel(resolved)}</span>}
       </div>
       <div className="ra-code-actions">
+        {highlightToggle && <button type="button" className="ra-code-control" aria-pressed={highlighting}
+          onClick={() => setHighlightOverride(!highlighting)}>{t("code.highlight", "Highlight")}</button>}
         {isJson && formatToggle && <button type="button" className="ra-code-control" aria-pressed={pretty}
           onClick={() => { setFormatOverride(!pretty); setCopyResult(null); }}>{t("code.format", "Format")}</button>}
         {copyable && <button type="button" className="ra-code-control" onClick={() => { void copy(); }}

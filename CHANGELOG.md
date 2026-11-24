@@ -2,6 +2,12 @@
 
 Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions and use [PEP 440](https://peps.python.org/pep-0440/) version numbers.
 
+## Unreleased
+
+- Add optional searchable sidebar navigation with preserved tree expansion.
+- Add authenticated custom home and category dashboards with a shared default view and user context.
+- Add theme-aware CodeBlock and JsonView with language detection, optional highlighting, lossless JSON formatting, clipboard and collapse controls.
+
 ## 1.0.0b3 — Third public beta
 
 - Add public Tabs and table primitives reused by built-in CRUD.
