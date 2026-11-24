@@ -312,3 +312,17 @@ drag-and-drop with the shared `SortableList` atom. Saved ordering respects
 hidden and pinned columns. **Agents → Insights → Drag to reorder** demonstrates
 the public `@pyntral/ui` API for custom React components. See
 [UI primitives](../../docs/ui.md) for keyboard interaction and typed props.
+
+### Consumer extension API examples
+
+- **Commerce → Products:** a before-list metric and after-show summary are
+  rendered with the existing standard CRUD controls, using `crud_slots`.
+- **Commerce → Product tag links:** the existing association table is exposed
+  as a read-only composite-key resource. Open a record to see both key fields.
+- **Security → Demo staff:** custom create/update handlers normalize usernames,
+  while the existing PasswordFeature still manages the write-only password.
+- **Agents → Insights → Consumer extension primitives:** try the shared tabs,
+  typed DataTable and a bounded binary bridge. The upload demonstration
+  returns the byte count and SHA-256; it neither decodes nor stores the image.
+- The Shop Docker build uses `pyntral export-ui` and copies the runtime-only
+  bundle into `/app/admin-dist`, selected explicitly with `PYNTRAL_DIST`.

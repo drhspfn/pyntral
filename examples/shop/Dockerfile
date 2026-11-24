@@ -14,18 +14,19 @@ RUN ADMIN_USERNAME=build-only \
     ADMIN_PASSWORD_HASH="$(uv run python -c 'from pyntral.auth import hash_password; print(hash_password("build-only"))')" \
     APP_SECRET_KEY='temporary-build-only-secret-not-used-at-runtime' \
     uv run --locked pyntral build --app examples.shop.app:app --force
+RUN uv run --locked pyntral export-ui /app/admin-dist
 
 FROM python:3.13-slim-bookworm AS runtime
 WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
-    PYNTRAL_DIST=/app/.pyntral/dist \
+    PYNTRAL_DIST=/app/admin-dist \
     DATABASE_URL=sqlite:////app/data/shop.db \
     SHOP_UPLOAD_ROOT=/app/data/uploads
 COPY --from=build /app/.venv /app/.venv
 COPY --from=build /app/src /app/src
 COPY --from=build /app/examples /app/examples
-COPY --from=build /app/.pyntral/dist /app/.pyntral/dist
+COPY --from=build /app/admin-dist /app/admin-dist
 RUN useradd -m -u 10001 pyntral && mkdir -p /app/data && chown pyntral:pyntral /app/data
 USER pyntral
 EXPOSE 8000

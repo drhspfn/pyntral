@@ -31,6 +31,7 @@ def describe_resources(admin: Admin) -> dict[str, Any]:
         resources.append({
             "id": data["id"], "label": data["label"],
             "primary_key": data["primaryKey"],
+            "primary_keys": data.get("primaryKeys", [data["primaryKey"]]),
             "fields": fields,
             "relationships": [{"name": x["name"], "target": x["resource"],
                                "many": x["many"], "editable": x.get("editable", False)}

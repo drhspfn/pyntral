@@ -15,7 +15,8 @@
     "archive-notice": "admin/ArchiveNotice.tsx"
   },
   "crud": {
-    "tags-list": "admin/TagCatalog.tsx"
+    "tags-list": "admin/TagCatalog.tsx",
+    "resource-summary": "admin/ResourceSummary.tsx"
   },
   "sidebarHeaders": {
     "shop-header": "admin/SidebarRegion.tsx"

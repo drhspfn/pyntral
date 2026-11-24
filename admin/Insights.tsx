@@ -6,6 +6,8 @@ import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, Collapsible,
   type SelectOption } from "@pyntral/ui";
 
 import { api } from "@pyntral/api";
+import { inspectUpload } from "@pyntral/generated";
+import { Tabs, TabList, Tab, TabPanel, DataTable } from "@pyntral/ui";
 
 /** Demonstrates that extensions use the same UI primitives/theme/feedback as the core. */
 export default function Insights({ schema, navigate }: CustomPageProps) {
@@ -14,6 +16,8 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
   const [search, setSearch] = useState("");
   const [date, setDate] = useState<string | null>(null);
   const [demoFiles, setDemoFiles] = useState<File[]>([]);
+  const [binaryFiles, setBinaryFiles] = useState<File[]>([]);
+  const [binaryResult, setBinaryResult] = useState<{ name: string; size: number; sha256: string } | null>(null);
   const [singleDemoFiles, setSingleDemoFiles] = useState<File[]>([]);
   const [roles, setRoles] = useState<(string | number)[]>(["reviewer", "author"]);
   const [agentId, setAgentId] = useState<string | number | null>(null);
@@ -36,7 +40,20 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
   return <section>
     <h1>Component playground</h1>
     <p style={{ color: "var(--ra-muted)", fontSize: 12 }}>A custom page using the public @pyntral/ui and @pyntral/feedback API.</p>
-    <div className="resource-grid" style={{ marginBottom: 20 }}>
+    <Card title="Consumer extension primitives" description="Tabs, DataTable and typed binary bridge">
+      <Tabs defaultValue="table">
+        <TabList label="Consumer examples"><Tab value="table">Table</Tab><Tab value="upload">Binary upload</Tab></TabList>
+        <TabPanel value="table"><DataTable rows={workflowSteps} getRowKey={row => row.id}
+          columns={[{ id: "id", header: "ID", cell: row => row.id }, { id: "label", header: "Step", cell: row => row.label }]}/></TabPanel>
+        <TabPanel value="upload"><FileUpload files={binaryFiles} onFilesChange={setBinaryFiles} multiple={false}
+          maxSizeBytes={2_000_000} accept="image/png,image/jpeg" onUpload={async (file, ctx) => {
+            const result = await inspectUpload({ label: "demo" }, file, ctx.signal);
+            setBinaryResult(result);
+            return { key: result.sha256, name: result.name, size: result.size, mimeType: file.type };
+          }}/>{binaryResult && <p style={{ overflowWrap: "anywhere" }}>{binaryResult.name} · {binaryResult.size} bytes · SHA-256 {binaryResult.sha256}</p>}</TabPanel>
+      </Tabs>
+    </Card>
+    <div className="resource-grid" style={{ marginTop: 20, marginBottom: 20 }}>
       <Card title="Reusable controls" description="Light/dark tokens inherited automatically">
         <div style={{ display: "grid", gap: 12 }}>
           <TextInput value={text} onChange={(e) => setText(e.target.value)} placeholder="Regular input" aria-label="Demo input"/>

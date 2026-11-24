@@ -44,6 +44,11 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
             assert resources["file-assets"]["icon"]["kind"] == "image"
             assert resources["editorial-drafts"]["uploadMaxBytes"] == 2_000_000
             products = resources["products"]
+            assert products["crudSlots"] == {"list": {"before": "resource-summary"}, "show": {"after": "resource-summary"}}
+            assert resources["product-tag-links"]["primaryKeys"] == ["product_id", "tag_id"]
+            links = client.get("/admin/api/resources/product-tag-links").json()["items"]
+            assert links and links[0]["__pyntral_id"]
+            assert client.get("/admin/api/resources/product-tag-links/" + links[0]["__pyntral_id"]).status_code == 200
             assert any(job["name"] == "inventory-report" for job in products["jobs"])
             job_url = "/admin/api/resources/products/jobs/inventory-report"
             assert client.post(job_url, json={}).status_code == 403
