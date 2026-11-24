@@ -120,7 +120,7 @@ export interface LoginConfig {
   sideTitle?: string | null; sideDescription?: string | null; sideFooter?: string | null;
   showThemeToggle: boolean; showPasswordToggle: boolean;
 }
-export interface PublicLoginConfig { login: LoginConfig; theme: ThemeConfig; localization?: LocalizationConfig }
+export interface PublicLoginConfig { title?: string; login: LoginConfig; theme: ThemeConfig; localization?: LocalizationConfig }
 export interface Schema {
   realtime?: boolean;
   localization?: LocalizationConfig;

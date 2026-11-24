@@ -1062,6 +1062,10 @@ function AdminApp() {
   });
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   const loginConfig = publicLogin.data ?? defaultLoginConfig;
+  useEffect(() => {
+    const title = publicLogin.data?.title ?? schema.data?.title;
+    if (title !== undefined) document.title = title;
+  }, [publicLogin.data?.title, schema.data?.title]);
   const theme = (auth.data?.user ? schema.data?.theme : undefined) ?? loginConfig.theme;
   const themeSelection = preferredTheme === "system" ? theme.default : preferredTheme;
   const themeMode: ThemeMode = themeSelection === "system" ? (systemDark ? "dark" : "light") : resolveMode(themeSelection);

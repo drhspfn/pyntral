@@ -369,3 +369,17 @@ import { Tabs, TabList, Tab, TabPanel, DataTable } from "@pyntral/ui";
 `DataTable<Row>` accepts rows, typed columns, row keys, loading/empty states,
 compact density and controlled sorting. It does not fetch or paginate data
 automatically; use application query state and your bridge/API.
+
+## Browser title and favicon
+
+`Admin(title="Solaris Atlas · Admin", favicon=SvgIcon.from_file("logo.svg"))`
+sets the browser title and favicon as well as the application title. When
+favicon is omitted, a sidebar header SvgIcon is inherited; otherwise the
+standard bundled favicon is used. Explicit `Path("logo.svg")`,
+`Path("logo.png")` or `Path("logo.ico")` are supported. Files are read at
+configuration time and bounded in size. The mount-relative public
+`/auth/favicon` route and `/favicon.svg` compatibility route work without
+authentication, including under ASGI proxy prefixes. The development client
+sets document.title when public login configuration arrives; the production
+HTML title is escaped and rendered by the server. No custom middleware or
+frontend rebuild is needed to change branding.

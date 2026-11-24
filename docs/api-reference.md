@@ -263,3 +263,14 @@ See [events](events.md) for the delivery/ACK contract and [bridges](bridges.md) 
 - Composite-key resources expose `primaryKeys: string[]`, `primaryKey: "__pyntral_id"` and opaque row IDs for CRUD operations; see [composite keys](resources.md#composite-primary-keys).
 - `Bridge(upload=BridgeUpload(max_bytes=..., content_types=(...)))`: opt-in raw binary input with typed metadata; `BridgeContext.file` is a `BridgeFile` or None. See [binary uploads](bridges.md#binary-uploads-with-typed-rpc).
 - Public React components: `Tabs`, `TabList`, `Tab`, `TabPanel`, `Table`, `DataTable`. See [UI reference](ui.md#tabs-and-tables).
+
+### Browser branding and HTTP client
+
+`Admin(favicon=SvgIcon | Path | None)` accepts a configured SVG or SVG/PNG/ICO
+file and inherits the sidebar SVG if omitted. `GET /auth/config` also exposes
+the public application `title`. `GET /auth/favicon` serves the image; the
+legacy `/favicon.svg` route remains available. See [browser branding](ui.md#browser-title-and-favicon).
+
+`@pyntral/api` exports `api<T>`, `ApiError`, `buildQuery`, and `base`.
+See [HTTP client](extensions.md#http-client-pyntralapi) for admin and host
+scope and security details.

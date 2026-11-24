@@ -6,7 +6,7 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 - Add public Tabs and table primitives reused by built-in CRUD.
 - Add before/after CRUD slots and default view composition.
-- Support read-only composite primary key resources with opaque record identities.
+- Support composite primary key CRUD with canonical record identities, scoped relations, actions, audit and uploads.
 - Add custom transactional create/update handlers and bounded binary RPC bridges.
 - Add portable custom SPA export and a Python-only Docker deployment recipe.
 
@@ -65,3 +65,4 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 See [release readiness](docs/deployment.md#release-readiness) for verification requirements.
 
 - PyPI-first release pipeline embeds the generic SPA inside wheel/sdist; custom TSX builds remain optional for consuming applications.
+

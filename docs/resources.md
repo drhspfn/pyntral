@@ -503,7 +503,7 @@ Resource(User, create_handler=create_user, update_handler=update_user)
 Handlers receive `OperationContext` after client field authorization,
 before-hooks, Pydantic validation and mapped-value conversion. The create
 handler returns a new mapped instance (transient, pending, or newly flushed in
-the same session). The update handler mutates the supplied record. Both may
+the same session). The update handler mutates the supplied record. The before/after hooks and handler share the same OperationContext instance; before hooks receive raw input, while the handler and after hook receive validated, typed fields. Both may
 perform domain operations in the current session, including flush; neither
 may commit or roll back. Pyntral applies virtual setters and managed timestamp
 defaults, audits, flushes, checks scope, encodes the response and commits.

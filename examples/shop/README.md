@@ -318,7 +318,7 @@ the public `@pyntral/ui` API for custom React components. See
 - **Commerce → Products:** a before-list metric and after-show summary are
   rendered with the existing standard CRUD controls, using `crud_slots`.
 - **Commerce → Product tag links:** the existing association table is exposed
-  as a read-only composite-key resource. Open a record to see both key fields.
+  as a composite-key resource. Create or remove a product/tag link; key components are immutable after creation. Open a record to see both fields.
 - **Security → Demo staff:** custom create/update handlers normalize usernames,
   while the existing PasswordFeature still manages the write-only password.
 - **Agents → Insights → Consumer extension primitives:** try the shared tabs,

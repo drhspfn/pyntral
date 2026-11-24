@@ -208,4 +208,4 @@ authentication. See [login customization](docs/ui.md#login-screen-customization)
 
 ## Consumer extension APIs (unreleased)
 
-The next development branch includes [compound tabs and table primitives](docs/ui.md#tabs-and-tables), [additive CRUD slots](docs/extensions.md#compose-standard-crud-views), [read-only composite keys and transactional handlers](docs/resources.md#read-only-composite-primary-keys), [binary RPC uploads](docs/bridges.md#binary-uploads-with-typed-rpc), and [portable custom SPA deployment](docs/deployment.md#custom-ui-in-a-python-only-runtime).
+The next development branch includes [compound tabs and table primitives](docs/ui.md#tabs-and-tables), [additive CRUD slots](docs/extensions.md#compose-standard-crud-views), [composite-key CRUD and transactional handlers](docs/resources.md#composite-primary-keys), [binary RPC uploads](docs/bridges.md#binary-uploads-with-typed-rpc), and [portable custom SPA deployment](docs/deployment.md#custom-ui-in-a-python-only-runtime).

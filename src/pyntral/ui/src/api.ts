@@ -12,14 +12,23 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+export interface ApiOptions extends RequestInit {
+  /** Use a same-origin host route instead of the mounted admin API. */
+  scope?: "admin" | "host";
+}
+
+export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const { scope = "admin", ...request } = options;
+  if (!path.startsWith("/") || path.startsWith("//") || /[\\\\\u0000-\u001f]/.test(path)) throw new ApiError(0, "invalid_path", "Expected a same-origin absolute path");
+  const url = new URL(scope === "host" ? path : base + path, window.location.origin);
+  if (url.origin !== window.location.origin || (scope === "admin" && !url.pathname.startsWith(base + "/"))) throw new ApiError(0, "invalid_path", "Path escapes the configured API scope");
   const method = (options.method || "GET").toUpperCase();
   const headers = new Headers(options.headers);
   if (typeof options.body === "string" && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  if (!["GET", "HEAD", "OPTIONS"].includes(method) && csrf) headers.set("X-CSRF-Token", csrf);
+  if (scope === "admin" && !["GET", "HEAD", "OPTIONS"].includes(method) && csrf) headers.set("X-CSRF-Token", csrf);
   let response: Response;
   try {
-    response = await fetch(base + path, { ...options, credentials: "same-origin", headers });
+    response = await fetch(url, { ...request, credentials: "same-origin", headers });
   } catch {
     throw new ApiError(0, "network_error", "Unable to contact the admin server");
   }

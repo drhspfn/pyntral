@@ -197,3 +197,30 @@ export default function Metrics({ resource }: CustomCrudProps) {
   return <Card title={resource.label}>Additional resource information</Card>;
 }
 ```
+
+## HTTP client: @pyntral/api
+
+Use the public `api<T>(path, options)` for JSON requests that do not need a
+generated bridge. Admin-relative paths start with `/` and resolve below the
+configured ASGI mount (including a reverse-proxy prefix). The client includes
+same-origin cookies, attaches the current admin CSRF token to non-safe admin
+requests, and raises `ApiError` with status, code, message and details.
+
+```tsx
+import { api, buildQuery, ApiError } from "@pyntral/api";
+const rows = await api<{ items: Record<string, unknown>[] }>(
+  "/api/resources/orders" + buildQuery({ limit: 10 })
+);
+const result = await api<{ ok: boolean }>("/api/custom-operation", {
+  method: "POST", body: JSON.stringify({ id: 42 })
+});
+```
+
+To address a host FastAPI route outside the admin mount, pass
+`{ scope: "host" }`, e.g. `api("/health", { scope: "host" })`. It uses
+the current origin and its cookies but does not forward the admin CSRF
+token automatically. Host routes own their authentication, CSRF and
+authorization policies. In Vite development they also need an appropriate
+proxy or same-origin server route; the default proxy only forwards the
+admin API/auth prefixes. Use `fetch` for non-JSON responses. FormData and
+binary bodies are supported without forcing the JSON content type.

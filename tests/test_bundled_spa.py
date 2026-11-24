@@ -115,3 +115,45 @@ def test_bundle_mount_respects_reverse_proxy_prefix(tmp_path):
         assert base == "/prefix/ops/"
         assert client.get(urljoin(base, script)).status_code == 200
         assert client.get("/prefix/ops/auth/me").headers["cache-control"] == "no-store"
+
+def test_browser_branding_escapes_title_and_inherits_svg(tmp_path):
+    from pyntral import SidebarConfig, SidebarHeader, SvgIcon
+    logo = SvgIcon('<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>')
+    (tmp_path / "index.html").write_text(
+        '<html><head><base data-pyntral-base href="./"/><title>Pyntral</title>'
+        '<link rel="icon" href="./favicon.svg" type="image/svg+xml"/></head></html>', encoding="utf-8")
+    app = FastAPI()
+    Admin(app, session_factory=lambda: None, auth=LocalAuth("demo", hash_password("example")),
+          secret_key="x" * 48, path="/ops", dist_dir=tmp_path, title="Atlas <Admin> & tools",
+          sidebar=SidebarConfig(header=SidebarHeader(icon=logo)))
+    with TestClient(app, root_path="/prefix") as client:
+        html = client.get("/prefix/ops/").text
+        assert "<title>Atlas &lt;Admin&gt; &amp; tools</title>" in html
+        assert 'href="/prefix/ops/auth/favicon"' in html
+        for route in ("auth/favicon", "favicon.svg"):
+            icon = client.get("/prefix/ops/" + route)
+            assert icon.content == logo.svg.encode()
+            assert icon.headers["content-type"].startswith("image/svg+xml")
+            assert "sandbox" in icon.headers["content-security-policy"]
+        assert client.get("/prefix/ops/auth/config").json()["title"] == "Atlas <Admin> & tools"
+
+
+def test_explicit_favicon_and_default_source_without_bundle(tmp_path):
+    from pyntral import SvgIcon, SidebarConfig, SidebarHeader
+    import pytest
+    common = dict(session_factory=lambda: None, auth=LocalAuth("demo", hash_password("example")),
+                  secret_key="x" * 48, dist_dir=tmp_path)
+    file = tmp_path / "icon.svg"
+    file.write_text('<svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>')
+    app = FastAPI()
+    Admin(app, **common, favicon=file, sidebar=SidebarConfig(header=SidebarHeader(
+        icon=SvgIcon('<svg xmlns="http://www.w3.org/2000/svg"/>'))))
+    with TestClient(app) as client:
+        assert client.get("/admin/auth/favicon").content == file.read_bytes()
+    default = FastAPI()
+    Admin(default, **common)
+    with TestClient(default) as client:
+        assert client.get("/admin/auth/favicon").status_code == 200
+    file.write_text("<html/>")
+    with pytest.raises(ValueError):
+        Admin(FastAPI(), **common, favicon=file)

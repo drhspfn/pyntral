@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from html import escape
 import hmac
 from copy import deepcopy
 from inspect import iscoroutinefunction
@@ -34,7 +35,7 @@ from .events import (
 )
 from .orm import AdminError, MapperAdapter
 from .resources import Page, Resource, NavigationGroup, validate_navigation
-from .sidebar import SidebarConfig, icon_metadata
+from .sidebar import SidebarConfig, SvgIcon, icon_metadata
 from .login import LoginConfig
 from .hooks import OperationContext
 from .realtime import RealtimeNotifier
@@ -75,6 +76,7 @@ class Admin:
         enable_jobs: bool = True,
         dist_dir: str | Path | None = None,
         title: str = "Pyntral",
+        favicon: SvgIcon | Path | None = None,
         theme: dict[str, Any] | None = None,
         default_theme: str = "system",  # system | light | dark
         animations: bool = True,
@@ -187,6 +189,8 @@ class Admin:
         if sidebar is not None and not isinstance(sidebar, SidebarConfig):
             raise TypeError("sidebar must be SidebarConfig")
         self.sidebar = sidebar if sidebar is not None else SidebarConfig()
+        inherited_icon = self.sidebar.header.icon if self.sidebar.header else None
+        self.favicon = self._prepare_favicon(favicon if favicon is not None else (inherited_icon if isinstance(inherited_icon, SvgIcon) else None))
         if login is not None and not isinstance(login, LoginConfig):
             raise TypeError("login must be LoginConfig")
         self.login_config = login if login is not None else LoginConfig()
@@ -677,6 +681,26 @@ class Admin:
             return local
         return (Path(__file__).parent / "web_dist").resolve()
 
+    @staticmethod
+    def _prepare_favicon(icon: SvgIcon | Path | None) -> tuple[bytes, str] | None:
+        if icon is None:
+            return None
+        if isinstance(icon, SvgIcon):
+            return icon.svg.encode("utf-8"), "image/svg+xml"
+        if not isinstance(icon, Path):
+            raise TypeError("favicon must be SvgIcon, Path or None")
+        if not icon.is_file() or icon.stat().st_size > 256 * 1024:
+            raise ValueError("Favicon must be an existing file no larger than 256 KiB")
+        data = icon.read_bytes()
+        if icon.suffix.lower() == ".svg":
+            svg = SvgIcon(data.decode("utf-8"))
+            return svg.svg.encode("utf-8"), "image/svg+xml"
+        if icon.suffix.lower() == ".png" and data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return data, "image/png"
+        if icon.suffix.lower() == ".ico" and data.startswith(b"\x00\x00\x01\x00"):
+            return data, "image/x-icon"
+        raise ValueError("Favicon must be a valid SVG, PNG or ICO file")
+
     def _register_routes(self) -> None:
         api = self.api
 
@@ -736,7 +760,7 @@ class Admin:
         async def login_config() -> dict:
             # Explicit public presentation contract. Do not expose resource metadata,
             # bridges, principals, credentials or per-principal resolver output here.
-            return {"login": self.login_config.metadata(self.title, self.sidebar.header),
+            return {"title": self.title, "login": self.login_config.metadata(self.title, self.sidebar.header),
                     "theme": {"default": self.default_theme, "animations": self.animations,
                               "tokens": {mode: dict(self.theme.get(mode, {})) for mode in ("light", "dark")}},
                     "localization": {"code": self.default_locale,
@@ -1716,6 +1740,18 @@ class Admin:
             finally:
                 await maybe_await(session.close())
 
+        @api.get("/auth/favicon", include_in_schema=False)
+        @api.get("/favicon.svg", include_in_schema=False)
+        async def favicon_image() -> Response:
+            headers = {"Cache-Control": "no-store", "Content-Security-Policy": "sandbox; default-src 'none'; style-src 'unsafe-inline'"}
+            if self.favicon is not None:
+                data, media_type = self.favicon
+                return Response(data, media_type=media_type, headers=headers)
+            for candidate in (self._dist() / "favicon.svg", Path(__file__).parent / "ui" / "public" / "favicon.svg"):
+                if candidate.is_file():
+                    return FileResponse(candidate, media_type="image/svg+xml", headers=headers)
+            raise AdminError(404, "Favicon not found", "not_found")
+
         @api.get("/{asset_path:path}", include_in_schema=False)
         async def spa(asset_path: str, request: Request) -> Any:
             dist = self._dist()
@@ -1725,7 +1761,7 @@ class Admin:
                     content={"error": {"code": "ui_not_built", "message":
                         "Pyntral SPA assets are missing. Install an official wheel or build custom UI with: pyntral build"}},
                 )
-            if asset_path.startswith("assets/") or asset_path in ("favicon.svg",):
+            if asset_path.startswith("assets/"):
                 candidate = (dist / asset_path).resolve()
                 if not candidate.is_relative_to(dist) or not candidate.is_file():
                     raise AdminError(404, "Asset not found", "not_found")
@@ -1735,6 +1771,13 @@ class Admin:
             html = (dist / "index.html").read_text(encoding="utf-8")
             mount = quote(request.scope.get("root_path", self.path).rstrip("/") + "/", safe="/")
             html = html.replace('<base data-pyntral-base href="./"', f'<base data-pyntral-base href="{mount}"', 1)
+            html = re.sub(r"<title>.*?</title>", lambda _: f"<title>{escape(self.title)}</title>",
+                          html, count=1, flags=re.DOTALL | re.IGNORECASE)
+            # Support both old custom bundles and the current template; use
+            # the mount-aware endpoint and let the browser detect image type.
+            html = re.sub(r'<link\b(?=[^>]*\brel=["\']icon["\'])[^>]*>',
+                          lambda _: f'<link rel="icon" href="{mount}auth/favicon" />',
+                          html, count=1, flags=re.IGNORECASE)
             return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
         @api.get("/", include_in_schema=False)
