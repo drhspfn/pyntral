@@ -126,7 +126,7 @@ export interface Schema {
   localization?: LocalizationConfig;
   title: string; resources: ResourceDef[]; pages: PageDef[];
   navigation: NavigationConfig; theme: ThemeConfig;
-  bridges: { name: string; description: string; inputSchema: unknown; outputSchema: unknown }[];
+  bridges: { name: string; description: string; inputSchema: unknown; outputSchema: unknown; upload?: { maxBytes: number; contentTypes: string[] } }[];
 }
 export interface Principal {
   id: string; username: string; roles: string[]; display_name: string | null;

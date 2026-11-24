@@ -18,7 +18,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -42,7 +42,7 @@ from .jobs import JobManager
 from .validation import validate_payload
 from .sessions import MemorySessionStore, SessionIdentity, SessionStore
 from .storage import _PENDING_DELETE_RECORD, StorageBackend, UploadEntry, safe_upload_name, normalize_mime
-from .bridge import Bridge, BridgeContext
+from .bridge import Bridge, BridgeContext, BridgeFile
 from .logging import (LoggingConfig, configure_logging, emit as emit_log, request_id_var)
 from pydantic import ValidationError
 
@@ -989,15 +989,45 @@ class Admin:
                 raise AdminError(404, "Bridge not found", "not_found")
             if (bridge.min_role is not None and not self._role_ok(principal, bridge.min_role)) or not await maybe_await(self.auth.authorize(principal, "bridge:" + name, "invoke")):
                 raise AdminError(403, "Permission denied", "forbidden")
-            payload = await self._body(request)
+            uploaded = None
+            if bridge.upload is None:
+                payload = await self._body(request)
+            else:
+                raw_input = request.headers.get("X-Pyntral-Input", "%7B%7D")
+                if len(raw_input) > 8192:
+                    raise AdminError(413, "Bridge upload metadata too large", "request_too_large")
+                try:
+                    payload = json.loads(unquote(raw_input, errors="strict"))
+                    if not isinstance(payload, dict):
+                        raise ValueError("Expected JSON object")
+                except (ValueError, UnicodeError, RecursionError):
+                    raise AdminError(422, "Invalid bridge upload metadata", "validation_error") from None
+                if not request.headers.get("X-Filename"):
+                    raise AdminError(422, "Expected a file upload", "validation_error")
+                filename = safe_upload_name(unquote(request.headers["X-Filename"]))
+                try:
+                    mime = normalize_mime(request.headers.get("Content-Type", ""), filename)
+                except ValueError:
+                    raise AdminError(422, "Invalid content type", "validation_error") from None
+                if not bridge.upload.accepts(mime):
+                    raise AdminError(415, "Unsupported upload content type", "unsupported_media_type")
             try:
                 parsed = bridge.input_model.model_validate(payload)
             except ValidationError as exc:
                 raise AdminError(422, "Invalid bridge input", "validation_error", exc.errors(
                     include_url=False, include_context=False, include_input=False)) from None
+            if bridge.upload is not None:
+                content = bytearray()
+                async for chunk in request.stream():
+                    if len(content) + len(chunk) > bridge.upload.max_bytes:
+                        raise AdminError(413, "Bridge upload too large", "upload_too_large")
+                    content.extend(chunk)
+                if not content:
+                    raise AdminError(422, "Upload must not be empty", "validation_error")
+                uploaded = BridgeFile(filename, mime, bytes(content))
             session = self.session_factory()
             try:
-                output = await maybe_await(bridge.handler(parsed, BridgeContext(principal, session)))
+                output = await maybe_await(bridge.handler(parsed, BridgeContext(principal, session, uploaded)))
                 try:
                     validated = bridge.output_model.model_validate(output)
                 except ValidationError as exc:
