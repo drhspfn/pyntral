@@ -71,6 +71,7 @@ export interface ResourceDef {
   pageSize: number;
   showSearch?: boolean;
   crudViews?: Partial<Record<"list" | "create" | "edit" | "show", string>>;
+  crudSlots?: Partial<Record<"list" | "create" | "edit" | "show", { before?: string; after?: string }>>;
   layouts?: { form: LayoutSectionDef[]; detail: LayoutSectionDef[] };
   formLayout?: "stack" | "grid";
   detailLayout?: "stack" | "grid";
@@ -202,6 +203,8 @@ export interface CustomCrudProps {
   mode: "list" | "create" | "edit" | "show";
   record?: RecordData;
   navigate: (route: string) => void;
+  /** Built-in view; render once when wrapping a CRUD replacement. */
+  defaultView: ReactNode;
   /** List queries are validated and scoped by the server. */
   loadList: (params?: Record<string, string | number | boolean>) => Promise<{
     items: RecordData[]; total: number; offset: number; limit: number;

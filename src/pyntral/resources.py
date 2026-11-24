@@ -234,6 +234,7 @@ class Resource(Generic[ModelT]):
     form_layout: str = "stack"  # stack | grid
     detail_layout: str = "stack"  # stack | grid
     crud_views: dict[str, str] = field(default_factory=dict)  # list/create/edit/show -> extension ID
+    crud_slots: dict[str, dict[str, str]] = field(default_factory=dict)  # mode -> before/after -> extension ID
     hooks: list[ResourceHook] = field(default_factory=list)
     virtual_fields: dict[str, VirtualField] = field(default_factory=dict)
     create_schema: type[BaseModel] | None = None
@@ -268,6 +269,12 @@ class Resource(Generic[ModelT]):
         if any(k not in {"list", "create", "edit", "show"} or not v or not isinstance(v, str)
                for k, v in self.crud_views.items()):
             raise ValueError("crud_views must map list/create/edit/show to component IDs")
+        for mode, slots in self.crud_slots.items():
+            if mode not in {"list", "create", "edit", "show"} or not isinstance(slots, dict) or any(
+                position not in {"before", "after"} or not isinstance(component, str) or not component.strip()
+                for position, component in slots.items()
+            ):
+                raise ValueError("crud_slots must map CRUD modes to before/after component IDs")
         if self.page_size < 1 or self.page_size > 200:
             raise ValueError("page_size must be between 1 and 200")
         if self.name is None:

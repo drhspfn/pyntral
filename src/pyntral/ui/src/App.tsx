@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Boxes,
@@ -10,6 +10,8 @@ import { fields as customFields, pages as customPages, actions as customActions,
 import { SidebarNavigation } from "./navigation";
 import { sidebarConfig, SidebarHeaderRegion, SidebarFooterRegion } from "./sidebar";
 import { Icon } from "./icon";
+import { Tabs, TabList, Tab, TabPanel } from "./tabs";
+import { Table } from "./data-table";
 import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
@@ -176,9 +178,8 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
     .sort((a, b) => names.indexOf(a.name) - names.indexOf(b.name));
   const { requestDelete } = useDeleteRecord(resource);
   const keys = data.items.map((row) => String(row[resource.primaryKey]));
-  return <div className={preferences?.density === "compact" ? "ra-table-compact" : ""}
-    style={{ "--ra-pin-left": selectable ? "46px" : "0px" } as CSSProperties}>
-    <div className="table-scroll"><table className="data-table"><thead><tr>
+  return <Table compact={preferences?.density === "compact"} label={resource.label}
+    style={{ "--ra-pin-left": selectable ? "46px" : "0px" } as CSSProperties}><thead><tr>
     {selectable && <th className="ra-select-cell"><Checkbox aria-label="Select all visible records"
       checked={keys.length > 0 && keys.every((key) => selection.includes(key))}
       indeterminate={keys.some((key) => selection.includes(key)) && !keys.every((key) => selection.includes(key))}
@@ -207,7 +208,7 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
           .map((action) => <RecordAction key={action.name} resource={resource} record={row} action={action} navigate={navigate}/>)}
       </div></td>
     </tr>)}
-  </tbody></table></div></div>;
+  </tbody></Table>;
 }
 function Pager({ offset, total, limit, onOffset }: { offset: number; total: number; limit: number; onOffset: (n: number) => void }) {
   return <div className="pager"><span>Showing <strong>{total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)}</strong> of <strong>{total}</strong> records</span>
@@ -495,8 +496,6 @@ function StructuredFields({ resource, mode, fields, values, render }: {
   const visible = (section: typeof sections[number]) =>
     !section.visibleIf || values[section.visibleIf.field] === section.visibleIf.equals;
   const tabs = sections.filter((section) => section.kind === "tab" && visible(section));
-  const tabGroup = useId();
-  const tabButtons = useRef(new Map<string, HTMLButtonElement>());
   const [selectedTab, setSelectedTab] = useState<string | null>(null);
   const [accordionOpen, setAccordionOpen] = useState<Record<string, boolean>>({});
   const current = tabs.find((section) => section.id === selectedTab) ?? tabs[0];
@@ -507,32 +506,10 @@ function StructuredFields({ resource, mode, fields, values, render }: {
   if (!sections.length) return content(fields.map((field) => field.name));
   const trailing = fields.filter((field) => !assigned.has(field.name));
   return <div className="ra-layout-sections">
-    {tabs.length > 0 && <div className="ra-layout-tabs" role="tablist" aria-label="Record sections">
-      {tabs.map((section, index) => <button key={section.id} type="button" role="tab"
-        id={`${tabGroup}-tab-${section.id}`} aria-controls={`${tabGroup}-panel-${section.id}`}
-        aria-selected={current?.id === section.id} tabIndex={current?.id === section.id ? 0 : -1}
-        ref={(button) => {
-          if (button) tabButtons.current.set(section.id, button);
-          else tabButtons.current.delete(section.id);
-        }}
-        onClick={() => setSelectedTab(section.id)}
-        onKeyDown={(event) => {
-          const positions: Record<string, number> = {
-            ArrowLeft: (index + tabs.length - 1) % tabs.length,
-            ArrowRight: (index + 1) % tabs.length, Home: 0, End: tabs.length - 1,
-          };
-          const next = tabs[positions[event.key]];
-          if (!next) return;
-          event.preventDefault();
-          setSelectedTab(next.id);
-          tabButtons.current.get(next.id)?.focus();
-        }}>
-        {section.title}</button>)}
-    </div>}
-    {tabs.map((section) => <section key={section.id} id={`${tabGroup}-panel-${section.id}`} role="tabpanel"
-      className="ra-layout-panel" hidden={current?.id !== section.id}
-      aria-labelledby={`${tabGroup}-tab-${section.id}`} tabIndex={mode === "detail" ? 0 : undefined}>
-      {current?.id === section.id && content(section.fields, section.columns)}</section>)}
+    {tabs.length > 0 && <Tabs value={current?.id} onValueChange={setSelectedTab}>
+      <TabList label="Record sections">{tabs.map(section => <Tab key={section.id} value={section.id}>{section.title}</Tab>)}</TabList>
+      {tabs.map(section => <TabPanel key={section.id} value={section.id}>{content(section.fields, section.columns)}</TabPanel>)}
+    </Tabs>}
     {sections.filter((section) => section.kind !== "tab" && visible(section)).map((section) =>
       section.kind === "accordion" ? <Collapsible className="ra-layout-group" key={section.id}
         header={section.title} open={accordionOpen[section.id] ?? section.defaultOpen}
@@ -896,22 +873,24 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
   const feedback = useAdminFeedback();
   const customId = resource.crudViews?.[mode];
   const Custom = customId ? customCrud[customId] : undefined;
+  const slots = resource.crudSlots?.[mode];
+  const Before = slots?.before ? customCrud[slots.before] : undefined;
+  const After = slots?.after ? customCrud[slots.after] : undefined;
   const record = useQuery({ queryKey: ["record", resource.id, id],
-    enabled: !!Custom && !!id,
+    enabled: !!(Custom || Before || After) && !!id,
     queryFn: () => api<{ record: RecordData }>(`/api/resources/${resource.id}/${encodeURIComponent(id!)}`),
   });
-  const versionedEdit = !!Custom && mode === "edit" && !!resource.versionField;
+  const versionedEdit = !!(Custom || Before || After) && mode === "edit" && !!resource.versionField;
   const [editRecord, setEditRecord] = useState<RecordData>();
   useEffect(() => {
     const fresh = record.data?.record;
     if (versionedEdit && fresh) setEditRecord((current) => current ?? fresh);
   }, [versionedEdit, record.data]);
   const displayedRecord = versionedEdit ? editRecord : record.data?.record;
-  if (!Custom) {
-    if (mode === "list") return <ResourceList resource={resource} schema={schema} navigate={navigate}/>;
-    if (mode === "show") return <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate}/>;
-    return <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)}/>;
-  }
+  const defaultView = mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate}/> :
+    mode === "show" ? <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate}/> :
+    <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)}/>;
+  if (!Custom && !Before && !After) return defaultView;
   const loadList: CustomCrudProps["loadList"] = async (params = {}) =>
     api<{ items: RecordData[]; total: number; offset: number; limit: number }>(
       `/api/resources/${resource.id}${buildQuery(params)}`);
@@ -938,15 +917,17 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
   };
   if (record.error && !displayedRecord) return <Alert error={record.error}/>;
   if (id && !displayedRecord) return <Loading/>;
-  return <Custom schema={schema} resource={resource} mode={mode} record={displayedRecord}
-    navigate={navigate} loadList={loadList} save={save} remove={remove}
-    reload={async () => {
+  const props: CustomCrudProps = { schema, resource, mode, record: displayedRecord, defaultView,
+    navigate, loadList, save, remove, reload: async () => {
       await invalidateResource(client, resource.id);
       if (versionedEdit) {
         const fresh = await record.refetch({ throwOnError: true });
         setEditRecord(fresh.data?.record);
       }
-    }}/>
+    } };
+  return <>{Before && <div className="ra-crud-slot"><Before {...props}/></div>}
+    {Custom ? <Custom {...props}/> : defaultView}
+    {After && <div className="ra-crud-slot"><After {...props}/></div>}</>;
 }
 
 function MainLayout({ schema, user, onLogout, navigate, route, children, themeMode, toggleTheme }: {
