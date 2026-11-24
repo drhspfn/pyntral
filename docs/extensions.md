@@ -171,3 +171,29 @@ export default function CustomLogin({ config, themeMode, toggleTheme }: LoginScr
   </main>;
 }
 ```
+
+## Compose standard CRUD views
+
+Register component IDs in the existing `crud` manifest category. Add before
+and after slots without rebuilding the default list, table, or record editor:
+
+```python
+Resource(Usage, crud_slots={"list": {"before": "usage-metrics"},
+                            "show": {"after": "usage-details"}})
+```
+
+Slot components receive `CustomCrudProps` (including the authorized record
+on record routes). They render around the standard screen or a configured
+replacement. A full `crud_views` override can alternatively render
+`props.defaultView` once inside its own wrapper. Slots must not render that
+element again. Standard controls retain their own queries, mutations and
+pagination. The API remains subject to normal access checks.
+
+```tsx
+import type { CustomCrudProps } from "@pyntral/types";
+import { Card } from "@pyntral/ui";
+
+export default function Metrics({ resource }: CustomCrudProps) {
+  return <Card title={resource.label}>Additional resource information</Card>;
+}
+```

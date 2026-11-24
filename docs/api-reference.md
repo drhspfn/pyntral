@@ -255,3 +255,11 @@ The bundle's `@pyntral/api` helper attaches same-origin cookies and the CSRF tok
 Events include a stable event ID, UTC timestamp, optional correlation and actor IDs, resource and record identifiers, and fields containing only field names and schema kinds. They are versioned for broker transport in [`transports/base.py`](../src/pyntral/transports/base.py).
 
 See [events](events.md) for the delivery/ACK contract and [bridges](bridges.md) for automatically generated TypeScript DTO bindings.
+
+## Consumer extension APIs
+
+- `Resource(crud_slots={"list": {"before": "component"}, "show": {"after": "component"}})`: additive CRUD extensions, alongside the existing `crud_views`; see [composition](extensions.md#compose-standard-crud-views).
+- `Resource(create_handler=callback, update_handler=callback)`: transactional domain handlers receiving `OperationContext`; see [custom writes](resources.md#custom-transactional-writes).
+- Composite-key resources expose `primaryKeys: string[]`, `primaryKey: "__pyntral_id"` and opaque row IDs for read-only operations; see [composite keys](resources.md#read-only-composite-primary-keys).
+- `Bridge(upload=BridgeUpload(max_bytes=..., content_types=(...)))`: opt-in raw binary input with typed metadata; `BridgeContext.file` is a `BridgeFile` or None. See [binary uploads](bridges.md#binary-uploads-with-typed-rpc).
+- Public React components: `Tabs`, `TabList`, `Tab`, `TabPanel`, `Table`, `DataTable`. See [UI reference](ui.md#tabs-and-tables).

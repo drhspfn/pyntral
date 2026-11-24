@@ -186,3 +186,17 @@ def test_dev_keeps_uvicorn_level_independent_from_admin_level(tmp_path, monkeypa
     with pytest.raises(ValueError, match="Uvicorn log level"):
         cli.dev(tmp_path, "examples.shop.app:app", backend_port=8000, frontend_port=5173,
                 base="/admin/", uvicorn_log_level="LOUD")
+
+def test_export_ui_copies_only_compiled_assets(tmp_path):
+    source = tmp_path / ".pyntral" / "dist"
+    with pytest.raises(RuntimeError, match="run pyntral build"):
+        cli.export_ui(tmp_path, tmp_path / "release")
+    (source / "assets").mkdir(parents=True)
+    (source / "index.html").write_text("<html/>")
+    (source / "assets" / "app.js").write_text("export {}")
+    destination = cli.export_ui(tmp_path, tmp_path / "release")
+    assert (destination / "assets" / "app.js").is_file()
+    with pytest.raises(ValueError, match="absent or empty"):
+        cli.export_ui(tmp_path, destination)
+    with pytest.raises(ValueError, match="separate"):
+        cli.export_ui(tmp_path, source / "nested")

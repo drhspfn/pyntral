@@ -342,3 +342,30 @@ Standard form labels support `login.title`, `login.subtitle`,
 non-default label strings take precedence. The default locale is used before
 sign-in. Custom `auth.login` extensions receive the public config and theme
 controls; see [extensions](extensions.md).
+
+## Tabs and tables
+
+`@pyntral/ui` exports controlled/uncontrolled compound tabs. The standard CRUD
+layout also uses these primitives. Arrow Left/Right, Home/End and disabled
+tabs are supported; panels have linked ARIA IDs. Use `keepMounted` to retain
+inactive component state.
+
+```tsx
+import { Tabs, TabList, Tab, TabPanel, DataTable } from "@pyntral/ui";
+
+<Tabs defaultValue="jobs">
+  <TabList label="Operations"><Tab value="jobs">Jobs</Tab><Tab value="history">History</Tab></TabList>
+  <TabPanel value="jobs">
+    <DataTable rows={jobs} getRowKey={row => row.id} columns={[
+      { id: "name", header: "Name", cell: row => row.name },
+      { id: "status", header: "Status", cell: row => row.status },
+    ]}/>
+  </TabPanel>
+  <TabPanel value="history">History content</TabPanel>
+</Tabs>
+```
+
+`Table` is the shared semantic table shell for custom thead/tbody markup.
+`DataTable<Row>` accepts rows, typed columns, row keys, loading/empty states,
+compact density and controlled sorting. It does not fetch or paginate data
+automatically; use application query state and your bridge/API.

@@ -467,3 +467,41 @@ This first version is explicitly mock-only: the browser holds native `File` obje
 ### Resource, page, group and action icons
 
 All four accept a Lucide name (for example `"shopping-cart"`), `SvgIcon`, `ImageIcon`, or `None`. Names are resolved by the shared UI `Icon` primitive, including in Overview and action buttons. A null icon explicitly hides the glyph. See [Sidebar branding and navigation icons](ui.md#sidebar-branding-and-navigation-icons) for the icon formats and appearance configuration.
+
+## Read-only composite primary keys
+
+Register a SQLAlchemy model with multiple primary key columns using
+`allow_create=False, allow_edit=False, allow_delete=False`. The initial
+implementation supports integer, text and UUID key components. List, detail,
+filters, export, and read-only relationship browsing are supported.
+`primaryKeys` contains the mapped key names; `primaryKey` is
+`__pyntral_id`, a server-generated opaque URL-safe identifier in rows.
+Do not construct it yourself; follow the returned value. If any key field
+is redacted, the identifier is omitted. Sorting adds key tie-breakers.
+Select/options, relationship mutations targeting composite records, actions,
+jobs, uploads, and writes on these resources are deliberately unsupported.
+
+## Custom transactional writes
+
+```python
+def create_user(ctx):
+    return User(name=ctx.payload["name"], password_hash=server_generated_hash())
+
+async def update_user(ctx):
+    ctx.record.name = ctx.payload["name"]
+
+Resource(User, create_handler=create_user, update_handler=update_user)
+```
+
+Handlers receive `OperationContext` after client field authorization,
+before-hooks, Pydantic validation and mapped-value conversion. The create
+handler returns a new mapped instance (transient, pending, or newly flushed in
+the same session). The update handler mutates the supplied record. Both may
+perform domain operations in the current session, including flush; neither
+may commit or roll back. Pyntral applies virtual setters and managed timestamp
+defaults, audits, flushes, checks scope, encodes the response and commits.
+After-hooks and events remain after commit. A handler may set hidden
+server-owned fields directly; it must not treat unvalidated values as trusted
+or bypass tenant/foreign-key policies. Normal client payloads cannot write
+hidden fields. For records with optimistic versioning, mutate mapped objects
+rather than issuing bulk SQL that bypasses SQLAlchemy's version checks.

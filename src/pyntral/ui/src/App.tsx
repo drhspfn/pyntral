@@ -305,7 +305,7 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
-  const [sort, setSort] = useState(resource.primaryKeys?.[0] ?? resource.primaryKey);
+  const [sort, setSort] = useState(resource.fields.find(field => field.name === (resource.primaryKeys?.[0] ?? resource.primaryKey) && field.sortable !== false)?.name ?? "");
   const [desc, setDesc] = useState(true);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);

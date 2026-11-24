@@ -861,7 +861,7 @@ class Admin:
                     "delete": permitted and await self._can(principal, name, "delete"),
                 }
                 if not permitted:
-                    metadata.update(fields=[], listFields=[], searchFields=[], relationships=[], actions=[], jobs=[])
+                    metadata.update(fields=[], listFields=[], searchFields=[], relationships=[], actions=[], jobs=[], crudSlots={})
                 else:
                     read_fields = await self._allowed_fields(principal, name)
                     edit_fields = await self._allowed_fields(principal, name, edit=True)
@@ -892,6 +892,8 @@ class Admin:
                     metadata["relationships"] = [r for r in metadata["relationships"]
                         if can_read.get(r["resource"], False)]
                     for relation in metadata["relationships"]:
+                        if self.resources[relation["resource"]].composite:
+                            relation["selectable"] = False
                         if "editable" in relation:
                             relation["editable"] = (metadata["capabilities"]["edit"]
                                 and can_select.get(relation["resource"], False))

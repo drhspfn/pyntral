@@ -637,12 +637,25 @@ class MapperAdapter:
         target = getattr(session, "sync_session", session)
         def reject_commit(_session):
             raise AdminError(500, "CRUD handlers must not commit transactions", "handler_transaction_error")
+        created: list[Any] = []
+        rolled_back = False
+        def remember_new(_session, instance):
+            created.append(instance)
+        def remember_rollback(_session):
+            nonlocal rolled_back
+            rolled_back = True
         event.listen(target, "before_commit", reject_commit)
+        event.listen(target, "pending_to_persistent", remember_new)
+        event.listen(target, "after_rollback", remember_rollback)
         try:
             async with self._transaction_errors(session):
-                yield
+                yield created
+                if rolled_back:
+                    raise AdminError(500, "CRUD handlers must not roll back transactions", "handler_transaction_error")
         finally:
             event.remove(target, "before_commit", reject_commit)
+            event.remove(target, "pending_to_persistent", remember_new)
+            event.remove(target, "after_rollback", remember_rollback)
 
     async def _stage_create(self, session: Any, payload: dict[str, Any],
                             principal: Principal | None = None) -> Any:
@@ -652,12 +665,13 @@ class MapperAdapter:
             mapped[key] = factory()
         if self.resource.create_handler is not None:
             ctx = OperationContext("create", self.resource.name, principal, session, payload=parsed.copy())
-            async with self._handler_transaction(session):
+            async with self._handler_transaction(session) as created:
                 record = await maybe_await(self.resource.create_handler(ctx))
                 if not isinstance(record, self.resource.model):
                     raise AdminError(500, "create_handler must return a mapped resource instance", "handler_output_error")
                 state = inspect(record)
-                if state.deleted or state.detached or state.persistent or (state.session is not None and state.session is not getattr(session, "sync_session", session)):
+                if (state.deleted or state.detached or (state.persistent and not any(row is record for row in created))
+                        or (state.session is not None and state.session is not getattr(session, "sync_session", session))):
                     raise AdminError(500, "create_handler must return a new instance in the current session", "handler_output_error")
                 for key in self.resource._server_defaults:
                     setattr(record, key, mapped[key])
@@ -687,12 +701,17 @@ class MapperAdapter:
     async def _stage_update(self, session: Any, record: Any, payload: dict[str, Any],
                             principal: Principal | None) -> set[str]:
         parsed = self.parsed_payload(payload, create=False)
+        before = None
         if self.resource.update_handler is not None:
+            from copy import deepcopy
+            before = {name: deepcopy(getattr(record, name)) for name in self.columns}
             identity = tuple(getattr(record, name) for name in self.pk_names)
             ctx = OperationContext("update", self.resource.name, principal, session, record=record, payload=parsed.copy())
             async with self._handler_transaction(session):
                 await maybe_await(self.resource.update_handler(ctx))
-                if tuple(getattr(record, name) for name in self.pk_names) != identity or record in session.deleted:
+                state = inspect(record)
+                if (state.deleted or state.detached or not state.persistent or record in session.deleted
+                        or tuple(getattr(record, name) for name in self.pk_names) != identity):
                     raise AdminError(500, "update_handler cannot replace or delete the resource identity", "handler_output_error")
         for name, value in parsed.items():
             if name in self.resource.virtual_fields:
@@ -703,7 +722,10 @@ class MapperAdapter:
             setattr(record, key, factory())
         await self._audit(session, record, "update", principal, list(payload))
         state = inspect(record)
-        return {name for name in self.columns if state.attrs[name].history.has_changes()}
+        changed = {name for name in self.columns if state.attrs[name].history.has_changes()}
+        if before is not None:
+            changed.update(name for name in self.columns if getattr(record, name) != before[name])
+        return changed
 
     async def update(self, session: Any, record: Any, payload: dict[str, Any],
                      principal: Principal | None = None) -> dict[str, Any]:

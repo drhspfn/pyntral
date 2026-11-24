@@ -1,4 +1,4 @@
-import { createContext, useContext, useId, useState, type ReactNode, type KeyboardEvent } from "react";
+import { createContext, useContext, useId, useState, useLayoutEffect, useRef, type ReactNode, type KeyboardEvent } from "react";
 
 type State = { id: string; value: string; select: (value: string) => void };
 const Context = createContext<State | null>(null);
@@ -18,7 +18,13 @@ export function Tabs({ children, value, defaultValue = "", onValueChange, classN
   } }}><div className={`ra-tabs ${className}`}>{children}</div></Context.Provider>;
 }
 export function TabList({ children, label = "Tabs", className = "" }: { children: ReactNode; label?: string; className?: string }) {
-  const { select } = useTabs();
+  const { select, value } = useTabs();
+  const list = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const enabled = Array.from(list.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)') ?? [])
+      .filter(tab => tab.closest('[role="tablist"]') === list.current);
+    if (enabled.length && !enabled.some(tab => tab.dataset.value === value)) select(enabled[0].dataset.value!);
+  }, [children, value, select]);
   function keydown(event: KeyboardEvent<HTMLDivElement>) {
     const tabs = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)'))
       .filter(tab => tab.closest('[role="tablist"]') === event.currentTarget);
@@ -30,7 +36,7 @@ export function TabList({ children, label = "Tabs", className = "" }: { children
     if (!next) return;
     event.preventDefault(); select(next.dataset.value!); next.focus();
   }
-  return <div role="tablist" aria-label={label} className={`ra-layout-tabs ${className}`} onKeyDown={keydown}>{children}</div>;
+  return <div ref={list} role="tablist" aria-label={label} className={`ra-layout-tabs ${className}`} onKeyDown={keydown}>{children}</div>;
 }
 export function Tab({ value, children, disabled = false }: { value: string; children: ReactNode; disabled?: boolean }) {
   const tabs = useTabs(), selected = tabs.value === value, suffix = encodeURIComponent(value);

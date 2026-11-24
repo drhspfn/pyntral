@@ -86,3 +86,11 @@ uv run pyntral types examples.shop.app:app --watch
 These commands do **not** run npm, ESLint, TypeScript or Vite. Generated types are always maintained in `.pyntral/generated/bridges.ts` and may also be copied to `--out`; the extra output must stay inside the project. `--editor` creates `.pyntral/tsconfig.editor.json` and, if the root lacks one, a small `tsconfig.json` extending it. Existing root TS configs are **never overwritten**: merge the generated path mappings yourself or extend the generated config.
 
 `--watch` watches Python source and the component manifest; it reruns generation in a new interpreter so that changed modules are imported fresh. Its errors are reported and watching continues. Use Ctrl+C to stop. VS Code needs React type packages installed in `.pyntral/ui/node_modules` (start `pyntral dev` once or run a normal build).
+
+## Export a prebuilt custom UI
+
+`pyntral export-ui DESTINATION` copies the compiled `.pyntral/dist` directory
+to an absent or empty directory, excluding the development workspace and npm
+dependencies. Run `pyntral build --app MODULE:app` first. Set
+`PYNTRAL_DIST` to the exported directory in the Python-only runtime.
+See [multi-stage deployment](deployment.md#custom-ui-in-a-python-only-runtime).

@@ -2,6 +2,14 @@
 
 Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions and use [PEP 440](https://peps.python.org/pep-0440/) version numbers.
 
+## Unreleased
+
+- Add public Tabs and table primitives reused by built-in CRUD.
+- Add before/after CRUD slots and default view composition.
+- Support read-only composite primary key resources with opaque record identities.
+- Add custom transactional create/update handlers and bounded binary RPC bridges.
+- Add portable custom SPA export and a Python-only Docker deployment recipe.
+
 ## 1.0.0b2 — Second public beta
 
 ### Added

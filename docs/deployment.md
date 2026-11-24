@@ -82,3 +82,37 @@ Before publishing a stable release, complete:
 6. Reserve the PyPI project name, configure publishing credentials, set canonical repository/docs URLs in `pyproject.toml`, and tag a release.
 
 The name and version in this repository are **not** proof that a distribution has been uploaded to PyPI.
+
+## Custom UI in a Python-only runtime
+
+Build the extension SPA in a separate Node-enabled stage using your app's
+locked Python dependencies, source and `pyntral.components.json`:
+
+```dockerfile
+FROM ghcr.io/astral-sh/uv:0.9-python3.13-bookworm AS build
+WORKDIR /app
+COPY --from=node:22-bookworm /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:22-bookworm /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
+COPY . .
+RUN uv sync --locked --no-dev
+# App imports must work with build-only configuration, not production secrets.
+RUN uv run --locked pyntral build --app your_app.main:app --force \
+ && uv run --locked pyntral export-ui /app/admin-dist
+
+FROM python:3.13-slim-bookworm AS runtime
+WORKDIR /app
+COPY --from=build /app/.venv /app/.venv
+COPY --from=build /app/your_app /app/your_app
+COPY --from=build /app/admin-dist /app/admin-dist
+ENV PATH="/app/.venv/bin:$PATH" PYNTRAL_DIST="/app/admin-dist"
+CMD ["uvicorn", "your_app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+Adjust application paths, lockfile and build-time configuration. Install
+the same Python package version in both stages. `PYNTRAL_DIST` explicitly
+selects the custom bundle; missing assets result in a clear error rather
+than silently using the generic wheel. Do not copy node_modules, credentials,
+uploads or build caches into the runtime. See the complete runnable
+[Shop Dockerfile](../examples/shop/Dockerfile). For CI artifacts, run the
+same build and `export-ui` command and archive the resulting directory.
