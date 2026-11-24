@@ -213,7 +213,7 @@ Slots accept all four modes and both positions, one extension per position.
 They render around the complete screen, not inside the toolbar. Record routes
 receive the authorized record once loaded. Save is available for create/edit;
 render the default view only once in an override. See the working
-[ResourceSummary](../admin/ResourceSummary.tsx) example.
+[ResourceSummary](../admin/ResourceSummary.tsx) and [WrappedDetail](../admin/WrappedDetail.tsx) examples.
 
 ## HTTP client: @pyntral/api
 

@@ -319,10 +319,12 @@ the public `@pyntral/ui` API for custom React components. See
   rendered with the existing standard CRUD controls, using `crud_slots`.
 - **Commerce → Product tag links:** the existing association table is exposed
   as a composite-key resource. Create or remove a product/tag link; key components are immutable after creation. Open a record to see both fields.
+- **Commerce → Product notes:** create with a product selector and locale, edit the note, then delete the row. This demonstrates mutable non-key fields on a composite PK and a `defaultView` wrapper in [WrappedDetail](../../admin/WrappedDetail.tsx).
 - **Security → Demo staff:** custom create/update handlers normalize usernames,
   while the existing PasswordFeature still manages the write-only password.
 - **Agents → Insights → Consumer extension primitives:** try the shared tabs,
-  typed DataTable and a bounded binary bridge. The upload demonstration
+  typed DataTable with clickable sort headers, compact density, semantic Table, disabled tab, and a bounded binary bridge. The upload demonstration
   returns the byte count and SHA-256; it neither decodes nor stores the image.
 - The Shop Docker build uses `pyntral export-ui` and copies the runtime-only
   bundle into `/app/admin-dist`, selected explicitly with `PYNTRAL_DIST`.
+- **Browser tab:** the title is `Shop demo` and the favicon inherits [logo.svg](logo.svg); test before login and after signing in. The public HTTP client is used by the Insights agent selector; `scope: "host"` is documented in [Extensions](../../docs/extensions.md#http-client-pyntralapi).

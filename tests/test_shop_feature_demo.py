@@ -24,6 +24,8 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
     try:
         with TestClient(demo.app) as client:
             public = client.get("/admin/auth/config").json()
+            assert public["title"] == "Shop demo"
+            assert client.get("/admin/auth/favicon").content == Path(demo.__file__).with_name("logo.svg").read_bytes()
             assert public["login"]["layout"] in ("centered", "split")
             assert public["login"]["brand"]["title"] == "Shop demo"
             assert public["login"]["brand"]["icon"]["kind"] == "svg"
@@ -49,6 +51,26 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
             links = client.get("/admin/api/resources/product-tag-links").json()["items"]
             assert links and links[0]["__pyntral_id"]
             assert client.get("/admin/api/resources/product-tag-links/" + links[0]["__pyntral_id"]).status_code == 200
+            notes = resources["product-notes"]
+            assert notes["primaryKeys"] == ["product_id", "locale"]
+            assert notes["crudViews"] == {"show": "wrapped-detail"}
+            product_key = next(field for field in notes["fields"] if field["name"] == "product_id")
+            assert product_key["relation"]["resource"] == "products"
+            assert not product_key["views"]["create"]["readonly"] and product_key["views"]["edit"]["readonly"]
+            note_path = "/admin/api/resources/product-notes"
+            created_note = client.post(note_path, json={"product_id": 1, "locale": "fr", "note": "Original"}, headers=csrf)
+            assert created_note.status_code == 201, created_note.text
+            note_url = note_path + "/" + created_note.json()["record"]["__pyntral_id"]
+            edited_note = client.patch(note_url, json={"note": "Edited"}, headers=csrf)
+            assert edited_note.status_code == 200 and edited_note.json()["record"]["note"] == "Edited"
+            assert client.patch(note_url, json={"locale": "de"}, headers=csrf).status_code == 422
+            assert client.delete(note_url, headers=csrf).status_code == 200
+            from urllib.parse import quote
+            upload = client.post("/admin/api/bridge/inspect-upload", content=b"demo", headers={
+                **csrf, "Content-Type": "image/png", "X-Filename": "demo.png",
+                "X-Pyntral-Input": quote('{"label":"demo"}'),
+            })
+            assert upload.status_code == 200 and upload.json()["result"]["size"] == 4
             assert any(job["name"] == "inventory-report" for job in products["jobs"])
             job_url = "/admin/api/resources/products/jobs/inventory-report"
             assert client.post(job_url, json={}).status_code == 403

@@ -89,6 +89,15 @@ class Product(Base):
     tags: Mapped[list[Tag]] = relationship(secondary=product_tags, back_populates="products")
 
 
+class ProductNote(Base):
+    """Editable composite-key example; the identity is fixed after creation."""
+    __tablename__ = "product_notes"
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), primary_key=True)
+    locale: Mapped[str] = mapped_column(String(16), primary_key=True)
+    note: Mapped[str] = mapped_column(String(200))
+    product: Mapped[Product] = relationship(viewonly=True)
+
+
 class Order(Base):
     __tablename__ = "orders"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -244,6 +253,12 @@ def seed() -> None:
     seed_agents()
     seed_tags()
     with SessionLocal() as session:
+        if session.scalar(select(ProductNote.product_id).limit(1)) is None:
+            product_id = session.scalar(select(Product.id).order_by(Product.id).limit(1))
+            if product_id is not None:
+                session.add(ProductNote(product_id=product_id, locale="en", note="Edit this note; the two keys stay fixed."))
+                session.commit()
+    with SessionLocal() as session:
         if session.scalar(select(ShippingLocation.id).limit(1)) is None:
             session.add_all([ShippingLocation(country="Moldova", city="Bălți"),
                              ShippingLocation(country="Ukraine", city="Kyiv")])
@@ -322,6 +337,8 @@ admin = Admin(
     path="/admin",
     secure_cookie=os.environ.get("ADMIN_SECURE_COOKIE", "true").lower() == "true",
     title="Shop demo",
+    # The browser favicon inherits the SVG header logo. Override with
+    # favicon=Path(__file__).with_name("logo.svg") for independent branding.
     sidebar=SidebarConfig(
         width=260, min_width=238, max_width=440, mobile_width=260,
         resizable=True, icon_size=18, indent=9, max_indent_depth=5,
@@ -573,6 +590,13 @@ admin.add_resource(Resource(
     ProductTagLink, name="product-tag-links", label="Product tag links", icon="link",
     navigation="Commerce", allow_edit=False,
     list_fields=["product_id", "tag_id"],
+))
+
+
+admin.add_resource(Resource(
+    ProductNote, name="product-notes", label="Product notes", icon="notebook-pen", navigation="Commerce",
+    title_field="note", list_fields=["product_id", "locale", "note"], search_fields=["note"],
+    crud_views={"show": "wrapped-detail"},
 ))
 
 
