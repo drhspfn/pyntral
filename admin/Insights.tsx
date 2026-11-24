@@ -56,6 +56,7 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
           <thead><tr><th scope="col">Primitive</th><th scope="col">Usage</th></tr></thead>
           <tbody><tr><td>Table</td><td>Custom semantic markup</td></tr><tr><td>DataTable</td><td>Typed row and column definitions</td></tr></tbody>
         </Table></TabPanel>
+        <TabPanel value="disabled">This panel cannot be selected.</TabPanel>
         <TabPanel value="upload" keepMounted><FileUpload files={binaryFiles} onFilesChange={setBinaryFiles} multiple={false}
           maxSizeBytes={2_000_000} accept="image/png,image/jpeg" onUpload={async (file, ctx) => {
             const result = await inspectUpload({ label: "demo" }, file, ctx.signal);

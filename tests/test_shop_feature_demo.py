@@ -25,7 +25,7 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
         with TestClient(demo.app) as client:
             public = client.get("/admin/auth/config").json()
             assert public["title"] == "Shop demo"
-            assert client.get("/admin/auth/favicon").content == Path(demo.__file__).with_name("logo.svg").read_bytes()
+            assert client.get("/admin/auth/favicon").content == Path(demo.__file__).with_name("logo.svg").read_text(encoding="utf-8").encode("utf-8")
             assert public["login"]["layout"] in ("centered", "split")
             assert public["login"]["brand"]["title"] == "Shop demo"
             assert public["login"]["brand"]["icon"]["kind"] == "svg"
@@ -71,6 +71,17 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
                 "X-Pyntral-Input": quote('{"label":"demo"}'),
             })
             assert upload.status_code == 200 and upload.json()["result"]["size"] == 4
+            staff_path = "/admin/api/resources/demo-staff"
+            staff = client.post(staff_path, json={"username": "  demo-user  ", "new_password": "demo-secret-password"}, headers=csrf)
+            assert staff.status_code == 201, staff.text
+            staff_record = staff.json()["record"]
+            assert staff_record["username"] == "demo-user" and "password_hash" not in staff_record
+            staff_url = staff_path + "/" + str(staff_record["id"])
+            renamed = client.patch(staff_url, json={"username": "  renamed  "}, headers=csrf)
+            assert renamed.status_code == 200 and renamed.json()["record"]["username"] == "renamed"
+            from pyntral import verify_password
+            with demo.SessionLocal() as session:
+                assert verify_password("demo-secret-password", session.get(demo.DemoStaffAccount, staff_record["id"]).password_hash)
             assert any(job["name"] == "inventory-report" for job in products["jobs"])
             job_url = "/admin/api/resources/products/jobs/inventory-report"
             assert client.post(job_url, json={}).status_code == 403
