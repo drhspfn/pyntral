@@ -754,7 +754,11 @@ button.ra-brand:hover{background:var(--ra-surface-alt)}
 .ra-table{min-width:0;max-width:100%}
 .ra-table-sort{font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left}
 .data-table .ra-table-empty{text-align:center;white-space:normal;padding:24px;color:var(--ra-muted)}
-.ra-crud-slot{min-width:0;margin-block:0 16px}
+.ra-crud-slot{min-width:0;max-width:100%}
+.ra-crud-slot-before{margin-bottom:16px}
+.ra-crud-slot-after{margin-top:16px}
+.page-heading.ra-crud-actions-only{justify-content:flex-end;margin-bottom:16px}
+.page-heading.ra-crud-actions-only .heading-actions{margin-left:auto}
 
 /* Navigation search stays above the scrollable, permission-filtered tree. */
 .ra-sidebar-navigation{display:flex;flex:1;min-height:0;min-width:0;flex-direction:column}

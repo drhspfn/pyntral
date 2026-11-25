@@ -56,6 +56,8 @@ export interface LayoutSectionDef {
   defaultOpen: boolean;
   columns?: 1 | 2 | null;
 }
+export type CrudMode = "list" | "create" | "edit" | "show";
+export interface CrudLayoutDef { showHeading?: boolean; beforePosition?: "after_heading" | "above_heading" }
 export interface ResourceDef {
   id: string;
   label: string;
@@ -72,7 +74,8 @@ export interface ResourceDef {
   pageSize: number;
   showSearch?: boolean;
   crudViews?: Partial<Record<"list" | "create" | "edit" | "show", string>>;
-  crudSlots?: Partial<Record<"list" | "create" | "edit" | "show", { before?: string; after?: string }>>;
+  crudSlots?: Partial<Record<CrudMode, { before?: string; after?: string }>>;
+  crudLayouts?: Partial<Record<CrudMode, CrudLayoutDef>>;
   layouts?: { form: LayoutSectionDef[]; detail: LayoutSectionDef[] };
   formLayout?: "stack" | "grid";
   detailLayout?: "stack" | "grid";

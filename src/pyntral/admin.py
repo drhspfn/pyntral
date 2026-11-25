@@ -908,7 +908,7 @@ class Admin:
                     "delete": permitted and await self._can(principal, name, "delete"),
                 }
                 if not permitted:
-                    metadata.update(fields=[], listFields=[], searchFields=[], relationships=[], actions=[], jobs=[], crudSlots={})
+                    metadata.update(fields=[], listFields=[], searchFields=[], relationships=[], actions=[], jobs=[], crudSlots={}, crudLayouts={})
                 else:
                     read_fields = await self._allowed_fields(principal, name)
                     edit_fields = await self._allowed_fields(principal, name, edit=True, view="edit")

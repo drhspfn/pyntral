@@ -12,6 +12,8 @@ import { sidebarConfig, SidebarHeaderRegion, SidebarFooterRegion } from "./sideb
 import { Icon } from "./icon";
 import { Tabs, TabList, Tab, TabPanel } from "./tabs";
 import { Table } from "./data-table";
+import { CrudHeading } from "./crud-heading";
+import { resolveCrudLayout } from "./crud-layout-state";
 import { JsonView } from "./code-block";
 import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
@@ -304,7 +306,9 @@ function BackgroundJobButton({ resource, job }: { resource: ResourceDef; job: Jo
   </div>;
 }
 
-function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void }) {
+type BuiltinCrudLayoutProps = { showHeading?: boolean; before?: ReactNode };
+
+function ResourceList({ resource, navigate, schema, showHeading = true, before }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void } & BuiltinCrudLayoutProps) {
   const { t } = useI18n();
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
@@ -336,17 +340,17 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
   useEffect(() => setSelection([]), [selectionScope, resource.id]);
   const records = useQuery({ queryKey: ["list", resource.id, query],
     queryFn: () => api<Listing>(`/api/resources/${resource.id}${query}`) });
+  const hasHeadingActions = !!resource.jobs?.length || resource.actions.some(action => action.kind === "resource") || resource.capabilities.create;
   return <>
-    <div className="page-heading"><div><div className="eyebrow">DATA / {resource.id.toUpperCase()}</div>
-      <h1>{resource.label}</h1><p>{t("resources.description", "View, organize, and manage your records.")}</p></div>
-      <div className="heading-actions">
+    <CrudHeading showHeading={showHeading} before={before} heading={<><div className="eyebrow">DATA / {resource.id.toUpperCase()}</div>
+      <h1>{resource.label}</h1><p>{t("resources.description", "View, organize, and manage your records.")}</p></>}
+      actions={hasHeadingActions ? <>
         {(resource.jobs ?? []).map((job) => <BackgroundJobButton key={job.name} resource={resource} job={job}/>)}
         {resource.actions.filter((action) => action.kind === "resource").map((action) =>
           <CollectionAction key={action.name} schema={schema} resource={resource} action={action}
             selected={[]} navigate={navigate} clearSelection={() => undefined}/>)}
         {resource.capabilities.create && <button className="btn primary" onClick={() => navigate(`resources/${resource.id}/new`)}><Plus size={17}/> {t("actions.new", "New record")}</button>}
-      </div>
-    </div>
+      </> : null}/>
     <div className="surface ra-table-surface">
       <div className="table-toolbar">
         {resource.showSearch && <SearchInput value={text} onChange={setText}
@@ -527,10 +531,10 @@ function StructuredFields({ resource, mode, fields, values, render }: {
   </div>;
 }
 
-function RecordEditor({ resource, id, navigate, notify }: {
+function RecordEditor({ resource, id, navigate, notify, showHeading = true, before }: {
   resource: ResourceDef; id?: string; navigate: (route: string) => void;
   notify: (text: string) => void;
-}) {
+} & BuiltinCrudLayoutProps) {
   const client = useQueryClient();
   const { t } = useI18n();
   const isNew = id === undefined;
@@ -616,9 +620,9 @@ function RecordEditor({ resource, id, navigate, notify }: {
   const visibleFields = viewFields(resource.fields, isNew ? "create" : "edit").filter((f) => !f.readonly);
   return <>
     <button className="back-link" onClick={() => navigate(isNew ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(id!)}`)}><ArrowLeft size={16}/> {isNew ? `Back to ${resource.label}` : "Back to record"}</button>
-    <div className="page-heading"><div><div className="eyebrow">{resource.label.toUpperCase()} / {isNew ? "CREATE" : "EDIT"}</div>
-      <h1>{isNew ? `New ${resource.label.replace(/s$/, "")}` : "Edit record"}</h1><p>Provide the details below and save your changes.</p></div>
-      {!isNew && <div className="heading-actions">
+    <CrudHeading showHeading={showHeading} before={before} heading={<><div className="eyebrow">{resource.label.toUpperCase()} / {isNew ? "CREATE" : "EDIT"}</div>
+      <h1>{isNew ? `New ${resource.label.replace(/s$/, "")}` : "Edit record"}</h1><p>Provide the details below and save your changes.</p></>}
+      actions={!isNew && (resource.capabilities.show || resource.capabilities.delete) ? <>
         {resource.capabilities.show && <button type="button" className="btn subtle"
           onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id!)}`)}>
           <ExternalLink size={16}/> View record</button>}
@@ -627,7 +631,7 @@ function RecordEditor({ resource, id, navigate, notify }: {
           onClick={() => { void requestDelete(id, resource.versionField
             ? baseline?.[resource.versionField] : undefined); }}>
           <Trash2 size={16}/> Delete</button>}
-      </div>}</div>
+      </> : null}/>
     {!isNew && record.isLoading ? <Loading/> : record.error && !baseline ? <Alert error={record.error}/> :
       <form className="editor-grid" onSubmit={(e: FormEvent) => { e.preventDefault(); mutation.mutate(); }}>
         <div className="surface editor-card"><div className="editor-card-title"><h2>Record details</h2><p>Fields marked with * are required.</p></div>
@@ -800,9 +804,9 @@ function ResourceUploads({ resource, identifier }: { resource: ResourceDef; iden
   </Card>;
 }
 
-function RecordShow({ resource, id, schema, navigate }: {
+function RecordShow({ resource, id, schema, navigate, showHeading = true, before }: {
   resource: ResourceDef; id: string; schema: Schema; navigate: (route: string) => void;
-}) {
+} & BuiltinCrudLayoutProps) {
   const record = useQuery({ queryKey: ["record", resource.id, id],
     queryFn: () => api<{ record: RecordData; actions: string[] }>(`/api/resources/${resource.id}/${encodeURIComponent(id)}`) });
   const { requestDelete, isPending: deleting } = useDeleteRecord(resource,
@@ -810,14 +814,13 @@ function RecordShow({ resource, id, schema, navigate }: {
   const related = resource.relationships.filter((relation) => schema.resources.some((r) => r.id === relation.resource));
   return <>
     <button className="back-link" onClick={() => navigate(`resources/${resource.id}`)}><ArrowLeft size={16}/> Back to {resource.label}</button>
-    <div className="page-heading"><div><div className="eyebrow">{resource.label.toUpperCase()} / RECORD</div>
+    <CrudHeading showHeading={showHeading} before={before} heading={<><div className="eyebrow">{resource.label.toUpperCase()} / RECORD</div>
       <h1>{record.data ? String(record.data.record[resource.titleField] ?? `Record ${id}`) : `Record ${id}`}</h1>
-      <p>Record details and connected relationships.</p></div>
-      <div className="heading-actions">
+      <p>Record details and connected relationships.</p></>}
+      actions={resource.capabilities.edit || resource.capabilities.delete ? <>
         {resource.capabilities.edit && <button className="btn subtle" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id)}/edit`)}><Pencil size={16}/> Edit</button>}
         {resource.capabilities.delete && <button className="btn danger" disabled={deleting} onClick={() => { void requestDelete(id, resource.versionField ? record.data?.record?.[resource.versionField] : undefined); }}><Trash2 size={16}/> Delete</button>}
-      </div>
-    </div>
+      </> : null}/>
     {record.isLoading ? <Loading/> : record.error ? <Alert error={record.error} /> : record.data && <>
       <div className="surface detail-card"><div className="editor-card-title"><h2>Details</h2><p>Data from the SQLAlchemy resource</p></div>
         <StructuredFields resource={resource} mode="detail" fields={viewFields(resource.fields, "show")}
@@ -893,9 +896,14 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
     if (versionedEdit && fresh) setEditRecord((current) => current ?? fresh);
   }, [versionedEdit, record.data]);
   const displayedRecord = versionedEdit ? editRecord : record.data?.record;
-  const defaultView = mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate}/> :
-    mode === "show" ? <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate}/> :
-    <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)}/>;
+  const layout = resolveCrudLayout(resource.crudLayouts?.[mode], !!Custom);
+  const renderDefaultView = (before?: ReactNode) => {
+    const props = { showHeading: layout.showHeading, before };
+    return mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate} {...props}/> :
+      mode === "show" ? <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate} {...props}/> :
+      <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)} {...props}/>;
+  };
+  const defaultView = renderDefaultView();
   if (!Custom && !Before && !After) return defaultView;
   const loadList: CustomCrudProps["loadList"] = async (params = {}) =>
     api<{ items: RecordData[]; total: number; offset: number; limit: number }>(
@@ -931,9 +939,11 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
         setEditRecord(fresh.data?.record);
       }
     } };
-  return <>{Before && <div className="ra-crud-slot"><Before {...props}/></div>}
-    {Custom ? <Custom {...props}/> : defaultView}
-    {After && <div className="ra-crud-slot"><After {...props}/></div>}</>;
+  const before = Before ? <div className="ra-crud-slot ra-crud-slot-before"><Before {...props}/></div> : null;
+  return <>
+    {layout.beforePosition === "above_heading" && before}
+    {Custom ? <Custom {...props}/> : renderDefaultView(layout.beforePosition === "after_heading" ? before : undefined)}
+    {After && <div className="ra-crud-slot ra-crud-slot-after"><After {...props}/></div>}</>;
 }
 
 function MainLayout({ schema, user, onLogout, navigate, route, children, themeMode, toggleTheme }: {
