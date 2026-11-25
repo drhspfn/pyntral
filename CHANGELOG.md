@@ -2,12 +2,31 @@
 
 Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions and use [PEP 440](https://peps.python.org/pep-0440/) version numbers.
 
-## Unreleased
+## 1.0.0b5 — Fifth public beta
 
-- Add themed composable Skeleton primitives and initial CRUD loading placeholders.
-- Pass SPA navigation to every custom field mode; avoid nested interactive first-column wrappers and support explicit record_link suppression.
-- Add opt-in StatusBadgeConfig and CodeFieldConfig, themed StatusBadge, multiline code editing and read-only code viewers.
-- Preserve list filter deep links in SPA navigation and history.
+### Added
+
+- Composable Skeleton, SkeletonText, SkeletonImage, SkeletonGroup, SkeletonRows and SkeletonFields primitives with themed shimmer, pulse and static modes, configurable dimensions and reduced-motion support.
+- Initial loading placeholders for standard CRUD tables, forms, record details, related lists/cards and attachments; opt out per resource with skeletons=False.
+- Public StatusBadge and declarative StatusBadgeConfig with automatic or explicitly mapped tones, localized labels, optional dots and warning theme tokens.
+- Declarative CodeFieldConfig reusing CodeBlock and JsonView for record details, optional inline list previews and multiline text editing.
+- SPA navigation callback in every CustomFieldProps mode, including related-record creation and filters.
+- Explicit Field.record_link control and mount-relative resource-list deep links with supported initial filters.
+
+### Changed
+
+- Custom first-column renderers and inline code previews are no longer wrapped in the automatic record-detail button. The row View action remains available subject to permissions.
+- DataTable shows skeleton rows with column headings during initial loading and preserves existing rows during refresh.
+- SPA navigation preserves query strings and history, including supported list filter parameters.
+- Expanded Shop examples, field configuration documentation and regression tests.
+
+### Upgrade notes
+
+- Rebuild application-specific SPA bundles and regenerate editor types after upgrading.
+- Existing custom first-column renderers that relied on the automatic detail link should call navigate explicitly or use the row View action.
+- Resource(skeletons=False) restores the previous spinner behavior. Custom components own their loading state.
+- Status and code presentation are opt-in via Field(widget="status"), Field(widget="code"), or their configuration objects. Field authorization and database validation remain unchanged.
+- Deep links initialize supported built-in list filters; changes in filter controls do not rewrite the URL.
 
 ## 1.0.0b4 — Fourth public beta
 

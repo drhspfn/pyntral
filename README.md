@@ -8,7 +8,7 @@ Define your resources in Python. Get a searchable, customizable administration i
 
 **Python 3.11+** · **FastAPI** · **SQLAlchemy 2.x** · **React 19** · **TypeScript** · **MIT**
 
-`1.0.0b4` · **Fourth public beta** · [Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [API reference](docs/api-reference.md)
+`1.0.0b5` · **Fifth public beta** · [Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [API reference](docs/api-reference.md)
 
 </div>
 
@@ -219,7 +219,7 @@ Beta 3 includes [compound tabs and table primitives](docs/ui.md#tabs-and-tables)
 
 All features are demonstrated in [Shop](examples/shop/README.md).
 
-## Loading and field presentation
+## Beta 5: loading and field presentation
 
 Compose animated [skeletons](docs/ui.md#skeletons-and-loading-states), use
 [declarative status badges and code fields](docs/resources.md#status-and-code-field-presentation),

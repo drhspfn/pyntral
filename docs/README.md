@@ -57,7 +57,7 @@ The minimal Python-only example is [`examples/basic/`](../examples/basic/README.
 - [CRUD heading visibility and slot placement](extensions.md#heading-visibility-and-slot-placement)
 - [Dashboard authorization](authorization.md#dashboard-authorization)
 
-## Loading and field presentation
+## Beta 5 loading and field presentation
 
 - [Skeleton primitives and loading tables](ui.md#skeletons-and-loading-states)
 - [StatusBadge and field presentation](resources.md#status-and-code-field-presentation)
