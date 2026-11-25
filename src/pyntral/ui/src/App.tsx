@@ -16,6 +16,7 @@ import { CrudHeading } from "./crud-heading";
 import { resolveCrudLayout } from "./crud-layout-state";
 import { CodeBlock, JsonView } from "./code-block";
 import { StatusBadge } from "./status-badge";
+import { Skeleton, SkeletonGroup, SkeletonRows, SkeletonFields } from "./skeleton";
 import { useDefaultRecordLink } from "./field-presentation-state";
 import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
@@ -187,7 +188,7 @@ function RecordAction({ resource, record, action, navigate }: {
   </span>;
 }
 
-function TableContent({ resource, data, navigate, selectable = false, selection = [], onSelectionChange, preferences }: { resource: ResourceDef; data: Listing;
+function TableContent({ resource, data, navigate, selectable = false, selection = [], onSelectionChange, preferences, loading = false }: { resource: ResourceDef; data?: Listing; loading?: boolean;
   navigate: (route: string) => void; selectable?: boolean; selection?: string[];
   onSelectionChange?: (selected: string[]) => void; preferences?: TablePreferences;
 }) {
@@ -195,17 +196,26 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
   const columns = viewFields(resource.fields, "list").filter((field) => names.includes(field.name))
     .sort((a, b) => names.indexOf(a.name) - names.indexOf(b.name));
   const { requestDelete } = useDeleteRecord(resource);
-  const keys = data.items.filter(row => row[resource.primaryKey] != null).map((row) => String(row[resource.primaryKey]));
-  return <Table compact={preferences?.density === "compact"} label={resource.label}
+  const items = data?.items ?? [];
+  const keys = items.filter(row => row[resource.primaryKey] != null).map((row) => String(row[resource.primaryKey]));
+  const { t } = useI18n();
+  return <>
+    {loading && <span role="status" className="ra-skeleton-status">{t("loading.records", "Loading records…")}</span>}
+    <Table busy={loading} compact={preferences?.density === "compact"} label={resource.label}
     style={{ "--ra-pin-left": selectable ? "46px" : "0px" } as CSSProperties}><thead><tr>
-    {selectable && <th className="ra-select-cell"><Checkbox aria-label="Select all visible records"
+    {selectable && <th className="ra-select-cell"><Checkbox disabled={loading} aria-label="Select all visible records"
       checked={keys.length > 0 && keys.every((key) => selection.includes(key))}
       indeterminate={keys.some((key) => selection.includes(key)) && !keys.every((key) => selection.includes(key))}
       onCheckedChange={(checked) => onSelectionChange?.(checked ? Array.from(new Set([...selection, ...keys])) : selection.filter((key) => !keys.includes(key)))}/></th>}
     {columns.map((field) => <th key={field.name} className={preferences?.pinned === field.name ? "ra-column-pinned" : ""}>
       {field.label}</th>)}<th className="actions-head">ACTION</th>
   </tr></thead><tbody>
-    {data.items.map((row, index) => <tr key={String(row[resource.primaryKey] ?? `redacted-${index}`)}>
+    {loading && !data ? <SkeletonRows rows={Math.min(resource.pageSize, 6)} columns={[
+      ...(selectable ? [{key:"selection",className:"ra-select-cell",width:16}] : []),
+      ...columns.map(field => ({key:field.name,className:preferences?.pinned === field.name ? "ra-column-pinned" : undefined,
+        width:field.kind === "boolean" || field.statusBadge ? 56 : undefined})),
+      {key:"actions",className:"actions-cell",width:42},
+    ]}/> : items.map((row, index) => <tr key={String(row[resource.primaryKey] ?? `redacted-${index}`)}>
       {selectable && <td className="ra-select-cell">{row[resource.primaryKey] != null && <Checkbox aria-label={`Select record ${String(row[resource.primaryKey])}`}
         checked={selection.includes(String(row[resource.primaryKey]))} onCheckedChange={(checked) => {
           const key = String(row[resource.primaryKey]);
@@ -222,11 +232,11 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
         {resource.capabilities.edit && row[resource.primaryKey] != null && <button title="Edit" aria-label="Edit record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}/edit`)}><Pencil size={15}/></button>}
         {resource.capabilities.delete && row[resource.primaryKey] != null && <button type="button" title="Delete" aria-label="Delete record"
           onClick={() => { void requestDelete(row[resource.primaryKey], resource.versionField ? row[resource.versionField] : undefined); }}><Trash2 size={15}/></button>}
-        {resource.actions.filter((a) => (a.kind ?? "record") === "record" && a.position !== "detail" && (data.actionsByRecord?.[String(row[resource.primaryKey])] || []).includes(a.name))
+        {resource.actions.filter((a) => (a.kind ?? "record") === "record" && a.position !== "detail" && (data?.actionsByRecord?.[String(row[resource.primaryKey])] || []).includes(a.name))
           .map((action) => <RecordAction key={action.name} resource={resource} record={row} action={action} navigate={navigate}/>)}
       </div></td>
     </tr>)}
-  </tbody></Table>;
+  </tbody></Table></>;
 }
 function Pager({ offset, total, limit, onOffset }: { offset: number; total: number; limit: number; onOffset: (n: number) => void }) {
   return <div className="pager"><span>Showing <strong>{total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)}</strong> of <strong>{total}</strong> records</span>
@@ -437,7 +447,7 @@ function ResourceList({ resource, navigate, schema, showHeading = true, before }
           <CollectionAction key={action.name} schema={schema} resource={resource} action={action}
             selected={selection} navigate={navigate} clearSelection={() => setSelection([])}/>)}
       </div>}
-      {records.isLoading ? <Loading label="Loading records…" /> : records.error ? <Alert error={records.error} /> :
+      {records.isLoading ? resource.skeletons === false ? <Loading label="Loading records…"/> : <TableContent resource={resource} loading navigate={navigate} selectable={resource.actions.some(action => action.kind === "bulk")} preferences={preferences}/> : records.error ? <Alert error={records.error} /> :
         records.data?.items.length ? <><TableContent resource={resource} data={records.data} navigate={navigate}
             selectable={resource.actions.some((action) => action.kind === "bulk")}
             selection={selection} onSelectionChange={setSelection} preferences={preferences}/>
@@ -646,7 +656,7 @@ function RecordEditor({ resource, id, navigate, notify, showHeading = true, befo
             ? baseline?.[resource.versionField] : undefined); }}>
           <Trash2 size={16}/> Delete</button>}
       </> : null}/>
-    {!isNew && record.isLoading ? <Loading/> : record.error && !baseline ? <Alert error={record.error}/> :
+    {!isNew && record.isLoading ? resource.skeletons === false ? <Loading/> : <SkeletonFields editor count={visibleFields.length} columns={resource.formLayout === "grid" ? 2 : 1}/> : record.error && !baseline ? <Alert error={record.error}/> :
       <form className="editor-grid" onSubmit={(e: FormEvent) => { e.preventDefault(); mutation.mutate(); }}>
         <div className="surface editor-card"><div className="editor-card-title"><h2>Record details</h2><p>Fields marked with * are required.</p></div>
           {visibleFields.length ? <StructuredFields resource={resource} mode="form" fields={visibleFields}
@@ -752,7 +762,8 @@ function RelatedRecords({ resource, identifier, relation, target, navigate }: {
           onChange={(value) => setNewValues((old) => ({ ...old, [field.name]: value }))}/>)}</div>
       <button className="btn primary" type="submit" disabled={mutateLink.isPending}>Create and link</button>
     </form>}
-    {rows.isLoading ? <Loading/> : rows.error ? <Alert error={rows.error}/> : rows.data?.items.length ? <>
+    {rows.isLoading ? target.skeletons === false ? <Loading/> : relation.layout === "cards" ? <SkeletonGroup label="Loading related records…"><div className="ra-related-cards">{Array.from({length:3}, (_, i) => <div key={i} className="ra-related-card"><Skeleton width="75%" height={16}/><Skeleton width="40%" height={10}/></div>)}</div></SkeletonGroup>
+      : <TableContent resource={target} loading navigate={navigate} selectable={selectable}/> : rows.error ? <Alert error={rows.error}/> : rows.data?.items.length ? <>
       {relation.layout === "cards" ? <div className="ra-related-cards">{rows.data.items.map((row, index) => {
         const id = row[target.primaryKey] == null ? null : String(row[target.primaryKey]);
         return <article className="ra-related-card" key={id ?? `redacted-${index}`}>
@@ -791,7 +802,7 @@ function ResourceUploads({ resource, identifier }: { resource: ResourceDef; iden
   });
   const maxBytes = resource.uploadMaxBytes ?? 10 * 1024 * 1024;
   return <Card title="Attachments" description="Files attached to this record." className="relationship-card ra-attachments">
-    {rows.isLoading && <Loading label="Loading attachments" />}
+    {rows.isLoading && (resource.skeletons === false ? <Loading label="Loading attachments"/> : <SkeletonGroup label="Loading attachments…"><div className="ra-attachment-skeleton">{Array.from({length:3}, (_, i) => <div key={i}><Skeleton size={36}/><Skeleton height={14} width="55%"/></div>)}</div></SkeletonGroup>)}
     {rows.error && <Alert error={rows.error}/>}
     {rows.data && <div className="ra-file-list">
       {rows.data.items.length === 0 && <p className="ra-attachments-empty">No attachments yet.</p>}
@@ -835,7 +846,7 @@ function RecordShow({ resource, id, schema, navigate, showHeading = true, before
         {resource.capabilities.edit && <button className="btn subtle" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id)}/edit`)}><Pencil size={16}/> Edit</button>}
         {resource.capabilities.delete && <button className="btn danger" disabled={deleting} onClick={() => { void requestDelete(id, resource.versionField ? record.data?.record?.[resource.versionField] : undefined); }}><Trash2 size={16}/> Delete</button>}
       </> : null}/>
-    {record.isLoading ? <Loading/> : record.error ? <Alert error={record.error} /> : record.data && <>
+    {record.isLoading ? resource.skeletons === false ? <Loading/> : <SkeletonFields count={viewFields(resource.fields,"show").length} columns={resource.detailLayout === "grid" ? 2 : 1}/> : record.error ? <Alert error={record.error} /> : record.data && <>
       <div className="surface detail-card"><div className="editor-card-title"><h2>Details</h2><p>Data from the SQLAlchemy resource</p></div>
         <StructuredFields resource={resource} mode="detail" fields={viewFields(resource.fields, "show")}
           values={record.data.record} render={(field) => <div className={`detail-item ${field.span === 2 ? "ra-field-wide" : ""}`}>
@@ -944,7 +955,7 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
     navigate(`resources/${resource.id}`);
   };
   if (record.error && !displayedRecord) return <Alert error={record.error}/>;
-  if (id && !displayedRecord) return <Loading/>;
+  if (id && !displayedRecord) return resource.skeletons === false ? <Loading/> : <SkeletonFields count={viewFields(resource.fields, mode === "edit" ? "edit" : "show").length} editor={mode === "edit"}/>;
   const props: CustomCrudProps = { schema, resource, mode, record: displayedRecord, defaultView,
     navigate, loadList, save, remove, reload: async () => {
       await invalidateResource(client, resource.id);

@@ -23,6 +23,8 @@ export type { TabsProps } from "./tabs";
 export { Table, DataTable } from "./data-table";
 export { CodeBlock, JsonView } from "./code-block";
 export { StatusBadge } from "./status-badge";
+export { Skeleton, SkeletonText, SkeletonImage, SkeletonGroup, SkeletonRows, SkeletonFields } from "./skeleton";
+export type { SkeletonProps, SkeletonTextProps, SkeletonColumn } from "./skeleton";
 export type { StatusBadgeProps } from "./status-badge";
 export type { BadgeTone } from "./types";
 export type { CodeBlockProps, JsonViewProps } from "./code-block";

@@ -79,6 +79,7 @@ export interface ResourceDef {
   titleField: string;
   pageSize: number;
   showSearch?: boolean;
+  skeletons?: boolean;
   crudViews?: Partial<Record<"list" | "create" | "edit" | "show", string>>;
   crudSlots?: Partial<Record<CrudMode, { before?: string; after?: string }>>;
   crudLayouts?: Partial<Record<CrudMode, CrudLayoutDef>>;
