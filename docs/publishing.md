@@ -17,7 +17,7 @@ The official wheel contains a **generic production SPA** at `pyntral/web_dist/`.
 
 `.github/workflows/publish-pypi.yml` runs when a Git tag `v*` is pushed. It:
 
-1. Verifies `v<version>` matches `pyproject.toml` (for example `v1.0.0b3`).
+1. Verifies `v<version>` matches `pyproject.toml` (for example `v1.0.0b4`).
 2. Runs Python and JavaScript logic tests.
 3. Compiles the **generic** frontend using a temporary project without application-specific components or bridge contracts. This build runs ESLint, TypeScript and Vite.
 4. Copies its production bundle to `src/pyntral/web_dist/` and builds the Python wheel and sdist with `uv build`.
@@ -60,8 +60,8 @@ On Windows, use `Scripts\python.exe` under the environment directory.
 After confirming all checks, create and push the release tag:
 
 ```bash
-git tag v1.0.0b3
-git push origin v1.0.0b3
+git tag v1.0.0b4
+git push origin v1.0.0b4
 ```
 
 Check the workflow outcome and PyPI package files before announcing availability. **No PyPI publication is performed by creating this repository.**
@@ -72,6 +72,6 @@ See [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/using-a-p
 
 Update pyproject.toml and uv.lock with uv version / uv lock, and set
 src/pyntral/ui/package.json to the corresponding SemVer version (Python
-1.0.0b3 = frontend 1.0.0-beta.3). No npm install is needed for a version-only
+1.0.0b4 = frontend 1.0.0-beta.4). No npm install is needed for a version-only
 change. Update README, CHANGELOG, and tests/test_public_release.py.
 Run `uv run --locked --extra dev pytest -q` and wait for PR checks before tagging.

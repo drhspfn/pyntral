@@ -2,13 +2,29 @@
 
 Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions and use [PEP 440](https://peps.python.org/pep-0440/) version numbers.
 
-## Unreleased
+## 1.0.0b4 — Fourth public beta
 
-- Place standard CRUD before slots below the page heading by default; configure legacy placement or hide the stock title per CRUD mode without removing actions.
+### Added
 
-- Add optional searchable sidebar navigation with preserved tree expansion.
-- Add authenticated custom home and category dashboards with a shared default view and user context.
-- Add theme-aware CodeBlock and JsonView with language detection, optional highlighting, lossless JSON formatting, clipboard and collapse controls.
+- Optional, localized sidebar search across authorized navigation labels, identifiers and category paths, with preserved expansion state.
+- Authenticated custom root and category dashboards using the dashboards TSX registry, user context, scoped schema and optional default Overview.
+- Theme-aware CodeBlock and JsonView with inline/block layouts, heuristic language detection, bounded syntax highlighting, lossless JSON-text formatting, copy, collapse and sizing options.
+- Per-mode CRUD heading visibility and before-slot placement through Resource.crud_layouts.
+
+### Changed
+
+- Standard CRUD before slots now render below the page heading and above content; after slots follow content with consistent spacing. Hiding a heading preserves available actions and back navigation.
+- Built-in JSON and array record details use JsonView; list previews remain compact.
+- Dashboard extensions participate in build cache, editor configuration and lint. Navigation routes handle invalid URL encoding and category deep links.
+- Expanded Shop examples, authorization and UI logic tests, and public API documentation.
+
+### Upgrade notes
+
+- Rebuild application-specific SPA bundles and refresh editor types after upgrading.
+- To retain Beta 3 slot ordering, set crud_layouts={"list": {"before_position": "above_heading"}} (or the corresponding CRUD mode). Full custom CRUD replacements still own their layout.
+- Sidebar search is opt-in. Without a configured dashboard component the existing Overview remains unchanged.
+- Dashboard and category permission checks use dashboard:<component-id> and group:<path> with action view. Resource and bridge permissions remain independent.
+- CodeBlock is read-only; syntax detection is heuristic and very large input falls back to raw display.
 
 ## 1.0.0b3 — Third public beta
 

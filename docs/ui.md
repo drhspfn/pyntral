@@ -156,6 +156,8 @@ The UI prefixes custom variables with `--ra-` (for example, `primary` → `--ra-
 
 When `primary` is overridden, the UI derives missing `primary-hover`, `primary-soft` and `sidebar-active` using the accent and current surface tokens. For opaque CSS colors normalized to hex, it chooses black or white `on-primary` using WCAG contrast. Explicit values for any derived token take precedence, including values inherited from the global theme. For translucent or complex CSS colors, specify `on-primary` explicitly. Both button implementations use the hover color for their fill and border; checked controls share `on-primary` for contrast.
 
+Syntax highlighting tokens include `code-keyword`, `code-string`, `code-number`, `code-name`, and `code-comment`. Set them independently in `theme.light` / `theme.dark` using the same prefix-free names. See [code viewers](#codeblock-and-jsonview).
+
 Scrollbar tokens include `scrollbar-width`, `scrollbar-track`, `scrollbar-thumb`, `scrollbar-thumb-hover`, and `scrollbar-radius`; Firefox supports a more limited scrollbar customization than Chromium/WebKit.
 
 Form and detail layout can be `stack` or `grid` on each resource. Custom component classes are free to use these tokens; avoid changing core styles globally when a scoped CSS class suffices.
@@ -430,7 +432,7 @@ sidebar = SidebarConfig(show_search=True, search_placeholder="Find a resource or
 
 Search is disabled by default. When enabled, the field stays above the
 scrolling navigation tree. It matches authorized resource/page labels and
-IDs and category paths, case-insensitively; matching categories include
+IDs and category paths, case-insensitively and accent-insensitively (all search words must match); matching categories include
 their descendants and matching leaves retain their ancestors. Search
 temporarily expands matching branches and does not alter manual expansion
 state. Locked entries remain locked. Clearing the search restores the
@@ -475,12 +477,19 @@ palette with optional CSS overrides for `--ra-code-keyword`,
 JavaScript, TypeScript, Python, SQL, Bash, XML/HTML, CSS, YAML). Auto
 detection is heuristic; specify the language for ambiguous snippets.
 Raw input is never treated as HTML. JSON formatting preserves numeric
-lexemes, duplicate keys and string contents; invalid JSON is displayed
-unchanged. Formatting is limited to 100,000 input characters, depth 256
+lexemes, duplicate keys and string contents when given the original JSON text;
+invalid JSON is displayed unchanged. For JsonView values already parsed as
+JavaScript objects, precision or duplicate keys lost during parsing cannot be
+recovered. Pass the original serialized text when exact numeric lexemes matter.
+Explicit aliases include c#, cs, js, ts, py, sh, html and yml. Unknown languages
+remain plain text. Formatting is limited to 100,000 input characters, depth 256
 and roughly 1 MiB of formatted output; language detection and highlighting
 are skipped above 12,000 and 40,000 characters respectively. Large logs
 remain visible and copyable. This is a viewer, not an editor or a general
 language formatter. Clipboard copying requires a browser secure context
-or localhost. The built-in record detail renderer uses JsonView for JSON
+or localhost. `format` and `highlight` set defaults; their optional toolbar
+buttons allow a local override. Inline mode omits the toolbar and collapse.
+For controlled collapse, use collapsible with collapsed and onCollapsedChange.
+The built-in record detail renderer uses JsonView for JSON
 and array fields, while lists keep compact previews. See the
 [Insights playground](../admin/Insights.tsx).

@@ -81,6 +81,8 @@ below. The generic wheel reads this metadata without a custom SPA build.
 | `mobile_width` | 238 | Independent drawer width (160–480 px), constrained to the viewport. |
 | `resizable` | True | Enable desktop resize separator. |
 | `show_icons` | True | Show navigation glyphs, independent of header and lock/disclosure indicators. |
+| `show_search` | False | Enable search over the authorized navigation tree. |
+| `search_placeholder` | None | Optional search text; None uses the UI locale. |
 | `icon_size` | 16 | Navigation glyph size, 12–32 px. |
 | `indent` | 9 | Indentation per level, 0–24 px. |
 | `max_indent_depth` | 5 | Maximum visual indentation level, 0–8; does not restrict tree depth. |
@@ -196,7 +198,7 @@ marked no-store. The resource schema remains authenticated.
 
 `navigation.sidebar` uses camelCase keys:
 `width`, `minWidth`, `maxWidth`, `mobileWidth`, `resizable`, `showIcons`,
-`iconSize`, `indent`, `maxIndentDepth`, `dashboardIcon`, `header`, `footer`,
+`iconSize`, `indent`, `maxIndentDepth`, `dashboardIcon`, `showSearch`, `searchPlaceholder`, `header`, `footer`,
 `headerComponent`, `footerComponent`, `itemComponent`.
 The header includes `title`, `subtitle`, `icon`, `showIcon`, `showTitle`,
 `showSubtitle`, `align`, `direction`, `divider`, `iconSize`, `logoWidth`,
@@ -286,8 +288,9 @@ min_role=None)` configures an authorized category landing page.
 `SidebarConfig(show_search=False, search_placeholder=None)` controls
 navigation filtering. Authenticated schema exposes navigation.dashboardComponent
 and per-group component IDs only when permitted; sidebar.showSearch and
-sidebar.searchPlaceholder configure the search. React DashboardProps and
-CodeBlockProps / JsonViewProps are public. See [dashboards](extensions.md#home-and-category-dashboards)
+sidebar.searchPlaceholder configure the search. React `DashboardProps`, `DashboardComponent`, `NavigationGroupDef`,
+`CrudLayoutDef`, `CrudMode`, `CodeBlockProps` and `JsonViewProps` are public
+through `@pyntral/types` (navigation/layout) or `@pyntral/ui` (code viewers). See [dashboards](extensions.md#home-and-category-dashboards)
 and [code viewers](ui.md#codeblock-and-jsonview).
 
 ### CRUD presentation layout

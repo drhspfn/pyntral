@@ -48,8 +48,11 @@ The minimal Python-only example is [`examples/basic/`](../examples/basic/README.
 - [Public HTTP client](extensions.md#http-client-pyntralapi)
 - [Portable custom UI](deployment.md#custom-ui-in-a-python-only-runtime)
 
-## Navigation and code presentation
+## Beta 4 navigation and presentation
 
 - [Sidebar search](ui.md#sidebar-search)
 - [Home and category dashboards](extensions.md#home-and-category-dashboards)
 - [CodeBlock and JsonView](ui.md#codeblock-and-jsonview)
+
+- [CRUD heading visibility and slot placement](extensions.md#heading-visibility-and-slot-placement)
+- [Dashboard authorization](authorization.md#dashboard-authorization)

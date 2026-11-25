@@ -342,3 +342,5 @@ the public `@pyntral/ui` API for custom React components. See
 - Security → Audit entries: no stock heading, summary followed by the table.
 - Commerce → Product notes: create form without the stock heading (back and
   save/cancel remain); show uses a full override wrapping defaultView.
+
+The new Beta 4 examples use the same production contracts: [ShopDashboard.tsx](../../admin/ShopDashboard.tsx), [Insights.tsx](../../admin/Insights.tsx), [ResourceSummary.tsx](../../admin/ResourceSummary.tsx) and [WrappedDetail.tsx](../../admin/WrappedDetail.tsx). See [Beta 4 documentation index](../../docs/README.md#beta-4-navigation-and-presentation) for API parameters and upgrade notes.

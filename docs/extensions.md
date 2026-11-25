@@ -283,9 +283,19 @@ parameters. See [Insights](../admin/Insights.tsx) for a live admin HTTP call.
 Register an extension ID in the `dashboards` manifest category, and
 select it in Python. Existing apps retain the built-in Overview.
 
+```json
+{
+  "dashboards": {
+    "home": "admin/Dashboard.tsx",
+    "category": "admin/Dashboard.tsx"
+  }
+}
+```
+
 ```python
 admin = Admin(app, session_factory=SessionLocal, auth=auth, secret_key=secret,
-    dashboard_component="home", sidebar=SidebarConfig(show_search=True))
+    dashboard_component="home", sidebar=SidebarConfig(show_search=True),
+    role_weights={"admin": 100})
 admin.add_group(NavigationGroup("Avatars", icon="users", component="category"))
 admin.add_group(NavigationGroup("Avatars/Generation", component="category", min_role="admin"))
 ```
@@ -310,7 +320,7 @@ and defaultView (the built-in Overview, restricted to category resources
 for a group dashboard). Render defaultView only when desired. The standard
 `useCurrentAdmin()` hook is also available. Use API/bridge calls for scoped
 metrics. The home dashboard is at the admin root; `show_dashboard=False`
-takes precedence. Category names navigate to `groups/<encoded path>`,
+takes precedence (the root opens the first accessible resource). Category names navigate to `groups/<encoded path>`,
 with a separate disclosure arrow for subcategories and child resources.
 A category without a component still behaves as an ordinary disclosure.
 Authorized standalone category dashboards are visible even with no children.
@@ -323,4 +333,6 @@ accessible descendants remain navigable. Dashboard authorization is not
 a replacement for resource/bridge authorization. Missing registered TSX
 components produce a configuration error rather than a silent fallback.
 The registry participates in Vite, lint, editor configuration and build
-fingerprinting. See [ShopDashboard](../admin/ShopDashboard.tsx).
+fingerprinting. With custom TSX, rebuild via `pyntral build --app MODULE:app`
+and refresh editor aliases via `pyntral types MODULE:app --editor`. The generic
+wheel has no application-specific dashboard components. See [authorization](authorization.md#dashboard-authorization). See [ShopDashboard](../admin/ShopDashboard.tsx).
