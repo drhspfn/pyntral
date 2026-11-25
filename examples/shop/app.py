@@ -578,6 +578,8 @@ admin.add_resource(Resource(
     AuditEntry, icon="shield-check", navigation="Security", name="audit-entries",
     label="Audit entries", list_fields=["id", "occurred_at", "resource", "record_id", "actor_id", "operation"],
     allow_create=False, allow_edit=False, allow_delete=False,
+    crud_slots={"list": {"before": "resource-summary"}},
+    crud_layouts={"list": {"show_heading": False}},
     fields={"field_names": Field(readonly=True)},
 ))
 # This resource deliberately uses a custom CRUD list while retaining the
@@ -592,6 +594,8 @@ admin.add_resource(Resource(
     ProductTagLink, name="product-tag-links", label="Product tag links", icon="link",
     navigation="Commerce", allow_edit=False,
     list_fields=["product_id", "tag_id"],
+    crud_slots={"list": {"before": "resource-summary"}},
+    crud_layouts={"list": {"before_position": "above_heading"}},
 ))
 
 
@@ -599,6 +603,7 @@ admin.add_resource(Resource(
     ProductNote, name="product-notes", label="Product notes", icon="notebook-pen", navigation="Commerce",
     title_field="note", list_fields=["product_id", "locale", "note"], search_fields=["note"],
     crud_views={"show": "wrapped-detail"},
+    crud_layouts={"create": {"show_heading": False}},
 ))
 
 

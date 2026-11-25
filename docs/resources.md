@@ -50,6 +50,7 @@ admin.add_resource(Resource(
 | `actions` | Record-level server callbacks and optional frontend views/dialogs. |
 | `crud_views` | Map list/create/edit/show to replacement component IDs. |
 | `crud_slots` | Map CRUD mode to before/after extension IDs. |
+| `crud_layouts` | Per-mode `CrudLayout` options for heading visibility and before placement. See [heading customization](extensions.md#heading-visibility-and-slot-placement). |
 | `hooks` | ResourceHook lifecycle callbacks. |
 | `create_handler`, `update_handler` | Sync/async callbacks accepting OperationContext. |
 

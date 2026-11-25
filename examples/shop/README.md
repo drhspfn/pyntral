@@ -334,3 +334,11 @@ the public `@pyntral/ui` API for custom React components. See
 - Search for "draft", "orders" or "Agents" in the sidebar; clear the search to restore the tree.
 - Overview renders ShopDashboard with signed-in user context and scoped live counts. Click Commerce, Agents or Agents/Operations to open its category dashboard; the separate arrow expands the children.
 - Agents → Insights → Code and JSON viewers shows C# detection, JSON pretty/raw toggling, copy, collapsing, inline SQL and plain wrapped logs. Record details also use JsonView for JSON/array fields.
+
+### CRUD heading placement
+
+- Commerce → Products: default order is resource heading, summary, table.
+- Commerce → Product tag links: legacy before-above-heading ordering.
+- Security → Audit entries: no stock heading, summary followed by the table.
+- Commerce → Product notes: create form without the stock heading (back and
+  save/cancel remain); show uses a full override wrapping defaultView.

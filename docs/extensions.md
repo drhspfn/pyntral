@@ -185,8 +185,9 @@ Resource(Usage, crud_slots={"list": {"before": "resource-summary"},
 ```
 
 Slot components receive `CustomCrudProps` (including the authorized record
-on record routes). They render around the standard screen or a configured
-replacement. A full `crud_views` override can alternatively render
+on record routes). On built-in screens, `before` renders after the standard
+page heading and before the table/form/details; `after` renders after the
+screen content. A full `crud_views` override can alternatively render
 `props.defaultView` once inside its own wrapper. Slots must not render that
 element again. Standard controls retain their own queries, mutations and
 pagination. The API remains subject to normal access checks.
@@ -211,10 +212,38 @@ export default function WrappedDetail({ defaultView }: CustomCrudProps) {
 ```
 
 Slots accept all four modes and both positions, one extension per position.
-They render around the complete screen, not inside the toolbar. Record routes
+They render outside the table toolbar and form controls. Record routes
 receive the authorized record once loaded. Save is available for create/edit;
 render the default view only once in an override. See the working
 [ResourceSummary](../admin/ResourceSummary.tsx) and [WrappedDetail](../admin/WrappedDetail.tsx) examples.
+
+### Heading visibility and slot placement
+
+```python
+Resource(
+    Usage,
+    crud_slots={"list": {"before": "budget-overview"}},
+    crud_layouts={"list": {"show_heading": True, "before_position": "after_heading"}},
+)
+```
+
+`crud_layouts` accepts a mapping from list/create/edit/show to `CrudLayout`
+options. Both options are optional:
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `show_heading` | True | Show the stock eyebrow, title and description. False removes these, retaining any available action buttons and back navigation. |
+| `before_position` | "after_heading" | Place before between the built-in heading and content; use "above_heading" for the Beta 3 ordering above the whole screen. |
+
+With the heading hidden and no heading actions, no empty heading wrapper is
+rendered. Actions remain available in a compact right-aligned row otherwise.
+The `after` slot remains below all built-in content, including detail
+relationships and attachments. Full replacement components own their layout;
+their slots still wrap the replacement, and show_heading applies only if
+they render defaultView. No authorization or CRUD behavior is changed.
+
+**Migration from Beta 3:** existing before slots now render below the heading
+on standard views. Set before_position="above_heading" for the old ordering.
 
 ## HTTP client: @pyntral/api
 

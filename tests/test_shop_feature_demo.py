@@ -52,6 +52,10 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
             assert resources["editorial-drafts"]["uploadMaxBytes"] == 2_000_000
             products = resources["products"]
             assert products["crudSlots"] == {"list": {"before": "resource-summary"}, "show": {"after": "resource-summary"}}
+            assert products["crudLayouts"] == {}
+            assert resources["audit-entries"]["crudLayouts"]["list"] == {"showHeading": False, "beforePosition": "after_heading"}
+            assert resources["product-tag-links"]["crudLayouts"]["list"] == {"showHeading": True, "beforePosition": "above_heading"}
+            assert resources["product-notes"]["crudLayouts"]["create"]["showHeading"] is False
             assert resources["product-tag-links"]["primaryKeys"] == ["product_id", "tag_id"]
             links = client.get("/admin/api/resources/product-tag-links").json()["items"]
             assert links and links[0]["__pyntral_id"]

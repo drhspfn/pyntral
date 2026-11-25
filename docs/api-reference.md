@@ -8,7 +8,7 @@ This page summarizes the public interfaces available in the current beta. For pr
 
 ```python
 from pyntral import (
-    Admin, Resource, Field, Relationship, Action, Page, NavigationGroup,
+    Admin, Resource, CrudLayout, Field, Relationship, Action, Page, NavigationGroup,
     SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec, LoginConfig,
     RoleAccess, Bridge, BridgeContext, BridgeUpload, BridgeFile, ResourceHook, OperationContext, VirtualField, FieldDependency,
     FieldView, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature,
@@ -55,7 +55,7 @@ Key methods:
 
 ### Configuration types
 
-- `Resource`: model, name, label, icon, navigation/order, list/search fields, field overrides, actions, page size, title/visible label, relationship settings, layouts, crud_views, crud_slots, create_handler, update_handler, hooks, scope, access policy and CRUD capability flags. See [resources](resources.md).
+- `Resource`: model, name, label, icon, navigation/order, list/search fields, field overrides, actions, page size, title/visible label, relationship settings, layouts, crud_views, crud_slots, crud_layouts, create_handler, update_handler, hooks, scope, access policy and CRUD capability flags. See [resources](resources.md).
 - `Field`: label, visible, readonly, required, widget, help, options, components, span, read/write roles, filter operators and width.
 - `Relationship`: visible, label, selectable, layout (`table`/`cards`).
 - `Action`: name, handler, label, variant, confirmation, position, appearance, component, dialog, icon, visible.
@@ -289,3 +289,12 @@ and per-group component IDs only when permitted; sidebar.showSearch and
 sidebar.searchPlaceholder configure the search. React DashboardProps and
 CodeBlockProps / JsonViewProps are public. See [dashboards](extensions.md#home-and-category-dashboards)
 and [code viewers](ui.md#codeblock-and-jsonview).
+
+### CRUD presentation layout
+
+`Resource(crud_layouts={"list": {"show_heading": False}})` hides the stock
+title and description on the list, not its actions. `CrudLayout` is a public
+TypedDict; supported modes are list/create/edit/show. `before_position`
+accepts "after_heading" (default) or "above_heading". Schema uses
+`crudLayouts[mode].showHeading` and `beforePosition`.
+See [heading visibility and slots](extensions.md#heading-visibility-and-slot-placement).

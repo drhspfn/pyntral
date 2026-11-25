@@ -348,3 +348,33 @@ async def test_async_composite_versioned_handler(tmp_path):
                 assert deleted.status_code == 200, deleted.text
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize("layout", [
+    {"invalid": {}}, {"list": {"unknown": True}}, {"list": {"show_heading": 1}},
+    {"list": {"before_position": "below_table"}}, {"list": None},
+])
+def test_invalid_crud_layout(layout):
+    with pytest.raises(ValueError, match="crud_layouts"):
+        Resource(Link, crud_layouts=layout)
+
+
+def test_crud_layout_schema_does_not_change_permissions(setup):
+    app, admin, _ = setup
+    admin.add_resource(Resource(Link, name="links",
+        crud_layouts={"list": {"show_heading": False}, "show": {"before_position": "above_heading"},
+                      "create": {}, "edit": {"show_heading": False, "before_position": "above_heading"}},
+        crud_slots={"list": {"before": "summary", "after": "footer"}},
+        allow_delete=False))
+    with TestClient(app) as client:
+        authenticated(client)
+        schema = client.get("/admin/api/schema").json()["resources"][0]
+        assert schema["crudLayouts"] == {
+            "list": {"showHeading": False, "beforePosition": "after_heading"},
+            "show": {"showHeading": True, "beforePosition": "above_heading"},
+            "create": {"showHeading": True, "beforePosition": "after_heading"},
+            "edit": {"showHeading": False, "beforePosition": "above_heading"},
+        }
+        assert schema["crudSlots"]["list"] == {"before": "summary", "after": "footer"}
+        assert schema["capabilities"]["create"] and schema["capabilities"]["edit"]
+        assert not schema["capabilities"]["delete"]

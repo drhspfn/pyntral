@@ -4,6 +4,8 @@ Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 
 ## Unreleased
 
+- Place standard CRUD before slots below the page heading by default; configure legacy placement or hide the stock title per CRUD mode without removing actions.
+
 - Add optional searchable sidebar navigation with preserved tree expansion.
 - Add authenticated custom home and category dashboards with a shared default view and user context.
 - Add theme-aware CodeBlock and JsonView with language detection, optional highlighting, lossless JSON formatting, clipboard and collapse controls.
