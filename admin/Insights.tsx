@@ -7,7 +7,7 @@ import { AsyncSelect, Badge, Button, Card, Checkbox, CheckboxGroup, Collapsible,
 
 import { api } from "@pyntral/api";
 import { inspectUpload } from "@pyntral/generated";
-import { Tabs, TabList, Tab, TabPanel, DataTable, Table, CodeBlock, JsonView, type DataTableProps } from "@pyntral/ui";
+import { Tabs, TabList, Tab, TabPanel, DataTable, Table, CodeBlock, JsonView, Skeleton, SkeletonText, SkeletonImage, SkeletonGroup, StatusBadge, type DataTableProps } from "@pyntral/ui";
 
 /** Demonstrates that extensions use the same UI primitives/theme/feedback as the core. */
 export default function Insights({ schema, navigate }: CustomPageProps) {
@@ -66,6 +66,27 @@ export default function Insights({ schema, navigate }: CustomPageProps) {
       </Tabs>
     </Card>
     <div className="resource-grid" style={{ marginTop: 20, marginBottom: 20 }}>
+      <Card title="Skeleton playground" description="Composable loading placeholders; the animation follows the current theme and reduced-motion preferences">
+        <SkeletonGroup label="Example loading layout">
+          <div style={{display:"grid",gap:16,padding:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <Skeleton variant="circle" size={44}/>
+              <div style={{flex:1}}><SkeletonText lines={2} lastWidth="40%"/></div>
+            </div>
+            <SkeletonImage aspectRatio="16 / 7"/>
+            <SkeletonText lines={3}/>
+            <div style={{display:"flex",gap:12}}><Skeleton width="40%" height={36} animation="pulse"/><Skeleton width="40%" height={36} animation="none"/></div>
+          </div>
+        </SkeletonGroup>
+        <DataTable rows={[]} columns={[{id:"name",header:"Name",cell:()=>null},{id:"status",header:"Status",cell:()=>null}]}
+          getRowKey={() => ""} loading skeletonRows={3} label="Loading table example"/>
+      </Card>
+      <Card title="Status badges" description="Automatic status tones and explicit overrides">
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",padding:12}}>
+          {["open","running","queued","completed","failed","custom"].map(value => <StatusBadge key={value} value={value}/>)}
+          <StatusBadge value="review" labels={{review:"Needs review"}} tones={{review:"warning"}} dot={false}/>
+        </div>
+      </Card>
       <Card title="Code and JSON viewers" description="Read-only, copyable, collapsible and theme-aware">
         <div style={{display:"grid",gap:12,padding:12,minWidth:0}}>
           <CodeBlock title="C# example" highlightToggle code={'using System;\npublic class Demo {\n    public static void Main() { Console.WriteLine("Hello"); }\n}'} collapsible maxHeight={180}/>
