@@ -16,6 +16,7 @@ from .virtual import VirtualField
 from .layout import LayoutSection
 from .jobs import JobAction
 from .sidebar import IconSpec
+from .presentation import StatusBadgeConfig, CodeFieldConfig
 
 
 @dataclass(slots=True)
@@ -109,8 +110,19 @@ class Field:
     create: FieldView | None = None
     show: FieldView | None = None
     filter: FieldView | None = None
+    record_link: bool = True  # Allow the built-in first-column record link.
+    status_badge: StatusBadgeConfig | None = None
+    code: CodeFieldConfig | None = None
 
     def __post_init__(self) -> None:
+        if type(self.record_link) is not bool:
+            raise TypeError("record_link must be boolean")
+        if self.status_badge is not None and not isinstance(self.status_badge, StatusBadgeConfig):
+            raise TypeError("status_badge must be StatusBadgeConfig")
+        if self.code is not None and not isinstance(self.code, CodeFieldConfig):
+            raise TypeError("code must be CodeFieldConfig")
+        if self.status_badge is not None and self.code is not None:
+            raise ValueError("Choose either status_badge or code presentation")
         if self.file_upload is not None and not isinstance(self.file_upload, FileUploadConfig):
             raise TypeError("file_upload must be FileUploadConfig")
         if self.span not in (1, 2):

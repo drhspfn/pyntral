@@ -1,6 +1,7 @@
 /* Pyntral design tokens. Set per-mode overrides via Admin(theme={light:{...},dark:{...}}). */
 :root, :root[data-theme="light"] {
   color-scheme:light;
+  --ra-warning:#895b16; --ra-warning-soft:#fff2d8;
   --ra-code-keyword:#a33d78;--ra-code-string:#237c52;--ra-code-number:#945d19;--ra-code-name:#285aa2;--ra-code-comment:var(--ra-muted);
   --ra-bg:#f8fafb; --ra-surface:#ffffff; --ra-surface-alt:#f3f6f8;
   --ra-text:#1c2934; --ra-text-secondary:#566879; --ra-muted:#8594a1;
@@ -25,6 +26,7 @@
 }
 :root[data-theme="dark"] {
   color-scheme:dark;
+  --ra-warning:#f4ca83; --ra-warning-soft:#47371f;
   --ra-code-keyword:#e9a0d0;--ra-code-string:#8dd9ad;--ra-code-number:#f4c278;--ra-code-name:#9ac4ff;
   --ra-bg:#10171e; --ra-surface:#18232d; --ra-surface-alt:#202e39;
   --ra-text:#e9eff4; --ra-text-secondary:#b9c5cf; --ra-muted:#8698a6;
@@ -794,3 +796,9 @@ button.ra-brand:hover{background:var(--ra-surface-alt)}
 .ra-code-block .hljs-comment,.ra-code-inline .hljs-comment{color:var(--ra-code-comment);font-style:italic}
 
 .detail-item dd{min-width:0;max-width:100%}
+
+.ra-badge-warning{background:var(--ra-warning-soft);color:var(--ra-warning)}
+.ra-status-badge{gap:6px;font-weight:600;white-space:nowrap}
+.ra-status-dot{width:6px;height:6px;flex:none;border-radius:50%;background:currentColor}
+.ra-code-editor{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;line-height:1.5}
+.data-table .ra-code-inline{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block}

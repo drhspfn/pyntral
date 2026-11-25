@@ -112,12 +112,12 @@ function MultiEnumFilter({ field, value, onChange }: {
   </div>;
 }
 
-export function AdvancedFilterField({ field, resource, value, onChange }: {
+export function AdvancedFilterField({ field, resource, value, onChange, navigate }: {
   field: FieldDef; resource: ResourceDef; value: FilterState;
-  onChange: (next: FilterState) => void;
+  onChange: (next: FilterState) => void; navigate: (route: string) => void;
 }) {
   const Custom = customFields[field.components.filter || field.components.edit || ""];
-  if (Custom) return <Custom field={field} resource={resource} record={{}} mode="filter"
+  if (Custom) return <Custom field={field} resource={resource} record={{}} mode="filter" navigate={navigate}
     value={value.value || null} onChange={(next) => onChange({ ...value, value: next == null ? "" : String(next) })}/>;
   const operators = filterOperators(field);
   if (!operators.length) return null;

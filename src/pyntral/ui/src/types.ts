@@ -7,6 +7,9 @@ export interface FieldViewDef {
   visible: boolean; readonly: boolean; required: boolean;
   component?: string | null; order?: number | null;
 }
+export type BadgeTone = "neutral" | "primary" | "success" | "danger" | "warning";
+export interface StatusBadgeDef { tones: Record<string, BadgeTone>; labels: Record<string, string>; defaultTone: BadgeTone; autoTone: boolean; dot: boolean }
+export interface CodeFieldDef { language: string; highlight: boolean; highlightToggle: boolean; format: boolean; formatToggle: boolean; copyable: boolean; collapsible: boolean; defaultCollapsed: boolean; wrap: boolean; maxHeight: number; listInline: boolean; editRows: number }
 export interface FieldDef {
   name: string;
   label: string;
@@ -17,6 +20,9 @@ export interface FieldDef {
   primaryKey: boolean;
   sortable?: boolean;
   widget?: string;
+  recordLink?: boolean;
+  statusBadge?: StatusBadgeDef | null;
+  code?: CodeFieldDef | null;
   fileUpload?: { multiple: boolean; maxFiles: number; maxSizeBytes: number;
     maxTotalBytes: number; accept: string; preview: boolean; allowPaste: boolean; mockOnly: true } | null;
   help?: string;
@@ -146,6 +152,8 @@ export interface CustomFieldProps {
   resource: ResourceDef;
   mode: "list" | "create" | "edit" | "show" | "filter";
   onChange?: (value: unknown) => void;
+  /** SPA navigation, relative to the admin mount; preserves unsaved-change guards. */
+  navigate: (route: string) => void;
 }
 export interface CustomPageProps { schema: Schema; navigate: (url: string) => void; }
 export type FieldComponent = ComponentType<CustomFieldProps>;

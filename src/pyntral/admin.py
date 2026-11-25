@@ -984,6 +984,8 @@ class Admin:
                 for field_data in metadata.get("fields", []):
                     field_data["label"] = localized(field_data.get("label"))
                     field_data["help"] = localized(field_data.get("help"))
+                    if field_data.get("statusBadge"):
+                        field_data["statusBadge"]["labels"] = {key: localized(label) for key, label in field_data["statusBadge"]["labels"].items()}
                 for operation in ("actions", "jobs"):
                     for action_data in metadata.get(operation, []):
                         for attribute in ("label", "confirmation"):

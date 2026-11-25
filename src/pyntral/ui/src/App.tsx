@@ -14,7 +14,9 @@ import { Tabs, TabList, Tab, TabPanel } from "./tabs";
 import { Table } from "./data-table";
 import { CrudHeading } from "./crud-heading";
 import { resolveCrudLayout } from "./crud-layout-state";
-import { JsonView } from "./code-block";
+import { CodeBlock, JsonView } from "./code-block";
+import { StatusBadge } from "./status-badge";
+import { useDefaultRecordLink } from "./field-presentation-state";
 import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
@@ -108,13 +110,23 @@ function pretty(value: unknown, kind?: string): ReactNode {
   if (typeof value === "object") return <code className="table-code">{JSON.stringify(value)}</code>;
   return String(value);
 }
-function FieldValue({ resource, field, value, record, mode }: {
+function FieldValue({ resource, field, value, record, mode, navigate }: {
   resource: ResourceDef; field: FieldDef; value: unknown; record: RecordData;
-  mode: "list" | "show";
+  mode: "list" | "show"; navigate: (route: string) => void;
 }) {
   const custom = field.components[mode];
   const Comp = custom ? customFields[custom] : undefined;
-  if (Comp) return <Comp field={field} value={value} record={record} resource={resource} mode={mode} />;
+  if (Comp) return <Comp field={field} value={value} record={record} resource={resource} mode={mode} navigate={navigate}/>;
+  if (value == null || value === "") return <span className="muted">—</span>;
+  if (field.statusBadge && (typeof value === "string" || typeof value === "number"))
+    return <StatusBadge value={value} {...field.statusBadge}/>;
+  if (field.code && (mode === "show" || field.code.listInline)) {
+    const { listInline, editRows, ...config } = field.code;
+    // Editing controls are not part of the read-only viewer.
+    const props = { ...config, inline: mode === "list" && listInline };
+    void editRows;
+    return typeof value === "object" ? <JsonView value={value} {...props}/> : <CodeBlock code={String(value)} {...props}/>;
+  }
   if (mode === "show" && value !== null && value !== undefined && (field.kind === "json" || field.kind === "array"))
     return <JsonView value={value} collapsible maxHeight={320}/>;
   return <>{pretty(value, field.kind)}</>;
@@ -201,9 +213,9 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
         }}/>}</td>}
       {columns.map((field, idx) => <td key={field.name}
         className={`${idx === 0 ? "strong-cell" : ""} ${preferences?.pinned === field.name ? "ra-column-pinned" : ""}`}>
-        {idx === 0 && resource.capabilities.show && row[resource.primaryKey] != null ? <button className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
-          <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" /></button> :
-          <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" />}
+        {useDefaultRecordLink(idx, field.recordLink, !!field.components.list, !!field.code?.listInline, resource.capabilities.show, row[resource.primaryKey]) ? <button type="button" className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
+          <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" navigate={navigate}/></button> :
+          <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" navigate={navigate}/>}
       </td>)}
       <td className="actions-cell"><div className="row-actions">
         {resource.capabilities.show && row[resource.primaryKey] != null && <button title="View" aria-label="View record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}><ExternalLink size={16}/></button>}
@@ -383,7 +395,7 @@ function ResourceList({ resource, navigate, schema, showHeading = true, before }
               filters[field.name]?.operator === "between" ||
               (field.kind === "enum" && filterOperators(field).includes("in") && filterOperators(field).includes("not_in")))}px` } as CSSProperties}>
             <span className="ra-filter-label">{field.label}</span>
-            <AdvancedFilterField field={field} resource={resource} value={filters[field.name] || {}}
+            <AdvancedFilterField field={field} resource={resource} navigate={navigate} value={filters[field.name] || {}}
               onChange={(value) => { setSelectedPreset(null); setFilters((old) => ({ ...old, [field.name]: value })); setOffset(0); }}/>
           </div>)}</div>
         <button className="link-btn" onClick={() => { setSelectedPreset(null); setFilters({}); setOffset(0); }}>{t("table.clear_filters", "Clear filters")}</button>
@@ -435,14 +447,14 @@ function ResourceList({ resource, navigate, schema, showHeading = true, before }
   </>;
 }
 
-function InputField({ field, resource, record, value, onChange, mode = "edit" }: {
+function InputField({ field, resource, record, value, onChange, navigate, mode = "edit" }: {
   field: FieldDef; resource: ResourceDef; record: RecordData; value: unknown;
-  onChange: (value: unknown) => void; mode?: "create" | "edit";
+  onChange: (value: unknown) => void; navigate: (route: string) => void; mode?: "create" | "edit";
 }) {
   const id = `field-${field.name}`;
   const custom = field.components[mode] || field.components.edit;
   const Comp = custom ? customFields[custom] : undefined;
-  const props: CustomFieldProps = { field, resource, record, value, onChange, mode };
+  const props: CustomFieldProps = { field, resource, record, value, onChange, mode, navigate };
   const source = field.dependency?.source;
   const sourceValue = source ? record[source] : undefined;
   const dynamicOptions = useQuery({
@@ -481,7 +493,9 @@ function InputField({ field, resource, record, value, onChange, mode = "edit" }:
   }
   else if (["date", "datetime"].includes(field.kind)) input = <DatePicker id={id} value={value == null || value === "" ? null : String(value)}
     onChange={onChange} includeTime={field.kind === "datetime"}/>;
-  else if (["json", "array"].includes(field.kind)) input = <Textarea id={id} rows={5} spellCheck={false}
+  else if (field.code && field.kind === "string") input = <Textarea id={id} rows={field.code.editRows} spellCheck={false} required={field.required}
+    className="ra-code-editor" value={value == null ? "" : String(value)} onChange={e => onChange(e.target.value)}/>;
+  else if (["json", "array"].includes(field.kind)) input = <Textarea id={id} rows={field.code?.editRows ?? 5} spellCheck={false}
     value={typeof value === "string" ? value : value == null ? "" : JSON.stringify(value, null, 2)}
     onChange={(e) => onChange(e.target.value)} placeholder="Valid JSON" />;
   else input = <TextInput id={id} type={["integer", "number"].includes(field.kind) ? "number"
@@ -636,7 +650,7 @@ function RecordEditor({ resource, id, navigate, notify, showHeading = true, befo
       <form className="editor-grid" onSubmit={(e: FormEvent) => { e.preventDefault(); mutation.mutate(); }}>
         <div className="surface editor-card"><div className="editor-card-title"><h2>Record details</h2><p>Fields marked with * are required.</p></div>
           {visibleFields.length ? <StructuredFields resource={resource} mode="form" fields={visibleFields}
-            values={values} render={(field) => <InputField field={field} resource={resource}
+            values={values} render={(field) => <InputField field={field} resource={resource} navigate={navigate}
               record={values} mode={isNew ? "create" : "edit"}
               value={values[field.name] ?? (field.kind === "boolean" ? false : "")}
               onChange={(v) => { setValues((old) => {
@@ -733,7 +747,7 @@ function RelatedRecords({ resource, identifier, relation, target, navigate }: {
     }}>
       <h4>Create {target.label.replace(/s$/, "")}</h4>
       <div className="field-grid ra-layout-stack">{viewFields(target.fields, "create").filter((field) => !field.readonly).map((field) =>
-        <InputField key={field.name} field={field} resource={target} record={newValues} mode="create"
+        <InputField key={field.name} field={field} resource={target} navigate={navigate} record={newValues} mode="create"
           value={newValues[field.name] ?? (field.kind === "boolean" ? false : "")}
           onChange={(value) => setNewValues((old) => ({ ...old, [field.name]: value }))}/>)}</div>
       <button className="btn primary" type="submit" disabled={mutateLink.isPending}>Create and link</button>
@@ -826,7 +840,7 @@ function RecordShow({ resource, id, schema, navigate, showHeading = true, before
         <StructuredFields resource={resource} mode="detail" fields={viewFields(resource.fields, "show")}
           values={record.data.record} render={(field) => <div className={`detail-item ${field.span === 2 ? "ra-field-wide" : ""}`}>
             <dt>{field.label}</dt><dd><FieldValue resource={resource} field={field}
-              record={record.data!.record} value={record.data!.record[field.name]} mode="show" /></dd>
+              record={record.data!.record} value={record.data!.record[field.name]} mode="show" navigate={navigate}/></dd>
           </div>} />
       </div>
       {!!resource.actions.length && <div className="record-extra-actions">
