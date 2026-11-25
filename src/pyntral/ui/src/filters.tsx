@@ -4,7 +4,7 @@ import { fields as customFields } from "virtual:pyntral-extensions";
 import { DatePicker, Select, TextInput, type SelectOption } from "./ui";
 import { RelationInput } from "./relation";
 import { FilterOperatorButton } from "./filter-operator";
-import { changeFilterOperator, filterOperators, type FilterOperator, type FilterState, type FilterValues } from "./filter-state";
+import { changeFilterOperator, filterOperators, type FilterState, type FilterValues } from "./filter-state";
 import type { FieldDef, ResourceDef } from "./types";
 
 export type { FilterOperator, FilterState, FilterValues } from "./filter-state";
