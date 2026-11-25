@@ -12,6 +12,7 @@ import {
   Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup, SortableList,
   SearchInput, Select, AsyncSelect, DatePicker, Calendar, Dialog,
   Tabs, TabList, Tab, TabPanel, Table, DataTable, CodeBlock, JsonView,
+  Skeleton, SkeletonText, SkeletonImage, SkeletonGroup, SkeletonRows, SkeletonFields, StatusBadge,
   FileUpload, FileRow, Collapsible, OverflowText, Icon, Brand,
   Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, PopoverClose,
 } from "@pyntral/ui";
@@ -20,7 +21,10 @@ import {
 | Component | Main props / behavior |
 | --- | --- |
 | `Button` | `variant` (`primary`, `secondary`, `ghost`, `danger`), `loading`, `startIcon`, `endIcon`, native button attributes. |
-| `Badge` | `tone` (`neutral`, `success`, `danger`, `primary`). |
+| `Badge` | `tone` (`neutral`, `success`, `danger`, `primary`, `warning`). |
+| `StatusBadge` | Status value, automatic tones, configurable labels/tones and optional dot. |
+| `Skeleton`, `SkeletonText`, `SkeletonImage` | Composable themed shapes, text lines and aspect-ratio placeholders. |
+| `SkeletonGroup`, `SkeletonRows`, `SkeletonFields` | Accessible loading regions and reusable table/form placeholders. |
 | `Card` | `title`, `description`, `children`. |
 | `TextInput`, `Textarea` | Native input/textarea props with theme styles. |
 | `FormField` | `label`, `htmlFor`, `hint`, `required`, `span`. |
@@ -396,7 +400,7 @@ by default; keepMounted retains their state.
 | Component | Props |
 | --- | --- |
 | `Table` | `children` (native thead/tbody), `label?`, `compact?`, `className?`, `style?` |
-| `DataTable<Row>` | `rows`, `columns`, `getRowKey`, `label?`, `compact?`, `loading?`, `empty?`, `className?`, `sort?`, `onSortChange?` |
+| `DataTable<Row>` | `rows`, `columns`, `getRowKey`, `label?`, `compact?`, `loading?`, `empty?`, `className?`, `sort?`, `onSortChange?`, `skeletonRows?`, `loadingLabel?` |
 | `DataColumn<Row>` | `id`, `header`, `cell(row)`, `className?`, `sortable?` |
 
 `DataTableProps<Row>`, `DataColumn<Row>`, and `TabsProps` are public types.
@@ -493,3 +497,61 @@ For controlled collapse, use collapsible with collapsed and onCollapsedChange.
 The built-in record detail renderer uses JsonView for JSON
 and array fields, while lists keep compact previews. See the
 [Insights playground](../admin/Insights.tsx).
+
+## Skeletons and loading states
+
+```tsx
+import { Skeleton, SkeletonText, SkeletonImage, SkeletonGroup, DataTable } from "@pyntral/ui";
+
+if (query.isPending) return <SkeletonGroup label="Loading profile">
+  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+    <Skeleton variant="circle" size={48}/>
+    <SkeletonText lines={2} width="70%" lastWidth="45%"/>
+  </div>
+  <SkeletonImage aspectRatio="16 / 9" radius={10}/>
+  <SkeletonText lines={3}/>
+</SkeletonGroup>;
+```
+
+| Component | Props / contract |
+| --- | --- |
+| `Skeleton` | variant (rect default, text, circle), width, height, size, radius, animation (shimmer default, pulse, none), className, style. Dimensions accept px numbers or CSS lengths. |
+| `SkeletonText` | Shared shape props except variant/size; lines (3), gap (8), lastWidth ("65%"); width sizes the group. |
+| `SkeletonImage` | Shared shape props except variant; width defaults to 100%, height auto, aspectRatio defaults to 16/9. |
+| `SkeletonGroup` | children (decorative placeholders only), label ("Loading…"), className, style. Announces the region once. |
+| `SkeletonRows` | columns ({key, className?, width?, variant?}[]), rows (5), animation. Render inside tbody of a semantic Table with busy enabled. |
+| `SkeletonFields` | count (4), columns (1 or 2), editor (false), label. Form/detail placeholders. |
+
+`SkeletonProps`, `SkeletonTextProps` and `SkeletonColumn` are exported.
+Repeated text/table placeholders are bounded to 30 rows/lines; field groups
+to 16. All respect reduced-motion preferences and Admin(animations=False).
+Use theme keys skeleton-base, skeleton-highlight, skeleton-duration to tune
+the light/dark palette and animation speed. Shapes themselves are aria-hidden;
+use a labeled loading region for assistive technology and never place
+interactive content inside SkeletonGroup.
+
+`DataTable` renders skeleton rows with real column headings when loading and
+rows is empty. Use skeletonRows=0 for the loading text instead; loadingLabel
+customizes the accessible status. Existing rows remain visible during a
+background refresh. The base Table accepts busy for aria-busy.
+Built-in CRUD, related tables/cards and attachment lists show placeholders
+during initial loads by default; set Resource(skeletons=False) for the former
+spinner behavior. Custom components still own their own loading state.
+See [Insights](../admin/Insights.tsx) and [AssetImage](../admin/AssetImage.tsx).
+
+## StatusBadge
+
+```tsx
+import { StatusBadge } from "@pyntral/ui";
+<StatusBadge value="running"/>
+<StatusBadge value="review" tones={{ review: "warning" }}
+  labels={{ review: "Needs review" }} dot={false}/>
+```
+
+Props: value (string/number/null), tones and labels (exact-value maps),
+defaultTone (neutral), autoTone (true), dot (true), className.
+Known success, danger, active and pending statuses receive sensible tones;
+unknown statuses use the fallback. Explicit mappings win. Labels are not
+automatically capitalized. Null/empty values render a dash. Warning colors
+are available on Badge as well, with warning and warning-soft theme keys.
+See [declarative field configuration](resources.md#status-and-code-field-presentation).

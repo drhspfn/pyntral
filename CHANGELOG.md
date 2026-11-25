@@ -2,6 +2,13 @@
 
 Pyntral releases follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions and use [PEP 440](https://peps.python.org/pep-0440/) version numbers.
 
+## Unreleased
+
+- Add themed composable Skeleton primitives and initial CRUD loading placeholders.
+- Pass SPA navigation to every custom field mode; avoid nested interactive first-column wrappers and support explicit record_link suppression.
+- Add opt-in StatusBadgeConfig and CodeFieldConfig, themed StatusBadge, multiline code editing and read-only code viewers.
+- Preserve list filter deep links in SPA navigation and history.
+
 ## 1.0.0b4 — Fourth public beta
 
 ### Added

@@ -218,3 +218,9 @@ Beta 3 includes [compound tabs and table primitives](docs/ui.md#tabs-and-tables)
 - Configure [CRUD heading visibility and slot placement](docs/extensions.md#heading-visibility-and-slot-placement) per screen; before slots now render below the built-in heading by default.
 
 All features are demonstrated in [Shop](examples/shop/README.md).
+
+## Loading and field presentation
+
+Compose animated [skeletons](docs/ui.md#skeletons-and-loading-states), use
+[declarative status badges and code fields](docs/resources.md#status-and-code-field-presentation),
+and [navigate from custom fields](docs/extensions.md#navigation-from-custom-fields).

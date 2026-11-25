@@ -56,3 +56,10 @@ The minimal Python-only example is [`examples/basic/`](../examples/basic/README.
 
 - [CRUD heading visibility and slot placement](extensions.md#heading-visibility-and-slot-placement)
 - [Dashboard authorization](authorization.md#dashboard-authorization)
+
+## Loading and field presentation
+
+- [Skeleton primitives and loading tables](ui.md#skeletons-and-loading-states)
+- [StatusBadge and field presentation](resources.md#status-and-code-field-presentation)
+- [Navigation from custom fields](extensions.md#navigation-from-custom-fields)
+- [Resource list deep links](filters.md#resource-list-deep-links)

@@ -408,3 +408,9 @@ def test_field_presentation_metadata_and_validation(setup):
         Field(record_link="false")
     with pytest.raises(ValueError):
         Resource(Item, skeletons=1)
+
+
+def test_field_widget_shorthands():
+    from pyntral import StatusBadgeConfig, CodeFieldConfig
+    assert isinstance(Field(widget="status").status_badge, StatusBadgeConfig)
+    assert isinstance(Field(widget="code").code, CodeFieldConfig)

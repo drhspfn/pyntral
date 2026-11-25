@@ -121,6 +121,10 @@ class Field:
             raise TypeError("status_badge must be StatusBadgeConfig")
         if self.code is not None and not isinstance(self.code, CodeFieldConfig):
             raise TypeError("code must be CodeFieldConfig")
+        if self.widget == "status" and self.status_badge is None:
+            self.status_badge = StatusBadgeConfig()
+        if self.widget == "code" and self.code is None:
+            self.code = CodeFieldConfig()
         if self.status_badge is not None and self.code is not None:
             raise ValueError("Choose either status_badge or code presentation")
         if self.file_upload is not None and not isinstance(self.file_upload, FileUploadConfig):
