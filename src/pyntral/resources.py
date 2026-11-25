@@ -16,6 +16,7 @@ from .virtual import VirtualField
 from .layout import LayoutSection
 from .jobs import JobAction
 from .sidebar import IconSpec
+from .presentation import StatusBadgeConfig, CodeFieldConfig
 
 
 @dataclass(slots=True)
@@ -109,8 +110,23 @@ class Field:
     create: FieldView | None = None
     show: FieldView | None = None
     filter: FieldView | None = None
+    record_link: bool = True  # Allow the built-in first-column record link.
+    status_badge: StatusBadgeConfig | None = None
+    code: CodeFieldConfig | None = None
 
     def __post_init__(self) -> None:
+        if type(self.record_link) is not bool:
+            raise TypeError("record_link must be boolean")
+        if self.status_badge is not None and not isinstance(self.status_badge, StatusBadgeConfig):
+            raise TypeError("status_badge must be StatusBadgeConfig")
+        if self.code is not None and not isinstance(self.code, CodeFieldConfig):
+            raise TypeError("code must be CodeFieldConfig")
+        if self.widget == "status" and self.status_badge is None:
+            self.status_badge = StatusBadgeConfig()
+        if self.widget == "code" and self.code is None:
+            self.code = CodeFieldConfig()
+        if self.status_badge is not None and self.code is not None:
+            raise ValueError("Choose either status_badge or code presentation")
         if self.file_upload is not None and not isinstance(self.file_upload, FileUploadConfig):
             raise TypeError("file_upload must be FileUploadConfig")
         if self.span not in (1, 2):
@@ -268,6 +284,7 @@ class Resource(Generic[ModelT]):
     allow_delete: bool = True
     allow_show: bool = True
     crud_layouts: dict[str, CrudLayout] = field(default_factory=dict)
+    skeletons: bool = True  # Use placeholders for built-in CRUD initial loads.
 
     def __post_init__(self) -> None:
         action_names = [action.name for action in self.actions] + [action.name for action in self.jobs]
@@ -290,6 +307,8 @@ class Resource(Generic[ModelT]):
                 for position, component in slots.items()
             ):
                 raise ValueError("crud_slots must map CRUD modes to before/after component IDs")
+        if type(self.skeletons) is not bool:
+            raise ValueError("skeletons must be boolean")
         if not isinstance(self.crud_layouts, dict):
             raise ValueError("crud_layouts must map CRUD modes to layout options")
         for mode, layout in self.crud_layouts.items():

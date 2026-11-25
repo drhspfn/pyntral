@@ -14,7 +14,10 @@ import { Tabs, TabList, Tab, TabPanel } from "./tabs";
 import { Table } from "./data-table";
 import { CrudHeading } from "./crud-heading";
 import { resolveCrudLayout } from "./crud-layout-state";
-import { JsonView } from "./code-block";
+import { CodeBlock, JsonView } from "./code-block";
+import { StatusBadge } from "./status-badge";
+import { Skeleton, SkeletonGroup, SkeletonRows, SkeletonFields } from "./skeleton";
+import { shouldLinkRecord } from "./field-presentation-state";
 import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
@@ -22,7 +25,8 @@ import { AsyncSelect, Button, Card, Checkbox, Collapsible, DatePicker, FileRow, 
   type SelectOption } from "./ui";
 import { RelationInput } from "./relation";
 import { AdvancedFilterField, serializeFilters, filterOperators, type FilterValues } from "./filters";
-import { filterControlWidth } from "./filter-state";
+import { filterControlWidth, filtersFromSearch } from "./filter-state";
+import { adminDestination, splitAdminLocation } from "./route-state";
 import { applyTheme, resolveMode } from "./theme";
 import { CurrentAdminProvider, useCurrentAdmin } from "./currentAdmin";
 import { I18nProvider, useI18n } from "./i18n";
@@ -41,12 +45,13 @@ const customProfileMenu = customProfile.menu;
 const ProfileMenuExtension = customProfile.menu;
 
 function useNavigation() {
-  const [url, setUrl] = useState(() => window.location.pathname);
-  const locationRef = useRef(window.location.pathname);
+  const currentLocation = () => window.location.pathname + window.location.search;
+  const [url, setUrl] = useState(currentLocation);
+  const locationRef = useRef(currentLocation());
   const navigatingRef = useRef(false);
   useEffect(() => {
     const onPopState = () => {
-      const destination = window.location.pathname;
+      const destination = window.location.pathname + window.location.search;
       const previous = locationRef.current;
       if (destination === previous) return;
       if (!hasNavigationBlocker()) {
@@ -71,7 +76,7 @@ function useNavigation() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
   const navigate = useCallback((route: string) => {
-    const full = `${base}/${route.replace(/^\//, "")}`.replace(/\/$/, "/");
+    const full = adminDestination(base, route);
     if (full === locationRef.current || navigatingRef.current) return;
     navigatingRef.current = true;
     void mayLeavePage().then((allowed) => {
@@ -82,7 +87,7 @@ function useNavigation() {
       window.scrollTo(0, 0);
     }).finally(() => { navigatingRef.current = false; });
   }, []);
-  return { route: url.startsWith(base) ? url.slice(base.length).replace(/^\//, "") : "", navigate };
+  return { ...splitAdminLocation(base, url), navigate };
 }
 
 function Loading({ label = "Loading…" }: { label?: string }) {
@@ -108,13 +113,23 @@ function pretty(value: unknown, kind?: string): ReactNode {
   if (typeof value === "object") return <code className="table-code">{JSON.stringify(value)}</code>;
   return String(value);
 }
-function FieldValue({ resource, field, value, record, mode }: {
+function FieldValue({ resource, field, value, record, mode, navigate }: {
   resource: ResourceDef; field: FieldDef; value: unknown; record: RecordData;
-  mode: "list" | "show";
+  mode: "list" | "show"; navigate: (route: string) => void;
 }) {
   const custom = field.components[mode];
   const Comp = custom ? customFields[custom] : undefined;
-  if (Comp) return <Comp field={field} value={value} record={record} resource={resource} mode={mode} />;
+  if (Comp) return <Comp field={field} value={value} record={record} resource={resource} mode={mode} navigate={navigate}/>;
+  if (value == null || value === "") return <span className="muted">—</span>;
+  if (field.statusBadge && (typeof value === "string" || typeof value === "number"))
+    return <StatusBadge value={value} {...field.statusBadge}/>;
+  if (field.code && (mode === "show" || field.code.listInline)) {
+    const { listInline, editRows, ...config } = field.code;
+    // Editing controls are not part of the read-only viewer.
+    const props = { ...config, inline: mode === "list" && listInline };
+    void editRows;
+    return typeof value === "object" ? <JsonView value={value} {...props}/> : <CodeBlock code={String(value)} {...props}/>;
+  }
   if (mode === "show" && value !== null && value !== undefined && (field.kind === "json" || field.kind === "array"))
     return <JsonView value={value} collapsible maxHeight={320}/>;
   return <>{pretty(value, field.kind)}</>;
@@ -175,7 +190,7 @@ function RecordAction({ resource, record, action, navigate }: {
   </span>;
 }
 
-function TableContent({ resource, data, navigate, selectable = false, selection = [], onSelectionChange, preferences }: { resource: ResourceDef; data: Listing;
+function TableContent({ resource, data, navigate, selectable = false, selection = [], onSelectionChange, preferences, loading = false }: { resource: ResourceDef; data?: Listing; loading?: boolean;
   navigate: (route: string) => void; selectable?: boolean; selection?: string[];
   onSelectionChange?: (selected: string[]) => void; preferences?: TablePreferences;
 }) {
@@ -183,17 +198,26 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
   const columns = viewFields(resource.fields, "list").filter((field) => names.includes(field.name))
     .sort((a, b) => names.indexOf(a.name) - names.indexOf(b.name));
   const { requestDelete } = useDeleteRecord(resource);
-  const keys = data.items.filter(row => row[resource.primaryKey] != null).map((row) => String(row[resource.primaryKey]));
-  return <Table compact={preferences?.density === "compact"} label={resource.label}
+  const items = data?.items ?? [];
+  const keys = items.filter(row => row[resource.primaryKey] != null).map((row) => String(row[resource.primaryKey]));
+  const { t } = useI18n();
+  return <>
+    {loading && <span role="status" className="ra-skeleton-status">{t("loading.records", "Loading records…")}</span>}
+    <Table busy={loading} compact={preferences?.density === "compact"} label={resource.label}
     style={{ "--ra-pin-left": selectable ? "46px" : "0px" } as CSSProperties}><thead><tr>
-    {selectable && <th className="ra-select-cell"><Checkbox aria-label="Select all visible records"
+    {selectable && <th className="ra-select-cell"><Checkbox disabled={loading} aria-label="Select all visible records"
       checked={keys.length > 0 && keys.every((key) => selection.includes(key))}
       indeterminate={keys.some((key) => selection.includes(key)) && !keys.every((key) => selection.includes(key))}
       onCheckedChange={(checked) => onSelectionChange?.(checked ? Array.from(new Set([...selection, ...keys])) : selection.filter((key) => !keys.includes(key)))}/></th>}
     {columns.map((field) => <th key={field.name} className={preferences?.pinned === field.name ? "ra-column-pinned" : ""}>
       {field.label}</th>)}<th className="actions-head">ACTION</th>
   </tr></thead><tbody>
-    {data.items.map((row, index) => <tr key={String(row[resource.primaryKey] ?? `redacted-${index}`)}>
+    {loading && !data ? <SkeletonRows rows={Math.min(resource.pageSize, 6)} columns={[
+      ...(selectable ? [{key:"selection",className:"ra-select-cell",width:16}] : []),
+      ...columns.map(field => ({key:field.name,className:preferences?.pinned === field.name ? "ra-column-pinned" : undefined,
+        width:field.kind === "boolean" || field.statusBadge ? 56 : undefined})),
+      {key:"actions",className:"actions-cell",width:42},
+    ]}/> : items.map((row, index) => <tr key={String(row[resource.primaryKey] ?? `redacted-${index}`)}>
       {selectable && <td className="ra-select-cell">{row[resource.primaryKey] != null && <Checkbox aria-label={`Select record ${String(row[resource.primaryKey])}`}
         checked={selection.includes(String(row[resource.primaryKey]))} onCheckedChange={(checked) => {
           const key = String(row[resource.primaryKey]);
@@ -201,20 +225,20 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
         }}/>}</td>}
       {columns.map((field, idx) => <td key={field.name}
         className={`${idx === 0 ? "strong-cell" : ""} ${preferences?.pinned === field.name ? "ra-column-pinned" : ""}`}>
-        {idx === 0 && resource.capabilities.show && row[resource.primaryKey] != null ? <button className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
-          <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" /></button> :
-          <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" />}
+        {shouldLinkRecord(idx, field.recordLink, !!field.components.list, !!field.code?.listInline, resource.capabilities.show, row[resource.primaryKey]) ? <button type="button" className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
+          <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" navigate={navigate}/></button> :
+          <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" navigate={navigate}/>}
       </td>)}
       <td className="actions-cell"><div className="row-actions">
         {resource.capabilities.show && row[resource.primaryKey] != null && <button title="View" aria-label="View record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}><ExternalLink size={16}/></button>}
         {resource.capabilities.edit && row[resource.primaryKey] != null && <button title="Edit" aria-label="Edit record" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}/edit`)}><Pencil size={15}/></button>}
         {resource.capabilities.delete && row[resource.primaryKey] != null && <button type="button" title="Delete" aria-label="Delete record"
           onClick={() => { void requestDelete(row[resource.primaryKey], resource.versionField ? row[resource.versionField] : undefined); }}><Trash2 size={15}/></button>}
-        {resource.actions.filter((a) => (a.kind ?? "record") === "record" && a.position !== "detail" && (data.actionsByRecord?.[String(row[resource.primaryKey])] || []).includes(a.name))
+        {resource.actions.filter((a) => (a.kind ?? "record") === "record" && a.position !== "detail" && (data?.actionsByRecord?.[String(row[resource.primaryKey])] || []).includes(a.name))
           .map((action) => <RecordAction key={action.name} resource={resource} record={row} action={action} navigate={navigate}/>)}
       </div></td>
     </tr>)}
-  </tbody></Table>;
+  </tbody></Table></>;
 }
 function Pager({ offset, total, limit, onOffset }: { offset: number; total: number; limit: number; onOffset: (n: number) => void }) {
   return <div className="pager"><span>Showing <strong>{total === 0 ? 0 : offset + 1}–{Math.min(offset + limit, total)}</strong> of <strong>{total}</strong> records</span>
@@ -308,10 +332,10 @@ function BackgroundJobButton({ resource, job }: { resource: ResourceDef; job: Jo
 
 type BuiltinCrudLayoutProps = { showHeading?: boolean; before?: ReactNode };
 
-function ResourceList({ resource, navigate, schema, showHeading = true, before }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void } & BuiltinCrudLayoutProps) {
+function ResourceList({ resource, navigate, schema, showHeading = true, before, initialSearch = "" }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void; initialSearch?: string } & BuiltinCrudLayoutProps) {
   const { t } = useI18n();
-  const [text, setText] = useState("");
-  const [search, setSearch] = useState("");
+  const [text, setText] = useState(() => new URLSearchParams(initialSearch).get("q") ?? "");
+  const [search, setSearch] = useState(text);
   const [offset, setOffset] = useState(0);
   const [sort, setSort] = useState(resource.fields.find(field => field.name === (resource.primaryKeys?.[0] ?? resource.primaryKey) && field.sortable !== false)?.name ?? "");
   const [desc, setDesc] = useState(true);
@@ -328,8 +352,8 @@ function ResourceList({ resource, navigate, schema, showHeading = true, before }
   const [presetName, setPresetName] = useState("");
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   useEffect(() => { try { localStorage.setItem(prefKey, JSON.stringify(preferences)); } catch { /* storage may be disabled */ } }, [prefKey, preferences]);
-  const [filters, setFilters] = useState<FilterValues>({});
-  const [appliedFilters, setAppliedFilters] = useState<FilterValues>({});
+  const [filters, setFilters] = useState<FilterValues>(() => filtersFromSearch(resource.fields, initialSearch));
+  const [appliedFilters, setAppliedFilters] = useState<FilterValues>(filters);
   const activeFilterCount = Object.keys(serializeFilters(resource.fields, filters)).length;
   useEffect(() => { const t = setTimeout(() => { setSearch(text); setOffset(0); }, 260); return () => clearTimeout(t); }, [text]);
   useEffect(() => { const t = setTimeout(() => setAppliedFilters(filters), 240); return () => clearTimeout(t); }, [filters]);
@@ -383,7 +407,7 @@ function ResourceList({ resource, navigate, schema, showHeading = true, before }
               filters[field.name]?.operator === "between" ||
               (field.kind === "enum" && filterOperators(field).includes("in") && filterOperators(field).includes("not_in")))}px` } as CSSProperties}>
             <span className="ra-filter-label">{field.label}</span>
-            <AdvancedFilterField field={field} resource={resource} value={filters[field.name] || {}}
+            <AdvancedFilterField field={field} resource={resource} navigate={navigate} value={filters[field.name] || {}}
               onChange={(value) => { setSelectedPreset(null); setFilters((old) => ({ ...old, [field.name]: value })); setOffset(0); }}/>
           </div>)}</div>
         <button className="link-btn" onClick={() => { setSelectedPreset(null); setFilters({}); setOffset(0); }}>{t("table.clear_filters", "Clear filters")}</button>
@@ -425,7 +449,7 @@ function ResourceList({ resource, navigate, schema, showHeading = true, before }
           <CollectionAction key={action.name} schema={schema} resource={resource} action={action}
             selected={selection} navigate={navigate} clearSelection={() => setSelection([])}/>)}
       </div>}
-      {records.isLoading ? <Loading label="Loading records…" /> : records.error ? <Alert error={records.error} /> :
+      {records.isLoading ? resource.skeletons === false ? <Loading label="Loading records…"/> : <TableContent resource={resource} loading navigate={navigate} selectable={resource.actions.some(action => action.kind === "bulk")} preferences={preferences}/> : records.error ? <Alert error={records.error} /> :
         records.data?.items.length ? <><TableContent resource={resource} data={records.data} navigate={navigate}
             selectable={resource.actions.some((action) => action.kind === "bulk")}
             selection={selection} onSelectionChange={setSelection} preferences={preferences}/>
@@ -435,14 +459,14 @@ function ResourceList({ resource, navigate, schema, showHeading = true, before }
   </>;
 }
 
-function InputField({ field, resource, record, value, onChange, mode = "edit" }: {
+function InputField({ field, resource, record, value, onChange, navigate, mode = "edit" }: {
   field: FieldDef; resource: ResourceDef; record: RecordData; value: unknown;
-  onChange: (value: unknown) => void; mode?: "create" | "edit";
+  onChange: (value: unknown) => void; navigate: (route: string) => void; mode?: "create" | "edit";
 }) {
   const id = `field-${field.name}`;
   const custom = field.components[mode] || field.components.edit;
   const Comp = custom ? customFields[custom] : undefined;
-  const props: CustomFieldProps = { field, resource, record, value, onChange, mode };
+  const props: CustomFieldProps = { field, resource, record, value, onChange, mode, navigate };
   const source = field.dependency?.source;
   const sourceValue = source ? record[source] : undefined;
   const dynamicOptions = useQuery({
@@ -481,7 +505,9 @@ function InputField({ field, resource, record, value, onChange, mode = "edit" }:
   }
   else if (["date", "datetime"].includes(field.kind)) input = <DatePicker id={id} value={value == null || value === "" ? null : String(value)}
     onChange={onChange} includeTime={field.kind === "datetime"}/>;
-  else if (["json", "array"].includes(field.kind)) input = <Textarea id={id} rows={5} spellCheck={false}
+  else if (field.code && field.kind === "string") input = <Textarea id={id} rows={field.code.editRows} spellCheck={false} required={field.required}
+    className="ra-code-editor" value={value == null ? "" : String(value)} onChange={e => onChange(e.target.value)}/>;
+  else if (["json", "array"].includes(field.kind)) input = <Textarea id={id} rows={field.code?.editRows ?? 5} spellCheck={false}
     value={typeof value === "string" ? value : value == null ? "" : JSON.stringify(value, null, 2)}
     onChange={(e) => onChange(e.target.value)} placeholder="Valid JSON" />;
   else input = <TextInput id={id} type={["integer", "number"].includes(field.kind) ? "number"
@@ -632,11 +658,11 @@ function RecordEditor({ resource, id, navigate, notify, showHeading = true, befo
             ? baseline?.[resource.versionField] : undefined); }}>
           <Trash2 size={16}/> Delete</button>}
       </> : null}/>
-    {!isNew && record.isLoading ? <Loading/> : record.error && !baseline ? <Alert error={record.error}/> :
+    {!isNew && record.isLoading ? resource.skeletons === false ? <Loading/> : <SkeletonFields editor count={visibleFields.length} columns={resource.formLayout === "grid" ? 2 : 1}/> : record.error && !baseline ? <Alert error={record.error}/> :
       <form className="editor-grid" onSubmit={(e: FormEvent) => { e.preventDefault(); mutation.mutate(); }}>
         <div className="surface editor-card"><div className="editor-card-title"><h2>Record details</h2><p>Fields marked with * are required.</p></div>
           {visibleFields.length ? <StructuredFields resource={resource} mode="form" fields={visibleFields}
-            values={values} render={(field) => <InputField field={field} resource={resource}
+            values={values} render={(field) => <InputField field={field} resource={resource} navigate={navigate}
               record={values} mode={isNew ? "create" : "edit"}
               value={values[field.name] ?? (field.kind === "boolean" ? false : "")}
               onChange={(v) => { setValues((old) => {
@@ -733,12 +759,13 @@ function RelatedRecords({ resource, identifier, relation, target, navigate }: {
     }}>
       <h4>Create {target.label.replace(/s$/, "")}</h4>
       <div className="field-grid ra-layout-stack">{viewFields(target.fields, "create").filter((field) => !field.readonly).map((field) =>
-        <InputField key={field.name} field={field} resource={target} record={newValues} mode="create"
+        <InputField key={field.name} field={field} resource={target} navigate={navigate} record={newValues} mode="create"
           value={newValues[field.name] ?? (field.kind === "boolean" ? false : "")}
           onChange={(value) => setNewValues((old) => ({ ...old, [field.name]: value }))}/>)}</div>
       <button className="btn primary" type="submit" disabled={mutateLink.isPending}>Create and link</button>
     </form>}
-    {rows.isLoading ? <Loading/> : rows.error ? <Alert error={rows.error}/> : rows.data?.items.length ? <>
+    {rows.isLoading ? target.skeletons === false ? <Loading/> : relation.layout === "cards" ? <SkeletonGroup label="Loading related records…"><div className="ra-related-cards">{Array.from({length:3}, (_, i) => <div key={i} className="ra-related-card"><Skeleton width="75%" height={16}/><Skeleton width="40%" height={10}/></div>)}</div></SkeletonGroup>
+      : <TableContent resource={target} loading navigate={navigate} selectable={selectable}/> : rows.error ? <Alert error={rows.error}/> : rows.data?.items.length ? <>
       {relation.layout === "cards" ? <div className="ra-related-cards">{rows.data.items.map((row, index) => {
         const id = row[target.primaryKey] == null ? null : String(row[target.primaryKey]);
         return <article className="ra-related-card" key={id ?? `redacted-${index}`}>
@@ -777,7 +804,7 @@ function ResourceUploads({ resource, identifier }: { resource: ResourceDef; iden
   });
   const maxBytes = resource.uploadMaxBytes ?? 10 * 1024 * 1024;
   return <Card title="Attachments" description="Files attached to this record." className="relationship-card ra-attachments">
-    {rows.isLoading && <Loading label="Loading attachments" />}
+    {rows.isLoading && (resource.skeletons === false ? <Loading label="Loading attachments"/> : <SkeletonGroup label="Loading attachments…"><div className="ra-attachment-skeleton">{Array.from({length:3}, (_, i) => <div key={i}><Skeleton size={36}/><Skeleton height={14} width="55%"/></div>)}</div></SkeletonGroup>)}
     {rows.error && <Alert error={rows.error}/>}
     {rows.data && <div className="ra-file-list">
       {rows.data.items.length === 0 && <p className="ra-attachments-empty">No attachments yet.</p>}
@@ -821,12 +848,12 @@ function RecordShow({ resource, id, schema, navigate, showHeading = true, before
         {resource.capabilities.edit && <button className="btn subtle" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id)}/edit`)}><Pencil size={16}/> Edit</button>}
         {resource.capabilities.delete && <button className="btn danger" disabled={deleting} onClick={() => { void requestDelete(id, resource.versionField ? record.data?.record?.[resource.versionField] : undefined); }}><Trash2 size={16}/> Delete</button>}
       </> : null}/>
-    {record.isLoading ? <Loading/> : record.error ? <Alert error={record.error} /> : record.data && <>
+    {record.isLoading ? resource.skeletons === false ? <Loading/> : <SkeletonFields count={viewFields(resource.fields,"show").length} columns={resource.detailLayout === "grid" ? 2 : 1}/> : record.error ? <Alert error={record.error} /> : record.data && <>
       <div className="surface detail-card"><div className="editor-card-title"><h2>Details</h2><p>Data from the SQLAlchemy resource</p></div>
         <StructuredFields resource={resource} mode="detail" fields={viewFields(resource.fields, "show")}
           values={record.data.record} render={(field) => <div className={`detail-item ${field.span === 2 ? "ra-field-wide" : ""}`}>
             <dt>{field.label}</dt><dd><FieldValue resource={resource} field={field}
-              record={record.data!.record} value={record.data!.record[field.name]} mode="show" /></dd>
+              record={record.data!.record} value={record.data!.record[field.name]} mode="show" navigate={navigate}/></dd>
           </div>} />
       </div>
       {!!resource.actions.length && <div className="record-extra-actions">
@@ -874,9 +901,9 @@ function ActionView({ resource, schema, id, action, navigate }: {
 }
 
 /** An override replaces the complete CRUD screen, not merely its fields. */
-function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
+function ResourceRoute({ schema, resource, mode, id, navigate, notify, initialSearch = "" }: {
   schema: Schema; resource: ResourceDef; mode: "list" | "create" | "edit" | "show";
-  id?: string; navigate: (route: string) => void; notify?: (message: string) => void;
+  id?: string; navigate: (route: string) => void; notify?: (message: string) => void; initialSearch?: string;
 }) {
   const client = useQueryClient();
   const feedback = useAdminFeedback();
@@ -899,7 +926,7 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
   const layout = resolveCrudLayout(resource.crudLayouts?.[mode], !!Custom);
   const renderDefaultView = (before?: ReactNode) => {
     const props = { showHeading: layout.showHeading, before };
-    return mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate} {...props}/> :
+    return mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate} initialSearch={initialSearch} {...props}/> :
       mode === "show" ? <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate} {...props}/> :
       <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)} {...props}/>;
   };
@@ -930,7 +957,7 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
     navigate(`resources/${resource.id}`);
   };
   if (record.error && !displayedRecord) return <Alert error={record.error}/>;
-  if (id && !displayedRecord) return <Loading/>;
+  if (id && !displayedRecord) return resource.skeletons === false ? <Loading/> : <SkeletonFields count={viewFields(resource.fields, mode === "edit" ? "edit" : "show").length} editor={mode === "edit"}/>;
   const props: CustomCrudProps = { schema, resource, mode, record: displayedRecord, defaultView,
     navigate, loadList, save, remove, reload: async () => {
       await invalidateResource(client, resource.id);
@@ -1049,7 +1076,7 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
 
 function AdminApp() {
   const client = useQueryClient();
-  const { route, navigate } = useNavigation();
+  const { route, search: routeSearch, navigate } = useNavigation();
   const auth = useQuery({ queryKey: ["auth"], queryFn: getAuth, retry: false, staleTime: 15_000 });
   const publicLogin = useQuery({ queryKey: ["login-config"], queryFn: () => api<PublicLoginConfig>("/auth/config"), retry: false });
   const schema = useQuery({ queryKey: ["schema", auth.data?.user?.id], enabled: !!auth.data?.user,
@@ -1111,7 +1138,7 @@ function AdminApp() {
     }
     if (!route) {
       const first = data.resources.find((r) => r.capabilities.list);
-       return first ? <ResourceRoute schema={data} resource={first} mode="list" navigate={navigate}/> : <Empty title="No resources"/>;
+       return first ? <ResourceRoute key={first.id + routeSearch} schema={data} resource={first} mode="list" navigate={navigate} initialSearch={routeSearch}/> : <Empty title="No resources"/>;
     }
     let segments: string[];
     try { segments = route.replace(/\/$/, "").split("/").map(decodeURIComponent); }
@@ -1128,7 +1155,7 @@ function AdminApp() {
       if (!resource) return <Empty title="Resource not found" description="This resource isn't available to your account."/>;
       if (!resource.capabilities.list) return <div className="empty"><LockKeyhole size={24}/><strong>Access denied</strong>
         <p>This resource is not available to your account.</p></div>;
-      if (segments.length === 2) return <ResourceRoute key={resource.id + ":list"} schema={data} resource={resource} mode="list" navigate={navigate}/>;
+      if (segments.length === 2) return <ResourceRoute key={resource.id + ":list" + routeSearch} schema={data} resource={resource} mode="list" navigate={navigate} initialSearch={routeSearch}/>;
       if (segments[2] === "new" && segments.length === 3 && resource.capabilities.create) return <ResourceRoute schema={data} resource={resource} mode="create" navigate={navigate} notify={setNotice}/>;
       if (segments.length === 4 && segments[3] === "edit" && resource.capabilities.edit) return <ResourceRoute key={resource.id + ":" + segments[2] + ":edit"} schema={data} resource={resource} mode="edit" id={segments[2]} navigate={navigate} notify={setNotice}/>;
       if (segments.length === 5 && segments[3] === "actions") {
@@ -1145,7 +1172,7 @@ function AdminApp() {
       if (page) return <Alert error={new Error(`Custom page component "${page.component}" not registered`)}/>;
     }
     return <Empty title="Page not found" description="Check the URL or choose a resource in the sidebar."/>;
-  }, [route, schema.data, navigate, auth.data?.user, setNotice]);
+  }, [route, routeSearch, schema.data, navigate, auth.data?.user, setNotice]);
 
   if (auth.isPending) return <div className="fullscreen-loading"><Loading label="Starting workspace…"/></div>;
   if (auth.error) return <div className="fullscreen-loading"><Alert error={auth.error}/><button className="btn subtle" onClick={() => auth.refetch()}>Retry</button></div>;

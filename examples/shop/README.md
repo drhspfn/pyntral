@@ -344,3 +344,12 @@ the public `@pyntral/ui` API for custom React components. See
   save/cancel remain); show uses a full override wrapping defaultView.
 
 The new Beta 4 examples use the same production contracts: [ShopDashboard.tsx](../../admin/ShopDashboard.tsx), [Insights.tsx](../../admin/Insights.tsx), [ResourceSummary.tsx](../../admin/ResourceSummary.tsx) and [WrappedDetail.tsx](../../admin/WrappedDetail.tsx). See [Beta 4 documentation index](../../docs/README.md#beta-4-navigation-and-presentation) for API parameters and upgrade notes.
+
+### Skeletons and field presentation
+
+- Agents → Insights: Skeleton playground (circle, image, text, shimmer/pulse/static shapes, loading DataTable) and Status badges (automatic tones and overrides).
+- Agents → Agents: avatar bridge shows a fixed-size Skeleton while resolving an image.
+- Agents → Operations → Agent runs: the first cell is a custom AgentLink button with SPA navigation; outcome uses StatusBadgeConfig.
+- Commerce → Orders: status values use declarative StatusBadgeConfig, without a custom renderer.
+- Commerce → Editorial drafts: body displays a copyable, collapsible CodeBlock and edits as multiline text.
+- Standard resource tables, details, forms, relationships and attachments show loading placeholders. No artificial delay is added to ordinary CRUD.

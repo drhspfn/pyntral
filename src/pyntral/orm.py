@@ -366,6 +366,9 @@ class MapperAdapter:
                     "sortable": True,
                     "nullable": column.nullable,
                     "widget": options.widget if options else None,
+                    "recordLink": options.record_link if options else True,
+                    "statusBadge": options.status_badge.metadata() if options and options.status_badge else None,
+                    "code": options.code.metadata() if options and options.code else None,
                     "fileUpload": ({"multiple": options.file_upload.multiple,
                                     "maxFiles": options.file_upload.max_files,
                                     "maxSizeBytes": options.file_upload.max_size_bytes,
@@ -440,6 +443,7 @@ class MapperAdapter:
             "showSearch": self.resource.show_search,
             "crudViews": self.resource.crud_views,
             "crudSlots": self.resource.crud_slots,
+            "skeletons": self.resource.skeletons,
             "crudLayouts": {mode: {"showHeading": layout.get("show_heading", True),
                                     "beforePosition": layout.get("before_position", "after_heading")}
                             for mode, layout in self.resource.crud_layouts.items()},

@@ -22,6 +22,11 @@ export { Tabs, TabList, Tab, TabPanel } from "./tabs";
 export type { TabsProps } from "./tabs";
 export { Table, DataTable } from "./data-table";
 export { CodeBlock, JsonView } from "./code-block";
+export { StatusBadge } from "./status-badge";
+export { Skeleton, SkeletonText, SkeletonImage, SkeletonGroup, SkeletonRows, SkeletonFields } from "./skeleton";
+export type { SkeletonProps, SkeletonTextProps, SkeletonColumn } from "./skeleton";
+export type { StatusBadgeProps } from "./status-badge";
+export type { BadgeTone } from "./types";
 export type { CodeBlockProps, JsonViewProps } from "./code-block";
 export type { DataTableProps, DataColumn } from "./data-table";
 export { Brand } from "./brand";
@@ -40,7 +45,7 @@ export type { CheckboxProps, CheckboxGroupProps, ChoiceOption, RadioGroupProps, 
 export type { FilterOperator } from "./filter-state";
 
 export function Badge({ children, tone = "neutral", className = "" }: {
-  children: ReactNode; tone?: "neutral" | "success" | "danger" | "primary"; className?: string;
+  children: ReactNode; tone?: "neutral" | "success" | "danger" | "primary" | "warning"; className?: string;
 }) {
   return <span className={`ra-badge ra-badge-${tone} ${className}`}>{children}</span>;
 }

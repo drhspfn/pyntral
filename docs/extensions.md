@@ -46,7 +46,7 @@ export default function Cover({ value, record, mode }: CustomFieldProps) {
 }
 ```
 
-`CustomFieldProps`: `field`, `value`, `record`, `resource`, `mode` (`list`, `edit`, `show`, `filter`) and optional `onChange`. For dynamic data, call a Pydantic bridge as demonstrated in [`AssetImage.tsx`](../admin/AssetImage.tsx).
+`CustomFieldProps`: `field`, `value`, `record`, `resource`, `mode` (`list`, `edit`, `show`, `filter`) and optional `onChange`, plus `navigate(route)` in every mode. For dynamic data, call a Pydantic bridge as demonstrated in [`AssetImage.tsx`](../admin/AssetImage.tsx).
 
 ## Pages, record actions, and dialogs
 
@@ -336,3 +336,34 @@ The registry participates in Vite, lint, editor configuration and build
 fingerprinting. With custom TSX, rebuild via `pyntral build --app MODULE:app`
 and refresh editor aliases via `pyntral types MODULE:app --editor`. The generic
 wheel has no application-specific dashboard components. See [authorization](authorization.md#dashboard-authorization). See [ShopDashboard](../admin/ShopDashboard.tsx).
+
+## Navigation from custom fields
+
+```tsx
+import type { CustomFieldProps } from "@pyntral/types";
+import { Button } from "@pyntral/ui";
+
+export default function AgentLink({ value, navigate }: CustomFieldProps) {
+  if (value == null) return null;
+  return <Button variant="ghost" onClick={() =>
+    navigate(`resources/agents/${encodeURIComponent(String(value))}`)}>
+    Agent #{String(value)}
+  </Button>;
+}
+```
+
+The required navigate callback uses the same SPA router and unsaved-change
+guard as pages, dashboards and CRUD extensions. Pass paths relative to the
+admin mount (with or without one leading slash), not full URLs or the
+mount prefix. Query strings are retained, including supported list filters;
+see [deep links](filters.md#resource-list-deep-links). It is supplied for
+list/show, create/edit, filter and related creation modes.
+
+A custom first-column renderer is no longer wrapped in the automatic
+record-detail button, so it may render its own links or buttons without
+invalid nested interactive markup. For ordinary fields set
+Field(record_link=False) to suppress that wrapper explicitly. The row's
+View action remains available subject to permissions. Code inline
+previews also remain unwrapped. Migration: custom first-column displays
+that previously relied on the automatic wrapper should explicitly call
+navigate or use the row View action. See [AgentLink](../admin/AgentLink.tsx).

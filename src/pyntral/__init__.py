@@ -2,6 +2,7 @@
 
 from .admin import Admin
 from .login import LoginConfig
+from .presentation import StatusBadgeConfig, CodeFieldConfig, BadgeTone
 from .sidebar import SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec
 from .hooks import ResourceHook, OperationContext
 from .virtual import VirtualField
@@ -23,6 +24,7 @@ from .transports.kafka import KafkaEventBus
 from .logging import LoggingConfig, EventFormatter, configure_logging, forward_to_loguru, stop_logging
 
 __all__ = [
+    "StatusBadgeConfig", "CodeFieldConfig", "BadgeTone",
     "LoginConfig", "SidebarConfig", "SidebarHeader", "SidebarFooter", "SvgIcon", "ImageIcon", "IconSpec",
     "describe_resources", "render_markdown", "write_schema_docs",
     "JobAction", "JobContext", "JobManager",

@@ -13,12 +13,12 @@ def test_public_identity():
     from json import loads
 
     version = metadata["project"]["version"]
-    assert version == "1.0.0b4"
+    assert version == "1.0.0b5"
     locked = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
     project = next(package for package in locked["package"] if package["name"] == "pyntral")
     assert project["version"] == version
     assert loads((ROOT / "src/pyntral/ui/package.json").read_text(encoding="utf-8"))["version"] == version.replace("b", "-beta.")
-    assert f"## {version} — Fourth public beta" in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert f"## {version} — Fifth public beta" in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert metadata["project"]["scripts"]["pyntral"] == "pyntral.cli:main"
     assert (ROOT / "src/pyntral/__init__.py").is_file()
     assert (ROOT / "pyntral.components.json").is_file()

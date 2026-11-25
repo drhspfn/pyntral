@@ -22,7 +22,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship,
 
 from pyntral import (
     Action, Admin, Bridge, BridgeUpload, CallbackAuth, Field, FileUploadConfig, FieldDependency, FieldView, LocalAuth, NavigationGroup, Page, Resource, Relationship,
-    SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, LoginConfig,
+    SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, LoginConfig, StatusBadgeConfig, CodeFieldConfig,
     ResourceUpdated, ResourceHook, VirtualField, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature, TimestampFeature, AuditFeature, AuditEntry, AuditBase, UploadFeature, LocalStorage, UploadBase,
 )
 
@@ -630,7 +630,8 @@ admin.add_resource(Resource(
     # Conditional rules run on the server for each record; creating a [Locked]
     # draft lets you exercise protected edits in the UI.
     fields={"version": Field(readonly=True),
-            "body": Field(write_when=lambda _principal, row: not row.title.startswith("[Locked]"))},
+            "body": Field(code=CodeFieldConfig(language="plaintext", wrap=True, max_height=300),
+                          write_when=lambda _principal, row: not row.title.startswith("[Locked]"))},
     operation_policy=lambda _principal, action, row: (
         row is None or action != "delete" or not row.title.startswith("[Locked]")),
     version_field="version",
@@ -648,7 +649,7 @@ admin.add_resource(Resource(Order, icon="activity", navigation="Commerce/Orders"
                             hooks=[ResourceHook(before_action=validate_order_action)],
                             title_field="id", relationships={"items": Relationship(label="Order items", selectable=True)},
                             fields={"created_at": Field(readonly=True),
-                                                       "status": Field(components={"list": "order-status", "show": "order-status"})},
+                                                       "status": Field(status_badge=StatusBadgeConfig(labels={"pending": "Pending", "fulfilled": "Fulfilled", "cancelled": "Cancelled"}))},
                             actions=[Action("mark_fulfilled", fulfill_order, label="Fulfill",
                                             confirmation="Mark this order as fulfilled?", position="both",
                                             appearance="badge", visible=lambda _principal, record:
@@ -678,7 +679,9 @@ admin.add_resource(Resource(Agent, navigation="Agents", icon="bot", visible_name
                             search_fields=["name"], fields={"cover_id": Field(
                                 label="Avatar", components={"list": "asset-image", "show": "asset-image"})}))
 admin.add_resource(Resource(AgentRun, name="agent-runs", navigation="Agents/Operations",
-                            icon="activity", list_fields=["id", "agent_id", "outcome"], search_fields=["outcome"]))
+                            icon="activity", list_fields=["agent_id", "id", "outcome"], search_fields=["outcome"],
+                            fields={"agent_id": Field(record_link=False, components={"list": "agent-link", "show": "agent-link"}),
+                                    "outcome": Field(status_badge=StatusBadgeConfig())}))
 admin.add_resource(Resource(FileAsset, name="file-assets", navigation="Agents/Operations", icon=ImageIcon(src="favicon.svg"),
                             visible_name=FileAsset.name, relationships={"agents": Relationship(visible=False)},
                             list_fields=["id", "name"], allow_create=False, allow_edit=False,

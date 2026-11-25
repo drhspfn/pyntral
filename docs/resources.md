@@ -50,6 +50,7 @@ admin.add_resource(Resource(
 | `actions` | Record-level server callbacks and optional frontend views/dialogs. |
 | `crud_views` | Map list/create/edit/show to replacement component IDs. |
 | `crud_slots` | Map CRUD mode to before/after extension IDs. |
+| `skeletons` | True by default; False restores spinner loading states for this resource. |
 | `crud_layouts` | Per-mode `CrudLayout` options for heading visibility and before placement. See [heading customization](extensions.md#heading-visibility-and-slot-placement). |
 | `hooks` | ResourceHook lifecycle callbacks. |
 | `create_handler`, `update_handler` | Sync/async callbacks accepting OperationContext. |
@@ -551,3 +552,55 @@ create_demo_staff and update_demo_staff in [Shop](../examples/shop/app.py).
 Use `NavigationGroup("Commerce", component="commerce-home")` to attach an
 optional dashboard to a navigation category. It does not replace or restrict
 the child resources. See [dashboard registry and authorization](extensions.md#home-and-category-dashboards).
+
+## Status and code field presentation
+
+```python
+from pyntral import Field, StatusBadgeConfig, CodeFieldConfig
+
+Resource(Task, fields={
+    "status": Field(status_badge=StatusBadgeConfig(
+        tones={"awaiting_review": "warning"},
+        labels={"awaiting_review": "Needs review"},
+    )),
+    "log": Field(code=CodeFieldConfig(
+        language="plaintext", max_height=320, wrap=True,
+        collapsible=True, default_collapsed=True,
+    ), span=2),
+    "external_id": Field(record_link=False),
+})
+```
+
+| StatusBadgeConfig | Default |
+| --- | --- |
+| tones / labels | Empty exact-value maps; labels support explicit @translation keys. |
+| default_tone | neutral |
+| auto_tone | True; known status strings are classified case-insensitively. |
+| dot | True |
+
+Badge tones: neutral, primary, success, danger, warning. For example
+completed/fulfilled → success, failed/cancelled → danger, running/open →
+primary, pending/queued → warning. Unknown values use default_tone. Use
+auto_tone=False to require explicit mappings. This is opt-in and does not
+change validation, database values, select options or filters.
+
+| CodeFieldConfig | Default |
+| --- | --- |
+| language | auto; use plaintext for logs or explicit language names. |
+| highlight / highlight_toggle | True / False |
+| format / format_toggle | True / True (valid JSON only) |
+| copyable / collapsible / default_collapsed | True / True / False |
+| wrap | False |
+| max_height | 360px (40–2000) |
+| list_inline | False; enable compact inline code preview in lists. |
+| edit_rows | 6 (2–50) |
+
+The read-only viewer uses CodeBlock for text and JsonView for structured
+values. The edit/create control for strings becomes a multiline textarea;
+JSON/array values retain their existing JSON editor. These options do not
+make a field read-only or bypass field policies. A registered custom renderer
+takes precedence; status/code configurations are mutually exclusive.
+`Field(widget="status")` and `Field(widget="code")` are shorthand for
+default configurations. Built-in form selection and dependency controls
+retain precedence. See [CodeBlock props](ui.md#codeblock-and-jsonview) and
+[Shop](../examples/shop/app.py) (Order.status and EditorialDraft.body).

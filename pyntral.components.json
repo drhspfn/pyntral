@@ -2,7 +2,8 @@
   "app": "examples.shop.app:app",
   "fields": {
     "order-status": "admin/OrderStatusBadge.tsx",
-    "asset-image": "admin/AssetImage.tsx"
+    "asset-image": "admin/AssetImage.tsx",
+    "agent-link": "admin/AgentLink.tsx"
   },
   "pages": {
     "insights": "admin/Insights.tsx"

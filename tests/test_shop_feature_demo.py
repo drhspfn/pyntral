@@ -50,6 +50,16 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
                 "shop-header", "shop-footer", "shop-item")
             assert resources["file-assets"]["icon"]["kind"] == "image"
             assert resources["editorial-drafts"]["uploadMaxBytes"] == 2_000_000
+            order_status = next(field for field in resources["orders"]["fields"] if field["name"] == "status")
+            assert order_status["statusBadge"]["labels"]["fulfilled"] == "Fulfilled"
+            assert order_status["statusBadge"]["autoTone"] is True
+            agent_link = next(field for field in resources["agent-runs"]["fields"] if field["name"] == "agent_id")
+            assert agent_link["recordLink"] is False
+            assert agent_link["components"]["list"] == "agent-link"
+            code_field = next(field for field in resources["editorial-drafts"]["fields"] if field["name"] == "body")
+            assert code_field["code"]["language"] == "plaintext"
+            assert code_field["code"]["maxHeight"] == 300
+            assert resources["orders"]["skeletons"] is True
             products = resources["products"]
             assert products["crudSlots"] == {"list": {"before": "resource-summary"}, "show": {"after": "resource-summary"}}
             assert products["crudLayouts"] == {}

@@ -8,7 +8,7 @@ This page summarizes the public interfaces available in the current beta. For pr
 
 ```python
 from pyntral import (
-    Admin, Resource, CrudLayout, Field, Relationship, Action, Page, NavigationGroup,
+    Admin, Resource, CrudLayout, Field, StatusBadgeConfig, CodeFieldConfig, BadgeTone, Relationship, Action, Page, NavigationGroup,
     SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec, LoginConfig,
     RoleAccess, Bridge, BridgeContext, BridgeUpload, BridgeFile, ResourceHook, OperationContext, VirtualField, FieldDependency,
     FieldView, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature,
@@ -56,7 +56,7 @@ Key methods:
 ### Configuration types
 
 - `Resource`: model, name, label, icon, navigation/order, list/search fields, field overrides, actions, page size, title/visible label, relationship settings, layouts, crud_views, crud_slots, crud_layouts, create_handler, update_handler, hooks, scope, access policy and CRUD capability flags. See [resources](resources.md).
-- `Field`: label, visible, readonly, required, widget, help, options, components, span, read/write roles, filter operators and width.
+- `Field`: label, visible, readonly, required, widget, help, options, components, span, read/write roles, filter operators and width; record_link, status_badge, code.
 - `Relationship`: visible, label, selectable, layout (`table`/`cards`).
 - `Action`: name, handler, label, variant, confirmation, position, appearance, component, dialog, icon, visible.
 - `Page`: name, label, component, icon, navigation, order, min_role.
@@ -301,3 +301,15 @@ TypedDict; supported modes are list/create/edit/show. `before_position`
 accepts "after_heading" (default) or "above_heading". Schema uses
 `crudLayouts[mode].showHeading` and `beforePosition`.
 See [heading visibility and slots](extensions.md#heading-visibility-and-slot-placement).
+
+### Field presentation and loading
+
+`Resource(skeletons=True)` enables skeleton loading (default). Field
+record_link defaults True; custom first-column fields are never wrapped in
+the stock button. StatusBadgeConfig and CodeFieldConfig are public validated
+Python configurations serialized as field.statusBadge and field.code, with
+recordLink as a boolean. StatusBadgeDef, CodeFieldDef and BadgeTone are public
+TypeScript types. CustomFieldProps.navigate is the mount-relative SPA
+navigation callback. All settings are presentation-only; resource/field
+authorization and database validation still apply. See [field presentation](resources.md#status-and-code-field-presentation),
+[loading UI](ui.md#skeletons-and-loading-states) and [custom fields](extensions.md#navigation-from-custom-fields).

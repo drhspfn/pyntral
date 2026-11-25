@@ -378,3 +378,39 @@ def test_crud_layout_schema_does_not_change_permissions(setup):
         assert schema["crudSlots"]["list"] == {"before": "summary", "after": "footer"}
         assert schema["capabilities"]["create"] and schema["capabilities"]["edit"]
         assert not schema["capabilities"]["delete"]
+
+
+def test_field_presentation_metadata_and_validation(setup):
+    from pyntral import StatusBadgeConfig, CodeFieldConfig
+    app, admin, _ = setup
+    admin.add_resource(Resource(Item, name="items", skeletons=False,
+        fields={"name": Field(record_link=False, status_badge=StatusBadgeConfig(
+            tones={"new": "primary"}, labels={"new": "New record"}, auto_tone=False)),
+            "password_hash": Field(visible=False, code=CodeFieldConfig())}))
+    with TestClient(app) as client:
+        authenticated(client)
+        schema = client.get("/admin/api/schema").json()["resources"][0]
+        assert schema["skeletons"] is False
+        fields = {field["name"]: field for field in schema["fields"]}
+        assert "password_hash" not in fields
+        assert fields["name"]["recordLink"] is False
+        assert fields["name"]["statusBadge"] == {
+            "tones": {"new": "primary"}, "labels": {"new": "New record"},
+            "defaultTone": "neutral", "autoTone": False, "dot": True,
+        }
+    with pytest.raises(ValueError):
+        StatusBadgeConfig(tones={"bad": "arbitrary"})
+    with pytest.raises(ValueError):
+        CodeFieldConfig(max_height=0)
+    with pytest.raises(ValueError):
+        Field(status_badge=StatusBadgeConfig(), code=CodeFieldConfig())
+    with pytest.raises(TypeError):
+        Field(record_link="false")
+    with pytest.raises(ValueError):
+        Resource(Item, skeletons=1)
+
+
+def test_field_widget_shorthands():
+    from pyntral import StatusBadgeConfig, CodeFieldConfig
+    assert isinstance(Field(widget="status").status_badge, StatusBadgeConfig)
+    assert isinstance(Field(widget="code").code, CodeFieldConfig)

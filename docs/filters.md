@@ -53,3 +53,15 @@ The allowed set is included in resource metadata and enforced by the server. Unk
 - The optional quick-search field is separate from advanced filtering and is disabled by default (`Resource.show_search=False`).
 
 See the API endpoint details in [API reference](api-reference.md).
+
+## Resource list deep links
+
+A custom component can call navigate("resources/edges?filter.from_node_id=12")
+to open a built-in list with its equality filter initialized. Explicit
+operator suffixes also work (filter.name.contains=example). Supported range
+and enum include/exclude controls accept their normal encoded JSON shapes.
+Search q is applied when the resource's quick search is enabled. Back/forward
+navigation and reload retain the URL's initial filter parameters. Editing
+filters in the UI does not rewrite the URL. The initial filter state is
+limited to the visible, supported controls and server authorization remains
+authoritative. Fully custom list replacements own their query state.
