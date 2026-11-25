@@ -52,7 +52,7 @@ def _component_fingerprint(project: Path) -> str:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     files = {
         f"{category}:{name}": relative
-        for category in ("fields", "pages", "actions", "dialogs", "crud", "themes", "profile", "access", "auth", "sidebarHeaders", "sidebarFooters", "sidebarItems")
+        for category in ("fields", "pages", "actions", "dialogs", "crud", "themes", "profile", "access", "auth", "sidebarHeaders", "sidebarFooters", "sidebarItems", "dashboards")
         for name, relative in config.get(category, {}).items()
     }
     hasher = hashlib.sha256(config_path.read_bytes())

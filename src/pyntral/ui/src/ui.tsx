@@ -21,6 +21,8 @@ export { Icon } from "./icon";
 export { Tabs, TabList, Tab, TabPanel } from "./tabs";
 export type { TabsProps } from "./tabs";
 export { Table, DataTable } from "./data-table";
+export { CodeBlock, JsonView } from "./code-block";
+export type { CodeBlockProps, JsonViewProps } from "./code-block";
 export type { DataTableProps, DataColumn } from "./data-table";
 export { Brand } from "./brand";
 export type { BrandProps } from "./brand";

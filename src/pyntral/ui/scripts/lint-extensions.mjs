@@ -20,7 +20,7 @@ try {
 }
 
 const eslint = new ESLint({ overrideConfigFile: path.resolve("eslint.config.mjs") });
-const categories = ["fields", "pages", "actions", "dialogs", "themes", "profile", "access", "auth", "sidebarHeaders", "sidebarFooters", "sidebarItems"];
+const categories = ["fields", "pages", "actions", "dialogs", "crud", "themes", "profile", "access", "auth", "sidebarHeaders", "sidebarFooters", "sidebarItems", "dashboards"];
 const files = new Set();
 for (const category of categories) {
   for (const relative of Object.values(manifest[category] || {})) {

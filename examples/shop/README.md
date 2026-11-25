@@ -328,3 +328,19 @@ the public `@pyntral/ui` API for custom React components. See
 - The Shop Docker build uses `pyntral export-ui` and copies the runtime-only
   bundle into `/app/admin-dist`, selected explicitly with `PYNTRAL_DIST`.
 - **Browser tab:** the title is `Shop demo` and the favicon inherits [logo.svg](logo.svg); test before login and after signing in. The public HTTP client is used by the Insights agent selector; `scope: "host"` is documented in [Extensions](../../docs/extensions.md#http-client-pyntralapi).
+
+### Search, dashboards and code viewers
+
+- Search for "draft", "orders" or "Agents" in the sidebar; clear the search to restore the tree.
+- Overview renders ShopDashboard with signed-in user context and scoped live counts. Click Commerce, Agents or Agents/Operations to open its category dashboard; the separate arrow expands the children.
+- Agents → Insights → Code and JSON viewers shows C# detection, JSON pretty/raw toggling, copy, collapsing, inline SQL and plain wrapped logs. Record details also use JsonView for JSON/array fields.
+
+### CRUD heading placement
+
+- Commerce → Products: default order is resource heading, summary, table.
+- Commerce → Product tag links: legacy before-above-heading ordering.
+- Security → Audit entries: no stock heading, summary followed by the table.
+- Commerce → Product notes: create form without the stock heading (back and
+  save/cancel remain); show uses a full override wrapping defaultView.
+
+The new Beta 4 examples use the same production contracts: [ShopDashboard.tsx](../../admin/ShopDashboard.tsx), [Insights.tsx](../../admin/Insights.tsx), [ResourceSummary.tsx](../../admin/ResourceSummary.tsx) and [WrappedDetail.tsx](../../admin/WrappedDetail.tsx). See [Beta 4 documentation index](../../docs/README.md#beta-4-navigation-and-presentation) for API parameters and upgrade notes.

@@ -97,3 +97,29 @@ is unavailable. Custom label callbacks run only when the row's declared
 role-protected and conditional fields are readable. Keep callback output
 limited to data intended for the selector. Use `Resource.scope` to enforce
 database-level row isolation.
+
+## Dashboard authorization
+
+Home and category dashboards are authenticated UI extensions, not independent
+REST endpoints. The schema includes Admin.dashboard_component only if
+the home dashboard is enabled and the auth callback permits
+`("dashboard:<component-id>", "view")`. A denied home extension falls
+back to the ordinary Overview. A category landing page requires
+`("group:<full/path>", "view")` and its optional NavigationGroup.min_role
+threshold (configured in Admin.role_weights). Its component ID is omitted
+when denied; authorized descendants keep their normal navigation entries.
+
+```python
+async def authorize(principal, resource, action, record=None):
+    if action == "view" and resource.startswith(("dashboard:", "group:")):
+        return "admin" in principal.roles
+    # Apply the application's existing resource/page policies here.
+    return True
+```
+
+Sidebar search only filters the authenticated schema, including intentionally
+locked entries; it grants no additional access. A dashboard receives the
+signed-in principal and scoped schema, but must still use authorized resource
+or bridge requests for data. JavaScript bundles are not access-control
+boundaries: never embed private data, credentials or secrets in TSX.
+See [dashboard configuration](extensions.md#home-and-category-dashboards).

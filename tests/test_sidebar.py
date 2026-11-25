@@ -103,3 +103,48 @@ def test_invalid_sidebar_dimensions():
             SidebarConfig(**kwargs)
     with pytest.raises(ValueError):
         SidebarHeader(align="invalid")
+
+
+def test_dashboard_permissions_and_empty_category():
+    app = FastAPI()
+    async def login(username, password):
+        return Principal(id=username, username=username, roles=[username])
+    async def authorize(principal, resource, action, record=None):
+        if resource.startswith(("group:", "dashboard:")):
+            return "admin" in principal.roles
+        return True
+    admin = Admin(app, session_factory=lambda: None, auth=CallbackAuth(login, authorize=authorize),
+                  secret_key="s" * 64, secure_cookie=False, dashboard_component="home",
+                  role_weights={"admin": 10, "reader": 1},
+                  sidebar=SidebarConfig(show_search=True, search_placeholder="Find page"))
+    admin.add_group(NavigationGroup("Standalone", component="landing", min_role="admin"))
+    admin.add_group(NavigationGroup("Shared", component="category", min_role="admin"))
+    admin.add_resource(Resource(Item, name="items", navigation="Shared"))
+    with TestClient(app) as client:
+        for role in ("admin", "reader"):
+            assert client.post("/admin/auth/login", json={"username": role, "password": "x"}).status_code == 200
+            schema = client.get("/admin/api/schema").json()
+            navigation = schema["navigation"]
+            assert navigation["sidebar"]["showSearch"] is True
+            assert navigation["sidebar"]["searchPlaceholder"] == "Find page"
+            groups = {g["path"]: g for g in navigation["groups"]}
+            assert "items" in [r["id"] for r in schema["resources"]]
+            if role == "admin":
+                assert navigation["dashboardComponent"] == "home"
+                assert groups["Standalone"]["component"] == "landing"
+                assert groups["Shared"]["component"] == "category"
+            else:
+                assert navigation["dashboardComponent"] is None
+                assert "Standalone" not in groups
+                assert "component" not in groups["Shared"]
+    assert "dashboardComponent" not in SidebarConfig().metadata("App")
+
+
+def test_invalid_dashboard_and_search_configuration():
+    with pytest.raises(ValueError):
+        SidebarConfig(show_search="yes")
+    with pytest.raises(ValueError):
+        SidebarConfig(search_placeholder=42)
+    with pytest.raises(ValueError, match="dashboard"):
+        Admin(FastAPI(), session_factory=lambda: None, auth=CallbackAuth(lambda *_: None),
+              secret_key="s" * 64, dashboard_component="../invalid")

@@ -1,5 +1,5 @@
 declare module "virtual:pyntral-extensions" {
-  import type { FieldComponent, PageComponent, ActionComponent, ThemeComponent, ProfileMenuComponent, ActionDialogComponent, AccessDeniedComponent, LoginScreenComponent, CrudComponent, SidebarRegionComponent, SidebarItemComponent } from "@pyntral/types";
+  import type { FieldComponent, PageComponent, ActionComponent, ThemeComponent, ProfileMenuComponent, ActionDialogComponent, AccessDeniedComponent, LoginScreenComponent, CrudComponent, SidebarRegionComponent, SidebarItemComponent, DashboardComponent } from "@pyntral/types";
   export const fields: Record<string, FieldComponent>;
   export const pages: Record<string, PageComponent>;
   export const actions: Record<string, ActionComponent>;
@@ -11,5 +11,6 @@ declare module "virtual:pyntral-extensions" {
   export const sidebarHeaders: Record<string, SidebarRegionComponent>;
   export const sidebarFooters: Record<string, SidebarRegionComponent>;
   export const sidebarItems: Record<string, SidebarItemComponent>;
+  export const dashboards: Record<string, DashboardComponent>;
   export const auth: Record<string, LoginScreenComponent>;
 }

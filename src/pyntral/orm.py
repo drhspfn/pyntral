@@ -440,6 +440,9 @@ class MapperAdapter:
             "showSearch": self.resource.show_search,
             "crudViews": self.resource.crud_views,
             "crudSlots": self.resource.crud_slots,
+            "crudLayouts": {mode: {"showHeading": layout.get("show_heading", True),
+                                    "beforePosition": layout.get("before_position", "after_heading")}
+                            for mode, layout in self.resource.crud_layouts.items()},
             "fields": fields,
             "listFields": [
                 name for name in (self.resource.list_fields or list(self.columns)[:6])

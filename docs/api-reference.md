@@ -8,7 +8,7 @@ This page summarizes the public interfaces available in the current beta. For pr
 
 ```python
 from pyntral import (
-    Admin, Resource, Field, Relationship, Action, Page, NavigationGroup,
+    Admin, Resource, CrudLayout, Field, Relationship, Action, Page, NavigationGroup,
     SidebarConfig, SidebarHeader, SidebarFooter, SvgIcon, ImageIcon, IconSpec, LoginConfig,
     RoleAccess, Bridge, BridgeContext, BridgeUpload, BridgeFile, ResourceHook, OperationContext, VirtualField, FieldDependency,
     FieldView, LayoutSection, JobAction, PasswordFeature, SoftDeleteFeature,
@@ -33,7 +33,7 @@ Admin(
     session_cookie_path="/", session_max_age=43200, session_store=None,
     require_async_sessions=False, enable_jobs=True, dist_dir=None,
     title="Pyntral", favicon=None, theme=None, default_theme="system",
-    animations=True, show_dashboard=True, sidebar=None, login=None, role_weights=None,
+    animations=True, show_dashboard=True, dashboard_component=None, sidebar=None, login=None, role_weights=None,
     logging_config=None, event_bus=None, auto_start_events=True,
     event_publish_timeout=2.0, max_json_bytes=1048576, storage=None,
     default_locale="en", translations=None, locale_resolver=None,
@@ -55,12 +55,12 @@ Key methods:
 
 ### Configuration types
 
-- `Resource`: model, name, label, icon, navigation/order, list/search fields, field overrides, actions, page size, title/visible label, relationship settings, layouts, crud_views, crud_slots, create_handler, update_handler, hooks, scope, access policy and CRUD capability flags. See [resources](resources.md).
+- `Resource`: model, name, label, icon, navigation/order, list/search fields, field overrides, actions, page size, title/visible label, relationship settings, layouts, crud_views, crud_slots, crud_layouts, create_handler, update_handler, hooks, scope, access policy and CRUD capability flags. See [resources](resources.md).
 - `Field`: label, visible, readonly, required, widget, help, options, components, span, read/write roles, filter operators and width.
 - `Relationship`: visible, label, selectable, layout (`table`/`cards`).
 - `Action`: name, handler, label, variant, confirmation, position, appearance, component, dialog, icon, visible.
 - `Page`: name, label, component, icon, navigation, order, min_role.
-- `NavigationGroup`: path, icon, order.
+- `NavigationGroup`: path, icon, order, optional component (dashboard registry ID) and min_role (landing page only).
 - `RoleAccess`: read/select/write/create/edit/delete thresholds and navigation state.
 - `Bridge`: name, input_model, output_model, handler, description, min_role, optional upload.
 - `BridgeUpload`: max_bytes (default 5 MiB, range 1–64 MiB), content_types (default application/octet-stream; exact types or type/*).
@@ -81,6 +81,8 @@ below. The generic wheel reads this metadata without a custom SPA build.
 | `mobile_width` | 238 | Independent drawer width (160–480 px), constrained to the viewport. |
 | `resizable` | True | Enable desktop resize separator. |
 | `show_icons` | True | Show navigation glyphs, independent of header and lock/disclosure indicators. |
+| `show_search` | False | Enable search over the authorized navigation tree. |
+| `search_placeholder` | None | Optional search text; None uses the UI locale. |
 | `icon_size` | 16 | Navigation glyph size, 12–32 px. |
 | `indent` | 9 | Indentation per level, 0–24 px. |
 | `max_indent_depth` | 5 | Maximum visual indentation level, 0–8; does not restrict tree depth. |
@@ -196,7 +198,7 @@ marked no-store. The resource schema remains authenticated.
 
 `navigation.sidebar` uses camelCase keys:
 `width`, `minWidth`, `maxWidth`, `mobileWidth`, `resizable`, `showIcons`,
-`iconSize`, `indent`, `maxIndentDepth`, `dashboardIcon`, `header`, `footer`,
+`iconSize`, `indent`, `maxIndentDepth`, `dashboardIcon`, `showSearch`, `searchPlaceholder`, `header`, `footer`,
 `headerComponent`, `footerComponent`, `itemComponent`.
 The header includes `title`, `subtitle`, `icon`, `showIcon`, `showTitle`,
 `showSubtitle`, `align`, `direction`, `divider`, `iconSize`, `logoWidth`,
@@ -277,3 +279,25 @@ legacy `/favicon.svg` route remains available. See [browser branding](ui.md#brow
 `@pyntral/api` exports `api<T>`, `ApiError`, `buildQuery`, `base`, and the `ApiOptions` type.
 See [HTTP client](extensions.md#http-client-pyntralapi) for admin and host
 scope and security details.
+
+### Navigation and dashboard metadata
+
+`Admin(dashboard_component="home")` references a TSX ID in the
+`dashboards` manifest category. `NavigationGroup(component="category",
+min_role=None)` configures an authorized category landing page.
+`SidebarConfig(show_search=False, search_placeholder=None)` controls
+navigation filtering. Authenticated schema exposes navigation.dashboardComponent
+and per-group component IDs only when permitted; sidebar.showSearch and
+sidebar.searchPlaceholder configure the search. React `DashboardProps`, `DashboardComponent`, `NavigationGroupDef`,
+`CrudLayoutDef`, `CrudMode`, `CodeBlockProps` and `JsonViewProps` are public
+through `@pyntral/types` (navigation/layout) or `@pyntral/ui` (code viewers). See [dashboards](extensions.md#home-and-category-dashboards)
+and [code viewers](ui.md#codeblock-and-jsonview).
+
+### CRUD presentation layout
+
+`Resource(crud_layouts={"list": {"show_heading": False}})` hides the stock
+title and description on the list, not its actions. `CrudLayout` is a public
+TypedDict; supported modes are list/create/edit/show. `before_position`
+accepts "after_heading" (default) or "above_heading". Schema uses
+`crudLayouts[mode].showHeading` and `beforePosition`.
+See [heading visibility and slots](extensions.md#heading-visibility-and-slot-placement).

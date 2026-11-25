@@ -13,7 +13,7 @@ from .audit import AuditEntry, AuditBase
 from .storage import StorageBackend, LocalStorage, S3Storage, UploadBase, UploadEntry
 from .sessions import MemorySessionStore, SessionIdentity, SessionStore
 from .auth import CallbackAuth, LocalAuth, ModelAuth, Principal, hash_password, verify_password
-from .resources import Action, Field, FieldDependency, FileUploadConfig, FieldView, Page, Resource, NavigationGroup, Relationship, RoleAccess
+from .resources import Action, CrudLayout, Field, FieldDependency, FileUploadConfig, FieldView, Page, Resource, NavigationGroup, Relationship, RoleAccess
 from .bridge import Bridge, BridgeContext, BridgeUpload, BridgeFile
 from .events import (AdminEvent, FieldRef, ResourceEvent, ResourceCreated, ResourceUpdated, ResourceDeleted,
                      ActionExecuted, CollectionActionExecuted, LoginSucceeded, LoginFailed, LogoutSucceeded, CustomEvent,
@@ -47,7 +47,7 @@ __all__ = [
     "MemorySessionStore", "SessionIdentity", "SessionStore",
     "Page",
     "Principal",
-    "Resource",
+    "Resource", "CrudLayout",
     "Relationship",
     "RoleAccess",
     "hash_password",

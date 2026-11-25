@@ -6,12 +6,15 @@ import {
   LoaderCircle, LockKeyhole, LogOut, Menu, MoreHorizontal, Pencil,
   Plus, RefreshCw, Trash2, Sun, Moon, X,
 } from "lucide-react";
-import { fields as customFields, pages as customPages, actions as customActions, dialogs as customDialogs, crud as customCrud, themes as customThemes, profile as customProfile, auth as customAuth } from "virtual:pyntral-extensions";
+import { fields as customFields, pages as customPages, actions as customActions, dialogs as customDialogs, crud as customCrud, themes as customThemes, profile as customProfile, auth as customAuth, dashboards } from "virtual:pyntral-extensions";
 import { SidebarNavigation } from "./navigation";
 import { sidebarConfig, SidebarHeaderRegion, SidebarFooterRegion } from "./sidebar";
 import { Icon } from "./icon";
 import { Tabs, TabList, Tab, TabPanel } from "./tabs";
 import { Table } from "./data-table";
+import { CrudHeading } from "./crud-heading";
+import { resolveCrudLayout } from "./crud-layout-state";
+import { JsonView } from "./code-block";
 import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
@@ -112,16 +115,19 @@ function FieldValue({ resource, field, value, record, mode }: {
   const custom = field.components[mode];
   const Comp = custom ? customFields[custom] : undefined;
   if (Comp) return <Comp field={field} value={value} record={record} resource={resource} mode={mode} />;
+  if (mode === "show" && value !== null && value !== undefined && (field.kind === "json" || field.kind === "array"))
+    return <JsonView value={value} collapsible maxHeight={320}/>;
   return <>{pretty(value, field.kind)}</>;
 }
 
-function Overview({ schema, navigate }: { schema: Schema; navigate: (route: string) => void }) {
+function Overview({ schema, navigate, groupPath }: { schema: Schema; navigate: (route: string) => void; groupPath?: string }) {
   const { t } = useI18n();
+  const resources = schema.resources.filter(r => r.capabilities.list && (!groupPath || r.navigation === groupPath || r.navigation?.startsWith(groupPath + "/")));
   return <>
-    <div className="page-heading"><div><h1>{t("nav.overview", "Overview")}</h1><p>{schema.title}</p></div></div>
+    <div className="page-heading"><div><h1>{groupPath?.split("/").at(-1) ?? t("nav.overview", "Overview")}</h1><p>{schema.title}</p></div></div>
     <div className="section-head"><h2>Resources</h2></div>
-    {schema.resources.some((r) => r.capabilities.list) ? <div className="resource-grid">
-      {schema.resources.filter((r) => r.capabilities.list).map((resource) => {
+    {resources.length ? <div className="resource-grid">
+      {resources.map((resource) => {
         return <button key={resource.id} className="resource-card" onClick={() => navigate(`resources/${resource.id}`)}>
           {resource.icon != null && <div className="resource-icon"><Icon icon={resource.icon} size={18} fallback="database"/></div>}<strong>{resource.label}</strong>
           <ArrowRight size={15}/>
@@ -300,7 +306,9 @@ function BackgroundJobButton({ resource, job }: { resource: ResourceDef; job: Jo
   </div>;
 }
 
-function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void }) {
+type BuiltinCrudLayoutProps = { showHeading?: boolean; before?: ReactNode };
+
+function ResourceList({ resource, navigate, schema, showHeading = true, before }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void } & BuiltinCrudLayoutProps) {
   const { t } = useI18n();
   const [text, setText] = useState("");
   const [search, setSearch] = useState("");
@@ -332,17 +340,17 @@ function ResourceList({ resource, navigate, schema }: { resource: ResourceDef; s
   useEffect(() => setSelection([]), [selectionScope, resource.id]);
   const records = useQuery({ queryKey: ["list", resource.id, query],
     queryFn: () => api<Listing>(`/api/resources/${resource.id}${query}`) });
+  const hasHeadingActions = !!resource.jobs?.length || resource.actions.some(action => action.kind === "resource") || resource.capabilities.create;
   return <>
-    <div className="page-heading"><div><div className="eyebrow">DATA / {resource.id.toUpperCase()}</div>
-      <h1>{resource.label}</h1><p>{t("resources.description", "View, organize, and manage your records.")}</p></div>
-      <div className="heading-actions">
+    <CrudHeading showHeading={showHeading} before={before} heading={<><div className="eyebrow">DATA / {resource.id.toUpperCase()}</div>
+      <h1>{resource.label}</h1><p>{t("resources.description", "View, organize, and manage your records.")}</p></>}
+      actions={hasHeadingActions ? <>
         {(resource.jobs ?? []).map((job) => <BackgroundJobButton key={job.name} resource={resource} job={job}/>)}
         {resource.actions.filter((action) => action.kind === "resource").map((action) =>
           <CollectionAction key={action.name} schema={schema} resource={resource} action={action}
             selected={[]} navigate={navigate} clearSelection={() => undefined}/>)}
         {resource.capabilities.create && <button className="btn primary" onClick={() => navigate(`resources/${resource.id}/new`)}><Plus size={17}/> {t("actions.new", "New record")}</button>}
-      </div>
-    </div>
+      </> : null}/>
     <div className="surface ra-table-surface">
       <div className="table-toolbar">
         {resource.showSearch && <SearchInput value={text} onChange={setText}
@@ -523,10 +531,10 @@ function StructuredFields({ resource, mode, fields, values, render }: {
   </div>;
 }
 
-function RecordEditor({ resource, id, navigate, notify }: {
+function RecordEditor({ resource, id, navigate, notify, showHeading = true, before }: {
   resource: ResourceDef; id?: string; navigate: (route: string) => void;
   notify: (text: string) => void;
-}) {
+} & BuiltinCrudLayoutProps) {
   const client = useQueryClient();
   const { t } = useI18n();
   const isNew = id === undefined;
@@ -612,9 +620,9 @@ function RecordEditor({ resource, id, navigate, notify }: {
   const visibleFields = viewFields(resource.fields, isNew ? "create" : "edit").filter((f) => !f.readonly);
   return <>
     <button className="back-link" onClick={() => navigate(isNew ? `resources/${resource.id}` : `resources/${resource.id}/${encodeURIComponent(id!)}`)}><ArrowLeft size={16}/> {isNew ? `Back to ${resource.label}` : "Back to record"}</button>
-    <div className="page-heading"><div><div className="eyebrow">{resource.label.toUpperCase()} / {isNew ? "CREATE" : "EDIT"}</div>
-      <h1>{isNew ? `New ${resource.label.replace(/s$/, "")}` : "Edit record"}</h1><p>Provide the details below and save your changes.</p></div>
-      {!isNew && <div className="heading-actions">
+    <CrudHeading showHeading={showHeading} before={before} heading={<><div className="eyebrow">{resource.label.toUpperCase()} / {isNew ? "CREATE" : "EDIT"}</div>
+      <h1>{isNew ? `New ${resource.label.replace(/s$/, "")}` : "Edit record"}</h1><p>Provide the details below and save your changes.</p></>}
+      actions={!isNew && (resource.capabilities.show || resource.capabilities.delete) ? <>
         {resource.capabilities.show && <button type="button" className="btn subtle"
           onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id!)}`)}>
           <ExternalLink size={16}/> View record</button>}
@@ -623,7 +631,7 @@ function RecordEditor({ resource, id, navigate, notify }: {
           onClick={() => { void requestDelete(id, resource.versionField
             ? baseline?.[resource.versionField] : undefined); }}>
           <Trash2 size={16}/> Delete</button>}
-      </div>}</div>
+      </> : null}/>
     {!isNew && record.isLoading ? <Loading/> : record.error && !baseline ? <Alert error={record.error}/> :
       <form className="editor-grid" onSubmit={(e: FormEvent) => { e.preventDefault(); mutation.mutate(); }}>
         <div className="surface editor-card"><div className="editor-card-title"><h2>Record details</h2><p>Fields marked with * are required.</p></div>
@@ -796,9 +804,9 @@ function ResourceUploads({ resource, identifier }: { resource: ResourceDef; iden
   </Card>;
 }
 
-function RecordShow({ resource, id, schema, navigate }: {
+function RecordShow({ resource, id, schema, navigate, showHeading = true, before }: {
   resource: ResourceDef; id: string; schema: Schema; navigate: (route: string) => void;
-}) {
+} & BuiltinCrudLayoutProps) {
   const record = useQuery({ queryKey: ["record", resource.id, id],
     queryFn: () => api<{ record: RecordData; actions: string[] }>(`/api/resources/${resource.id}/${encodeURIComponent(id)}`) });
   const { requestDelete, isPending: deleting } = useDeleteRecord(resource,
@@ -806,14 +814,13 @@ function RecordShow({ resource, id, schema, navigate }: {
   const related = resource.relationships.filter((relation) => schema.resources.some((r) => r.id === relation.resource));
   return <>
     <button className="back-link" onClick={() => navigate(`resources/${resource.id}`)}><ArrowLeft size={16}/> Back to {resource.label}</button>
-    <div className="page-heading"><div><div className="eyebrow">{resource.label.toUpperCase()} / RECORD</div>
+    <CrudHeading showHeading={showHeading} before={before} heading={<><div className="eyebrow">{resource.label.toUpperCase()} / RECORD</div>
       <h1>{record.data ? String(record.data.record[resource.titleField] ?? `Record ${id}`) : `Record ${id}`}</h1>
-      <p>Record details and connected relationships.</p></div>
-      <div className="heading-actions">
+      <p>Record details and connected relationships.</p></>}
+      actions={resource.capabilities.edit || resource.capabilities.delete ? <>
         {resource.capabilities.edit && <button className="btn subtle" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(id)}/edit`)}><Pencil size={16}/> Edit</button>}
         {resource.capabilities.delete && <button className="btn danger" disabled={deleting} onClick={() => { void requestDelete(id, resource.versionField ? record.data?.record?.[resource.versionField] : undefined); }}><Trash2 size={16}/> Delete</button>}
-      </div>
-    </div>
+      </> : null}/>
     {record.isLoading ? <Loading/> : record.error ? <Alert error={record.error} /> : record.data && <>
       <div className="surface detail-card"><div className="editor-card-title"><h2>Details</h2><p>Data from the SQLAlchemy resource</p></div>
         <StructuredFields resource={resource} mode="detail" fields={viewFields(resource.fields, "show")}
@@ -889,9 +896,14 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
     if (versionedEdit && fresh) setEditRecord((current) => current ?? fresh);
   }, [versionedEdit, record.data]);
   const displayedRecord = versionedEdit ? editRecord : record.data?.record;
-  const defaultView = mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate}/> :
-    mode === "show" ? <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate}/> :
-    <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)}/>;
+  const layout = resolveCrudLayout(resource.crudLayouts?.[mode], !!Custom);
+  const renderDefaultView = (before?: ReactNode) => {
+    const props = { showHeading: layout.showHeading, before };
+    return mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate} {...props}/> :
+      mode === "show" ? <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate} {...props}/> :
+      <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)} {...props}/>;
+  };
+  const defaultView = renderDefaultView();
   if (!Custom && !Before && !After) return defaultView;
   const loadList: CustomCrudProps["loadList"] = async (params = {}) =>
     api<{ items: RecordData[]; total: number; offset: number; limit: number }>(
@@ -927,9 +939,11 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
         setEditRecord(fresh.data?.record);
       }
     } };
-  return <>{Before && <div className="ra-crud-slot"><Before {...props}/></div>}
-    {Custom ? <Custom {...props}/> : defaultView}
-    {After && <div className="ra-crud-slot"><After {...props}/></div>}</>;
+  const before = Before ? <div className="ra-crud-slot ra-crud-slot-before"><Before {...props}/></div> : null;
+  return <>
+    {layout.beforePosition === "above_heading" && before}
+    {Custom ? <Custom {...props}/> : renderDefaultView(layout.beforePosition === "after_heading" ? before : undefined)}
+    {After && <div className="ra-crud-slot ra-crud-slot-after"><After {...props}/></div>}</>;
 }
 
 function MainLayout({ schema, user, onLogout, navigate, route, children, themeMode, toggleTheme }: {
@@ -1088,12 +1102,27 @@ function AdminApp() {
   const content = useMemo(() => {
     const data = schema.data;
     if (!data) return null;
-    if (!route && data.navigation?.showDashboard !== false) return <Overview schema={data} navigate={navigate}/>;
+    if (!route && data.navigation?.showDashboard !== false) {
+      const defaultView = <Overview schema={data} navigate={navigate}/>;
+      const component = data.navigation.dashboardComponent;
+      const Custom = component && Object.hasOwn(dashboards, component) ? dashboards[component] : undefined;
+      if (component && !Custom) return <Alert error={new Error(`Dashboard component "${component}" not registered`)}/>;
+      return Custom && auth.data?.user ? <Custom schema={data} navigate={navigate} user={auth.data.user} group={null} defaultView={defaultView}/> : defaultView;
+    }
     if (!route) {
       const first = data.resources.find((r) => r.capabilities.list);
-       return first ? <ResourceList schema={data} resource={first} navigate={navigate}/> : <Empty title="No resources"/>;
+       return first ? <ResourceRoute schema={data} resource={first} mode="list" navigate={navigate}/> : <Empty title="No resources"/>;
     }
-    const segments = route.split("/").map(decodeURIComponent);
+    let segments: string[];
+    try { segments = route.replace(/\/$/, "").split("/").map(decodeURIComponent); }
+    catch { return <Empty title="Invalid URL"/>; }
+    if (segments[0] === "groups" && segments.length > 1) {
+      const group = data.navigation.groups.find(g => g.path === segments.slice(1).join("/"));
+      const Custom = group?.component && Object.hasOwn(dashboards, group.component) ? dashboards[group.component] : undefined;
+      if (group?.component && !Custom) return <Alert error={new Error(`Dashboard component "${group.component}" not registered`)}/>;
+      if (group && Custom && auth.data?.user) return <Custom schema={data} navigate={navigate} user={auth.data.user} group={group}
+        defaultView={<Overview schema={data} navigate={navigate} groupPath={group.path}/>}/>;
+    }
     if (segments[0] === "resources") {
       const resource = data.resources.find((r) => r.id === segments[1]);
       if (!resource) return <Empty title="Resource not found" description="This resource isn't available to your account."/>;
@@ -1116,7 +1145,7 @@ function AdminApp() {
       if (page) return <Alert error={new Error(`Custom page component "${page.component}" not registered`)}/>;
     }
     return <Empty title="Page not found" description="Check the URL or choose a resource in the sidebar."/>;
-  }, [route, schema.data, navigate]);
+  }, [route, schema.data, navigate, auth.data?.user, setNotice]);
 
   if (auth.isPending) return <div className="fullscreen-loading"><Loading label="Starting workspace…"/></div>;
   if (auth.error) return <div className="fullscreen-loading"><Alert error={auth.error}/><button className="btn subtle" onClick={() => auth.refetch()}>Retry</button></div>;

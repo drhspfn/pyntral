@@ -15,6 +15,7 @@ The published Pyntral Python wheel contains a complete generic SPA that works wi
   "dialogs": { "archive-notice": "admin/ArchiveNotice.tsx" },
   "themes": {},
   "crud": { "resource-summary": "admin/ResourceSummary.tsx" },
+  "dashboards": { "home": "admin/ShopDashboard.tsx", "category": "admin/ShopDashboard.tsx" },
   "profile": {},
   "access": {},
   "auth": {}
@@ -184,8 +185,9 @@ Resource(Usage, crud_slots={"list": {"before": "resource-summary"},
 ```
 
 Slot components receive `CustomCrudProps` (including the authorized record
-on record routes). They render around the standard screen or a configured
-replacement. A full `crud_views` override can alternatively render
+on record routes). On built-in screens, `before` renders after the standard
+page heading and before the table/form/details; `after` renders after the
+screen content. A full `crud_views` override can alternatively render
 `props.defaultView` once inside its own wrapper. Slots must not render that
 element again. Standard controls retain their own queries, mutations and
 pagination. The API remains subject to normal access checks.
@@ -210,10 +212,38 @@ export default function WrappedDetail({ defaultView }: CustomCrudProps) {
 ```
 
 Slots accept all four modes and both positions, one extension per position.
-They render around the complete screen, not inside the toolbar. Record routes
+They render outside the table toolbar and form controls. Record routes
 receive the authorized record once loaded. Save is available for create/edit;
 render the default view only once in an override. See the working
 [ResourceSummary](../admin/ResourceSummary.tsx) and [WrappedDetail](../admin/WrappedDetail.tsx) examples.
+
+### Heading visibility and slot placement
+
+```python
+Resource(
+    Usage,
+    crud_slots={"list": {"before": "budget-overview"}},
+    crud_layouts={"list": {"show_heading": True, "before_position": "after_heading"}},
+)
+```
+
+`crud_layouts` accepts a mapping from list/create/edit/show to `CrudLayout`
+options. Both options are optional:
+
+| Option | Default | Behavior |
+| --- | --- | --- |
+| `show_heading` | True | Show the stock eyebrow, title and description. False removes these, retaining any available action buttons and back navigation. |
+| `before_position` | "after_heading" | Place before between the built-in heading and content; use "above_heading" for the Beta 3 ordering above the whole screen. |
+
+With the heading hidden and no heading actions, no empty heading wrapper is
+rendered. Actions remain available in a compact right-aligned row otherwise.
+The `after` slot remains below all built-in content, including detail
+relationships and attachments. Full replacement components own their layout;
+their slots still wrap the replacement, and show_heading applies only if
+they render defaultView. No authorization or CRUD behavior is changed.
+
+**Migration from Beta 3:** existing before slots now render below the heading
+on standard views. Set before_position="above_heading" for the old ordering.
 
 ## HTTP client: @pyntral/api
 
@@ -247,3 +277,62 @@ binary bodies are supported without forcing the JSON content type.
 result type is compile-time only, not runtime validation. Use generated bridges
 for Pydantic DTO validation. `base` exposes the mount; `buildQuery` encodes query
 parameters. See [Insights](../admin/Insights.tsx) for a live admin HTTP call.
+
+## Home and category dashboards
+
+Register an extension ID in the `dashboards` manifest category, and
+select it in Python. Existing apps retain the built-in Overview.
+
+```json
+{
+  "dashboards": {
+    "home": "admin/Dashboard.tsx",
+    "category": "admin/Dashboard.tsx"
+  }
+}
+```
+
+```python
+admin = Admin(app, session_factory=SessionLocal, auth=auth, secret_key=secret,
+    dashboard_component="home", sidebar=SidebarConfig(show_search=True),
+    role_weights={"admin": 100})
+admin.add_group(NavigationGroup("Avatars", icon="users", component="category"))
+admin.add_group(NavigationGroup("Avatars/Generation", component="category", min_role="admin"))
+```
+
+```tsx
+import type { DashboardProps } from "@pyntral/types";
+import { Card, Badge } from "@pyntral/ui";
+
+export default function Dashboard({ user, group, defaultView }: DashboardProps) {
+  return <>
+    <Card title={group?.path ?? "Workspace"}>
+      {user.roles.map(role => <Badge key={role}>{role}</Badge>)}
+    </Card>
+    {defaultView}
+  </>;
+}
+```
+
+`DashboardProps` contains schema, navigate(route), user (Principal),
+group (null on the root dashboard or NavigationGroupDef on a category),
+and defaultView (the built-in Overview, restricted to category resources
+for a group dashboard). Render defaultView only when desired. The standard
+`useCurrentAdmin()` hook is also available. Use API/bridge calls for scoped
+metrics. The home dashboard is at the admin root; `show_dashboard=False`
+takes precedence (the root opens the first accessible resource). Category names navigate to `groups/<encoded path>`,
+with a separate disclosure arrow for subcategories and child resources.
+A category without a component still behaves as an ordinary disclosure.
+Authorized standalone category dashboards are visible even with no children.
+
+Server-side authorization checks `dashboard:<component-id>` and
+`group:<full/path>` with operation `view`. Groups can additionally specify
+a known minimum role. Denied home extensions fall back to Overview; denied
+category components are omitted from the authenticated schema, while
+accessible descendants remain navigable. Dashboard authorization is not
+a replacement for resource/bridge authorization. Missing registered TSX
+components produce a configuration error rather than a silent fallback.
+The registry participates in Vite, lint, editor configuration and build
+fingerprinting. With custom TSX, rebuild via `pyntral build --app MODULE:app`
+and refresh editor aliases via `pyntral types MODULE:app --editor`. The generic
+wheel has no application-specific dashboard components. See [authorization](authorization.md#dashboard-authorization). See [ShopDashboard](../admin/ShopDashboard.tsx).

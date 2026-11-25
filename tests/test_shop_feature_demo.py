@@ -37,6 +37,11 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
             schema = client.get("/admin/api/schema").json()
             resources = {resource["id"]: resource for resource in schema["resources"]}
             sidebar = schema["navigation"]["sidebar"]
+            assert sidebar["showSearch"] is True
+            assert schema["navigation"]["dashboardComponent"] == "shop-home"
+            groups = {g["path"]: g for g in schema["navigation"]["groups"]}
+            assert groups["Commerce"]["component"] == "shop-category"
+            assert groups["Agents/Operations"]["component"] == "shop-category"
             assert sidebar["width"] == 260 and sidebar["resizable"]
             assert sidebar["header"]["title"] == "Shop demo"
             assert sidebar["header"]["subtitle"] == "Commerce workspace"
@@ -47,6 +52,10 @@ def test_shop_feature_showcase(tmp_path: Path, monkeypatch):
             assert resources["editorial-drafts"]["uploadMaxBytes"] == 2_000_000
             products = resources["products"]
             assert products["crudSlots"] == {"list": {"before": "resource-summary"}, "show": {"after": "resource-summary"}}
+            assert products["crudLayouts"] == {}
+            assert resources["audit-entries"]["crudLayouts"]["list"] == {"showHeading": False, "beforePosition": "after_heading"}
+            assert resources["product-tag-links"]["crudLayouts"]["list"] == {"showHeading": True, "beforePosition": "above_heading"}
+            assert resources["product-notes"]["crudLayouts"]["create"]["showHeading"] is False
             assert resources["product-tag-links"]["primaryKeys"] == ["product_id", "tag_id"]
             links = client.get("/admin/api/resources/product-tag-links").json()["items"]
             assert links and links[0]["__pyntral_id"]

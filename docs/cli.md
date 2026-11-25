@@ -95,3 +95,10 @@ to an absent or empty directory, excluding the development workspace and npm
 dependencies. Run `pyntral build --app MODULE:app` first. Set
 `PYNTRAL_DIST` to the exported directory in the Python-only runtime.
 See [multi-stage deployment](deployment.md#custom-ui-in-a-python-only-runtime).
+
+### Dashboard extensions and editor setup
+
+The dashboards manifest category is included in extension source fingerprints,
+Vite registration, linting and generated editor includes. After adding a TSX
+dashboard, run `pyntral types MODULE:app --editor` for editor support and
+`pyntral build --app MODULE:app` for deployment. See [dashboard configuration](extensions.md#home-and-category-dashboards).

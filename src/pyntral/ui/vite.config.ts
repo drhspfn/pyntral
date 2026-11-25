@@ -34,7 +34,7 @@ function extensions(): Plugin {
       if (id !== resolvedId) return;
       const config = loadConfig();
       const lines: string[] = [];
-      for (const category of ["fields", "pages", "actions", "dialogs", "crud", "themes", "profile", "access", "auth", "sidebarHeaders", "sidebarFooters", "sidebarItems"]) {
+      for (const category of ["fields", "pages", "actions", "dialogs", "crud", "themes", "profile", "access", "auth", "sidebarHeaders", "sidebarFooters", "sidebarItems", "dashboards"]) {
         const entries: string[] = [];
         for (const [key, relative] of Object.entries(config[category] || {})) {
           const absolute = path.resolve(project, relative);

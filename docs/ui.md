@@ -11,7 +11,7 @@ import {
   Button, Badge, Card, TextInput, Textarea, FormField,
   Checkbox, CheckboxGroup, RadioGroup, Switch, ToggleGroup, SortableList,
   SearchInput, Select, AsyncSelect, DatePicker, Calendar, Dialog,
-  Tabs, TabList, Tab, TabPanel, Table, DataTable,
+  Tabs, TabList, Tab, TabPanel, Table, DataTable, CodeBlock, JsonView,
   FileUpload, FileRow, Collapsible, OverflowText, Icon, Brand,
   Popover, PopoverTrigger, PopoverContent, PopoverHeader, PopoverFooter, PopoverClose,
 } from "@pyntral/ui";
@@ -37,6 +37,7 @@ import {
 | `Dialog` | Reusable dialog primitive; for global actions use `useAdminFeedback().confirm()`. |
 | `Tabs`, `TabList`, `Tab`, `TabPanel` | Compound tabs with controlled/uncontrolled state. |
 | `Table`, `DataTable` | Shared semantic table shell and typed data grid. |
+| `CodeBlock`, `JsonView` | Read-only inline or multiline source and JSON viewers; copy, collapse, format and highlight. |
 | `FileUpload`, `FileRow` | Controlled selection, explicit upload callback and file rows. |
 | `Collapsible`, `OverflowText` | Disclosure and truncated labels. |
 | `Icon`, `Brand` | Shared icon and branding primitives. |
@@ -154,6 +155,8 @@ admin = Admin(
 The UI prefixes custom variables with `--ra-` (for example, `primary` → `--ra-primary`). Set variables for `light` and `dark` separately; components should reference CSS custom properties rather than hard-coded colors. `default_theme` is `system`, `light`, or `dark`. `animations=False` applies the shared reduced-motion switch.
 
 When `primary` is overridden, the UI derives missing `primary-hover`, `primary-soft` and `sidebar-active` using the accent and current surface tokens. For opaque CSS colors normalized to hex, it chooses black or white `on-primary` using WCAG contrast. Explicit values for any derived token take precedence, including values inherited from the global theme. For translucent or complex CSS colors, specify `on-primary` explicitly. Both button implementations use the hover color for their fill and border; checked controls share `on-primary` for contrast.
+
+Syntax highlighting tokens include `code-keyword`, `code-string`, `code-number`, `code-name`, and `code-comment`. Set them independently in `theme.light` / `theme.dark` using the same prefix-free names. See [code viewers](#codeblock-and-jsonview).
 
 Scrollbar tokens include `scrollbar-width`, `scrollbar-track`, `scrollbar-thumb`, `scrollbar-thumb-hover`, and `scrollbar-radius`; Firefox supports a more limited scrollbar customization than Chromium/WebKit.
 
@@ -420,3 +423,73 @@ authentication, including under ASGI proxy prefixes. The development client
 sets document.title when public login configuration arrives; the production
 HTML title is escaped and rendered by the server. No custom middleware or
 frontend rebuild is needed to change branding.
+
+## Sidebar search
+
+```python
+sidebar = SidebarConfig(show_search=True, search_placeholder="Find a resource or page")
+```
+
+Search is disabled by default. When enabled, the field stays above the
+scrolling navigation tree. It matches authorized resource/page labels and
+IDs and category paths, case-insensitively and accent-insensitively (all search words must match); matching categories include
+their descendants and matching leaves retain their ancestors. Search
+temporarily expands matching branches and does not alter manual expansion
+state. Locked entries remain locked. Clearing the search restores the
+tree. It works in the mobile drawer as well. When omitted, the placeholder
+uses the current UI locale.
+
+## CodeBlock and JsonView
+
+```tsx
+import { CodeBlock, JsonView } from "@pyntral/ui";
+
+<CodeBlock code={source} language="auto" title="Source"
+  highlight collapsible copyable maxHeight={320}/>
+
+<JsonView value={response.payload} title="Request payload"
+  format formatToggle highlightToggle defaultCollapsed collapsible
+  minHeight={80} maxHeight={280} wrap/>
+
+<CodeBlock code="SELECT * FROM products" language="sql" inline/>
+```
+
+| Prop | Contract / default |
+| --- | --- |
+| `code` / `value` | CodeBlock takes source text; JsonView takes an object or serialized JSON string. |
+| `language` | auto (default), explicit name/alias or plaintext; JsonView always uses JSON. |
+| `title`, `showLanguage` | Optional title, language label visible by default. |
+| `inline` | False; true renders a compact code span without toolbar. |
+| `highlight`, `highlightToggle` | True / false; optional user-facing toggle. |
+| `format`, `formatToggle` | True / true; formatting and toggle only apply to valid JSON. |
+| `indent` | 2 spaces; clamped to 0–8. |
+| `copyable` | True; copies exactly the displayed text, with clipboard success/error feedback. |
+| `collapsible`, `defaultCollapsed` | False / false. |
+| `collapsed`, `onCollapsedChange` | Optional controlled collapse state. |
+| `wrap` | False; use true for wrapped lines instead of horizontal scrolling. |
+| `minHeight`, `maxHeight` | Code body size (px or CSS length); max defaults to 360px. |
+| `minWidth`, `maxWidth`, `fontSize`, `className`, `style` | Layout and visual overrides; width defaults to max 100%. |
+
+Both props types are exported. The viewers use the inherited light/dark
+palette with optional CSS overrides for `--ra-code-keyword`,
+`--ra-code-string`, `--ra-code-number`, `--ra-code-name`, and
+`--ra-code-comment`. Highlight.js uses a bounded grammar set (JSON, C#,
+JavaScript, TypeScript, Python, SQL, Bash, XML/HTML, CSS, YAML). Auto
+detection is heuristic; specify the language for ambiguous snippets.
+Raw input is never treated as HTML. JSON formatting preserves numeric
+lexemes, duplicate keys and string contents when given the original JSON text;
+invalid JSON is displayed unchanged. For JsonView values already parsed as
+JavaScript objects, precision or duplicate keys lost during parsing cannot be
+recovered. Pass the original serialized text when exact numeric lexemes matter.
+Explicit aliases include c#, cs, js, ts, py, sh, html and yml. Unknown languages
+remain plain text. Formatting is limited to 100,000 input characters, depth 256
+and roughly 1 MiB of formatted output; language detection and highlighting
+are skipped above 12,000 and 40,000 characters respectively. Large logs
+remain visible and copyable. This is a viewer, not an editor or a general
+language formatter. Clipboard copying requires a browser secure context
+or localhost. `format` and `highlight` set defaults; their optional toolbar
+buttons allow a local override. Inline mode omits the toolbar and collapse.
+For controlled collapse, use collapsible with collapsed and onCollapsedChange.
+The built-in record detail renderer uses JsonView for JSON
+and array fields, while lists keep compact previews. See the
+[Insights playground](../admin/Insights.tsx).

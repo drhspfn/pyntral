@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import re
-from typing import Any, Callable, Generic, TypeVar
+from typing import Any, Callable, Generic, Literal, TypedDict, TypeVar
 from uuid import UUID
 from pydantic import BaseModel
 
@@ -150,6 +150,8 @@ class NavigationGroup:
     path: str  # e.g. "Agents" or "Agents/Runtime"
     icon: IconSpec = "folder"
     order: int = 0
+    component: str | None = None  # Dashboard registry ID for the category landing page.
+    min_role: str | None = None  # Landing page only; child resources retain their own ACL.
 
 
 @dataclass(slots=True)
@@ -212,6 +214,13 @@ class Relationship:
 ModelT = TypeVar("ModelT", bound=DeclarativeBase)
 
 
+class CrudLayout(TypedDict, total=False):
+    """Presentation of a built-in CRUD screen; permissions and actions are unchanged."""
+
+    show_heading: bool
+    before_position: Literal["after_heading", "above_heading"]
+
+
 @dataclass(slots=True)
 class Resource(Generic[ModelT]):
     model: type[ModelT]
@@ -258,6 +267,7 @@ class Resource(Generic[ModelT]):
     allow_edit: bool = True
     allow_delete: bool = True
     allow_show: bool = True
+    crud_layouts: dict[str, CrudLayout] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         action_names = [action.name for action in self.actions] + [action.name for action in self.jobs]
@@ -280,6 +290,14 @@ class Resource(Generic[ModelT]):
                 for position, component in slots.items()
             ):
                 raise ValueError("crud_slots must map CRUD modes to before/after component IDs")
+        if not isinstance(self.crud_layouts, dict):
+            raise ValueError("crud_layouts must map CRUD modes to layout options")
+        for mode, layout in self.crud_layouts.items():
+            if (mode not in {"list", "create", "edit", "show"} or not isinstance(layout, dict)
+                    or set(layout) - {"show_heading", "before_position"}
+                    or type(layout.get("show_heading", True)) is not bool
+                    or layout.get("before_position", "after_heading") not in ("after_heading", "above_heading")):
+                raise ValueError("Invalid crud_layouts: expected show_heading (bool) and before_position (after_heading or above_heading)")
         if self.page_size < 1 or self.page_size > 200:
             raise ValueError("page_size must be between 1 and 200")
         if self.name is None:

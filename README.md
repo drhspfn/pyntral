@@ -8,7 +8,7 @@ Define your resources in Python. Get a searchable, customizable administration i
 
 **Python 3.11+** · **FastAPI** · **SQLAlchemy 2.x** · **React 19** · **TypeScript** · **MIT**
 
-`1.0.0b3` · **Third public beta** · [Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [API reference](docs/api-reference.md)
+`1.0.0b4` · **Fourth public beta** · [Get started](docs/getting-started.md) · [Documentation](docs/README.md) · [API reference](docs/api-reference.md)
 
 </div>
 
@@ -209,3 +209,12 @@ authentication. See [login customization](docs/ui.md#login-screen-customization)
 ## Consumer extension APIs
 
 Beta 3 includes [compound tabs and table primitives](docs/ui.md#tabs-and-tables), [additive CRUD slots](docs/extensions.md#compose-standard-crud-views), [composite-key CRUD and transactional handlers](docs/resources.md#composite-primary-keys), [binary RPC uploads](docs/bridges.md#binary-uploads-with-typed-rpc), and [portable custom SPA deployment](docs/deployment.md#custom-ui-in-a-python-only-runtime).
+
+## Beta 4: navigation and presentation
+
+- Enable [sidebar search](docs/ui.md#sidebar-search) with SidebarConfig(show_search=True).
+- Replace the root Overview or add [category dashboards](docs/extensions.md#home-and-category-dashboards) using the dashboards extension registry.
+- Display [CodeBlock and JsonView](docs/ui.md#codeblock-and-jsonview) with themed highlighting, optional JSON formatting, collapse and clipboard controls.
+- Configure [CRUD heading visibility and slot placement](docs/extensions.md#heading-visibility-and-slot-placement) per screen; before slots now render below the built-in heading by default.
+
+All features are demonstrated in [Shop](examples/shop/README.md).

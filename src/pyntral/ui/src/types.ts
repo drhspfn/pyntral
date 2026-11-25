@@ -56,6 +56,8 @@ export interface LayoutSectionDef {
   defaultOpen: boolean;
   columns?: 1 | 2 | null;
 }
+export type CrudMode = "list" | "create" | "edit" | "show";
+export interface CrudLayoutDef { showHeading?: boolean; beforePosition?: "after_heading" | "above_heading" }
 export interface ResourceDef {
   id: string;
   label: string;
@@ -72,7 +74,8 @@ export interface ResourceDef {
   pageSize: number;
   showSearch?: boolean;
   crudViews?: Partial<Record<"list" | "create" | "edit" | "show", string>>;
-  crudSlots?: Partial<Record<"list" | "create" | "edit" | "show", { before?: string; after?: string }>>;
+  crudSlots?: Partial<Record<CrudMode, { before?: string; after?: string }>>;
+  crudLayouts?: Partial<Record<CrudMode, CrudLayoutDef>>;
   layouts?: { form: LayoutSectionDef[]; detail: LayoutSectionDef[] };
   formLayout?: "stack" | "grid";
   detailLayout?: "stack" | "grid";
@@ -103,8 +106,10 @@ export interface SidebarConfig {
   showIcons: boolean; iconSize: number; indent: number; maxIndentDepth: number; dashboardIcon: IconSpec;
   header: SidebarHeaderConfig | null; footer: SidebarFooterConfig | null;
   headerComponent?: string | null; footerComponent?: string | null; itemComponent?: string | null;
+  showSearch?: boolean; searchPlaceholder?: string | null;
 }
-export interface NavigationConfig { groups: { path: string; icon: IconSpec; order: number }[]; showDashboard: boolean; sidebar?: SidebarConfig }
+export interface NavigationGroupDef { path: string; icon: IconSpec; order: number; component?: string }
+export interface NavigationConfig { groups: NavigationGroupDef[]; showDashboard: boolean; dashboardComponent?: string | null; sidebar?: SidebarConfig }
 export interface ThemeConfig {
   default: "light" | "dark" | "system";
   animations: boolean;
@@ -145,6 +150,11 @@ export interface CustomFieldProps {
 export interface CustomPageProps { schema: Schema; navigate: (url: string) => void; }
 export type FieldComponent = ComponentType<CustomFieldProps>;
 export type PageComponent = ComponentType<CustomPageProps>;
+/** Landing page context; schema contains only authorized navigation metadata. */
+export interface DashboardProps extends CustomPageProps {
+  user: Principal; group: NavigationGroupDef | null; defaultView: ReactNode;
+}
+export type DashboardComponent = ComponentType<DashboardProps>;
 
 export interface CustomActionProps {
   schema: Schema;
