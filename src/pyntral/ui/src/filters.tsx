@@ -4,20 +4,12 @@ import { fields as customFields } from "virtual:pyntral-extensions";
 import { DatePicker, Select, TextInput, type SelectOption } from "./ui";
 import { RelationInput } from "./relation";
 import { FilterOperatorButton } from "./filter-operator";
-import { changeFilterOperator, type FilterOperator, type FilterState, type FilterValues } from "./filter-state";
+import { changeFilterOperator, filterOperators, type FilterOperator, type FilterState, type FilterValues } from "./filter-state";
 import type { FieldDef, ResourceDef } from "./types";
 
 export type { FilterOperator, FilterState, FilterValues } from "./filter-state";
 
-export function filterOperators(field: FieldDef): FilterOperator[] {
-  if (field.filterOperators) return field.filterOperators;
-  if (field.relation) return ["eq", "neq"];
-  if (field.kind === "enum" || field.kind === "boolean") return ["eq"];
-  if (["integer", "number", "date", "datetime", "time"].includes(field.kind))
-    return ["eq", "neq", "gt", "gte", "lt", "lte", "between"];
-  if (field.kind === "string") return ["eq", "neq", "contains", "starts_with", "ends_with"];
-  return ["eq", "neq"];
-}
+export { filterOperators } from "./filter-state";
 
 /** Converts only complete filter expressions; incomplete ranges remain editing drafts. */
 export function serializeFilters(fields: FieldDef[], values: FilterValues): Record<string, string> {

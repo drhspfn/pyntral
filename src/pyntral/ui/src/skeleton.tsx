@@ -47,10 +47,10 @@ export interface SkeletonColumn { key: string; className?: string; width?: Lengt
 export function SkeletonRows({ columns, rows = 5, animation = "shimmer" }: {
   columns: readonly SkeletonColumn[]; rows?: number; animation?: SkeletonProps["animation"];
 }) {
-  const cells = columns.length ? columns : [{key:"empty"}];
+  const cells: readonly SkeletonColumn[] = columns.length ? columns : [{key:"empty"}];
   return <>{Array.from({length:count(rows)}, (_, row) => <tr key={row} aria-hidden="true" className="ra-skeleton-row">
     {cells.map((column, col) => <td key={column.key} className={column.className}>
-      <Skeleton animation={animation} variant={column.variant ?? "text"} width={column.width ?? (col === 0 ? "78%" : "62%")}
+      <Skeleton animation={animation} variant={column.variant ?? "text"} width={column.width ?? (column.variant === "circle" ? 18 : col === 0 ? "78%" : "62%")}
         height={column.variant === "circle" ? 18 : 12}/>
     </td>)}
   </tr>)}</>;

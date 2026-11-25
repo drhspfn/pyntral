@@ -14,6 +14,6 @@ export function statusTone(value: string, overrides: Readonly<Record<string, Bad
 export function statusLabel(value: string, labels: Readonly<Record<string,string>> = {}): string {
   return Object.hasOwn(labels, value) ? labels[value] : value;
 }
-export function useDefaultRecordLink(index: number, enabled: boolean | undefined, custom: boolean, inlineCode: boolean, canShow: boolean, id: unknown): boolean {
+export function shouldLinkRecord(index: number, enabled: boolean | undefined, custom: boolean, inlineCode: boolean, canShow: boolean, id: unknown): boolean {
   return index === 0 && enabled !== false && !custom && !inlineCode && canShow && id != null;
 }

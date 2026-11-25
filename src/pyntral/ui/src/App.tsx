@@ -17,7 +17,7 @@ import { resolveCrudLayout } from "./crud-layout-state";
 import { CodeBlock, JsonView } from "./code-block";
 import { StatusBadge } from "./status-badge";
 import { Skeleton, SkeletonGroup, SkeletonRows, SkeletonFields } from "./skeleton";
-import { useDefaultRecordLink } from "./field-presentation-state";
+import { shouldLinkRecord } from "./field-presentation-state";
 import { LoginScreen, defaultLoginConfig } from "./login";
 import { AdminFeedbackProvider, useAdminFeedback } from "./feedback";
 import { useDeleteRecord, invalidateResource, type Listing } from "./mutations";
@@ -25,7 +25,8 @@ import { AsyncSelect, Button, Card, Checkbox, Collapsible, DatePicker, FileRow, 
   type SelectOption } from "./ui";
 import { RelationInput } from "./relation";
 import { AdvancedFilterField, serializeFilters, filterOperators, type FilterValues } from "./filters";
-import { filterControlWidth } from "./filter-state";
+import { filterControlWidth, filtersFromSearch } from "./filter-state";
+import { adminDestination, splitAdminLocation } from "./route-state";
 import { applyTheme, resolveMode } from "./theme";
 import { CurrentAdminProvider, useCurrentAdmin } from "./currentAdmin";
 import { I18nProvider, useI18n } from "./i18n";
@@ -44,12 +45,13 @@ const customProfileMenu = customProfile.menu;
 const ProfileMenuExtension = customProfile.menu;
 
 function useNavigation() {
-  const [url, setUrl] = useState(() => window.location.pathname);
-  const locationRef = useRef(window.location.pathname);
+  const currentLocation = () => window.location.pathname + window.location.search;
+  const [url, setUrl] = useState(currentLocation);
+  const locationRef = useRef(currentLocation());
   const navigatingRef = useRef(false);
   useEffect(() => {
     const onPopState = () => {
-      const destination = window.location.pathname;
+      const destination = window.location.pathname + window.location.search;
       const previous = locationRef.current;
       if (destination === previous) return;
       if (!hasNavigationBlocker()) {
@@ -74,7 +76,7 @@ function useNavigation() {
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
   const navigate = useCallback((route: string) => {
-    const full = `${base}/${route.replace(/^\//, "")}`.replace(/\/$/, "/");
+    const full = adminDestination(base, route);
     if (full === locationRef.current || navigatingRef.current) return;
     navigatingRef.current = true;
     void mayLeavePage().then((allowed) => {
@@ -85,7 +87,7 @@ function useNavigation() {
       window.scrollTo(0, 0);
     }).finally(() => { navigatingRef.current = false; });
   }, []);
-  return { route: url.startsWith(base) ? url.slice(base.length).replace(/^\//, "") : "", navigate };
+  return { ...splitAdminLocation(base, url), navigate };
 }
 
 function Loading({ label = "Loading…" }: { label?: string }) {
@@ -223,7 +225,7 @@ function TableContent({ resource, data, navigate, selectable = false, selection 
         }}/>}</td>}
       {columns.map((field, idx) => <td key={field.name}
         className={`${idx === 0 ? "strong-cell" : ""} ${preferences?.pinned === field.name ? "ra-column-pinned" : ""}`}>
-        {useDefaultRecordLink(idx, field.recordLink, !!field.components.list, !!field.code?.listInline, resource.capabilities.show, row[resource.primaryKey]) ? <button type="button" className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
+        {shouldLinkRecord(idx, field.recordLink, !!field.components.list, !!field.code?.listInline, resource.capabilities.show, row[resource.primaryKey]) ? <button type="button" className="cell-link" onClick={() => navigate(`resources/${resource.id}/${encodeURIComponent(String(row[resource.primaryKey]))}`)}>
           <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" navigate={navigate}/></button> :
           <FieldValue resource={resource} field={field} value={row[field.name]} record={row} mode="list" navigate={navigate}/>}
       </td>)}
@@ -330,10 +332,10 @@ function BackgroundJobButton({ resource, job }: { resource: ResourceDef; job: Jo
 
 type BuiltinCrudLayoutProps = { showHeading?: boolean; before?: ReactNode };
 
-function ResourceList({ resource, navigate, schema, showHeading = true, before }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void } & BuiltinCrudLayoutProps) {
+function ResourceList({ resource, navigate, schema, showHeading = true, before, initialSearch = "" }: { resource: ResourceDef; schema: Schema; navigate: (route: string) => void; initialSearch?: string } & BuiltinCrudLayoutProps) {
   const { t } = useI18n();
-  const [text, setText] = useState("");
-  const [search, setSearch] = useState("");
+  const [text, setText] = useState(() => new URLSearchParams(initialSearch).get("q") ?? "");
+  const [search, setSearch] = useState(text);
   const [offset, setOffset] = useState(0);
   const [sort, setSort] = useState(resource.fields.find(field => field.name === (resource.primaryKeys?.[0] ?? resource.primaryKey) && field.sortable !== false)?.name ?? "");
   const [desc, setDesc] = useState(true);
@@ -350,8 +352,8 @@ function ResourceList({ resource, navigate, schema, showHeading = true, before }
   const [presetName, setPresetName] = useState("");
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null);
   useEffect(() => { try { localStorage.setItem(prefKey, JSON.stringify(preferences)); } catch { /* storage may be disabled */ } }, [prefKey, preferences]);
-  const [filters, setFilters] = useState<FilterValues>({});
-  const [appliedFilters, setAppliedFilters] = useState<FilterValues>({});
+  const [filters, setFilters] = useState<FilterValues>(() => filtersFromSearch(resource.fields, initialSearch));
+  const [appliedFilters, setAppliedFilters] = useState<FilterValues>(filters);
   const activeFilterCount = Object.keys(serializeFilters(resource.fields, filters)).length;
   useEffect(() => { const t = setTimeout(() => { setSearch(text); setOffset(0); }, 260); return () => clearTimeout(t); }, [text]);
   useEffect(() => { const t = setTimeout(() => setAppliedFilters(filters), 240); return () => clearTimeout(t); }, [filters]);
@@ -899,9 +901,9 @@ function ActionView({ resource, schema, id, action, navigate }: {
 }
 
 /** An override replaces the complete CRUD screen, not merely its fields. */
-function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
+function ResourceRoute({ schema, resource, mode, id, navigate, notify, initialSearch = "" }: {
   schema: Schema; resource: ResourceDef; mode: "list" | "create" | "edit" | "show";
-  id?: string; navigate: (route: string) => void; notify?: (message: string) => void;
+  id?: string; navigate: (route: string) => void; notify?: (message: string) => void; initialSearch?: string;
 }) {
   const client = useQueryClient();
   const feedback = useAdminFeedback();
@@ -924,7 +926,7 @@ function ResourceRoute({ schema, resource, mode, id, navigate, notify }: {
   const layout = resolveCrudLayout(resource.crudLayouts?.[mode], !!Custom);
   const renderDefaultView = (before?: ReactNode) => {
     const props = { showHeading: layout.showHeading, before };
-    return mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate} {...props}/> :
+    return mode === "list" ? <ResourceList resource={resource} schema={schema} navigate={navigate} initialSearch={initialSearch} {...props}/> :
       mode === "show" ? <RecordShow resource={resource} schema={schema} id={id!} navigate={navigate} {...props}/> :
       <RecordEditor resource={resource} id={id} navigate={navigate} notify={notify ?? (() => undefined)} {...props}/>;
   };
@@ -1074,7 +1076,7 @@ function MainLayout({ schema, user, onLogout, navigate, route, children, themeMo
 
 function AdminApp() {
   const client = useQueryClient();
-  const { route, navigate } = useNavigation();
+  const { route, search: routeSearch, navigate } = useNavigation();
   const auth = useQuery({ queryKey: ["auth"], queryFn: getAuth, retry: false, staleTime: 15_000 });
   const publicLogin = useQuery({ queryKey: ["login-config"], queryFn: () => api<PublicLoginConfig>("/auth/config"), retry: false });
   const schema = useQuery({ queryKey: ["schema", auth.data?.user?.id], enabled: !!auth.data?.user,
@@ -1136,7 +1138,7 @@ function AdminApp() {
     }
     if (!route) {
       const first = data.resources.find((r) => r.capabilities.list);
-       return first ? <ResourceRoute schema={data} resource={first} mode="list" navigate={navigate}/> : <Empty title="No resources"/>;
+       return first ? <ResourceRoute key={first.id + routeSearch} schema={data} resource={first} mode="list" navigate={navigate} initialSearch={routeSearch}/> : <Empty title="No resources"/>;
     }
     let segments: string[];
     try { segments = route.replace(/\/$/, "").split("/").map(decodeURIComponent); }
@@ -1153,7 +1155,7 @@ function AdminApp() {
       if (!resource) return <Empty title="Resource not found" description="This resource isn't available to your account."/>;
       if (!resource.capabilities.list) return <div className="empty"><LockKeyhole size={24}/><strong>Access denied</strong>
         <p>This resource is not available to your account.</p></div>;
-      if (segments.length === 2) return <ResourceRoute key={resource.id + ":list"} schema={data} resource={resource} mode="list" navigate={navigate}/>;
+      if (segments.length === 2) return <ResourceRoute key={resource.id + ":list" + routeSearch} schema={data} resource={resource} mode="list" navigate={navigate} initialSearch={routeSearch}/>;
       if (segments[2] === "new" && segments.length === 3 && resource.capabilities.create) return <ResourceRoute schema={data} resource={resource} mode="create" navigate={navigate} notify={setNotice}/>;
       if (segments.length === 4 && segments[3] === "edit" && resource.capabilities.edit) return <ResourceRoute key={resource.id + ":" + segments[2] + ":edit"} schema={data} resource={resource} mode="edit" id={segments[2]} navigate={navigate} notify={setNotice}/>;
       if (segments.length === 5 && segments[3] === "actions") {
@@ -1170,7 +1172,7 @@ function AdminApp() {
       if (page) return <Alert error={new Error(`Custom page component "${page.component}" not registered`)}/>;
     }
     return <Empty title="Page not found" description="Check the URL or choose a resource in the sidebar."/>;
-  }, [route, schema.data, navigate, auth.data?.user, setNotice]);
+  }, [route, routeSearch, schema.data, navigate, auth.data?.user, setNotice]);
 
   if (auth.isPending) return <div className="fullscreen-loading"><Loading label="Starting workspace…"/></div>;
   if (auth.error) return <div className="fullscreen-loading"><Alert error={auth.error}/><button className="btn subtle" onClick={() => auth.refetch()}>Retry</button></div>;
